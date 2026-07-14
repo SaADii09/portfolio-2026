@@ -131,38 +131,36 @@ export function Desktop() {
 
   if (isMobile) {
     return (
-      <div className="relative w-full h-screen overflow-hidden flex flex-col bg-os-bg">
-        {windows.length === 0 && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex gap-3 p-3 overflow-x-auto flex-shrink-0">
-              {widgets.map((w) => (
-                <WidgetWrapper key={w.id} id={w.id}>
-                  {renderWidgetContent(w.type, w.id)}
-                </WidgetWrapper>
+      <div className="relative w-full h-screen overflow-hidden bg-os-bg">
+        <div className="absolute inset-0 pb-[var(--taskbar-height,52px)] overflow-auto">
+          <div className="flex gap-3 p-3 overflow-x-auto flex-shrink-0">
+            {widgets.map((w) => (
+              <WidgetWrapper key={w.id} id={w.id}>
+                {renderWidgetContent(w.type, w.id)}
+              </WidgetWrapper>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-center">
+            <div className="grid grid-cols-3 gap-4 p-4">
+              {DESKTOP_ICONS.map((app) => (
+                <button
+                  key={app.id}
+                  onClick={() => handleIconDoubleClick(app)}
+                  className="flex flex-col items-center gap-1.5 p-2 rounded-os transition-colors hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-os-accent"
+                  title={`Open ${app.label}`}
+                >
+                  <div className="w-12 h-12 flex items-center justify-center rounded-os bg-os-surface">
+                    <app.icon size={22} className="text-os-accent" />
+                  </div>
+                  <span className="text-[10px] font-body text-center leading-tight text-os-text">
+                    {app.label}
+                  </span>
+                </button>
               ))}
             </div>
-
-            <div className="flex-1 flex items-center justify-center">
-              <div className="grid grid-cols-3 gap-4 p-4">
-                {DESKTOP_ICONS.map((app) => (
-                  <button
-                    key={app.id}
-                    onClick={() => handleIconDoubleClick(app)}
-                    className="flex flex-col items-center gap-1.5 p-2 rounded-os transition-colors hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-os-accent"
-                    title={`Open ${app.label}`}
-                  >
-                    <div className="w-12 h-12 flex items-center justify-center rounded-os bg-os-surface">
-                      <app.icon size={22} className="text-os-accent" />
-                    </div>
-                    <span className="text-[10px] font-body text-center leading-tight text-os-text">
-                      {app.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
-        )}
+        </div>
 
         <AnimatePresence>
           {windows

@@ -99,4 +99,17 @@ body {
   transition:
     background 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
     color 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.os-drag-handle {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.os-window-content {
+  touch-action: pan-y;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }

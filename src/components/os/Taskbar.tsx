@@ -73,7 +73,7 @@ export function Taskbar() {
   if (isMobile) {
     return (
       <div
-        className="flex items-center justify-around px-2 z-[9999] bg-os-surface"
+        className="flex items-center justify-around px-2 fixed bottom-0 left-0 right-0 z-[9999] bg-os-surface"
         style={{
           height: "var(--taskbar-height, 52px)",
           borderTop: "1px solid var(--border)",

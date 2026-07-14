@@ -70,9 +70,10 @@ export function ChatPanel() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-[9997] flex flex-col"
+              className="fixed left-0 right-0 z-[9997] flex flex-col"
               style={{
-                height: "65%",
+                bottom: "var(--taskbar-height, 52px)",
+                height: "60%",
                 background: "var(--bg-secondary)",
                 borderTopLeftRadius: "var(--radius)",
                 borderTopRightRadius: "var(--radius)",
