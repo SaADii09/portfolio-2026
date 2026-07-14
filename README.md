@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DevOS Portfolio
+
+Interactive Web OS portfolio — a fully functional desktop environment in the browser. Built with Next.js 16, Tailwind v4, Zustand, and Framer Motion.
+
+**Live demo**: [saadahmad.dev](https://saadahmad.dev) _(placeholder)_
+
+## Features
+
+- **3 switchable themes** — Retro 2D, Neon City, Classic Editorial with live CSS variable swapping
+- **Window management** — drag, resize (all edges/corners), minimize, maximize, restore, close, opacity control
+- **6 functional apps** — About, Projects (iframe previews), Terminal, Contact, Resume, Control Panel
+- **5 live widgets** — Clock, CPU monitor, Weather (Open-Meteo API), Music player, Sticky notes
+- **AI chat assistant** — Anthropic streaming API with RAG from local knowledge base
+- **Live wallpapers** — Canvas-rendered per theme (retro embers, neon grid, editorial curves)
+- **Full mobile support** — floating windows with drag/resize, bottom tab bar, chat bottom sheet, 44px touch targets
+- **Persistence** — theme, windows, widgets, music state saved to localStorage
+
+## Tech Stack
+
+| Layer     | Technology                            |
+| --------- | ------------------------------------- |
+| Framework | Next.js 16 (App Router, Turbopack)    |
+| Styling   | Tailwind CSS v4                       |
+| State     | Zustand 5 (persist middleware)        |
+| Animation | Framer Motion 12                      |
+| Icons     | Lucide React                          |
+| AI        | Anthropic Claude (streaming SSE)      |
+| Testing   | Vitest + Testing Library + Playwright |
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Start dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
 # or
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create a `.env.local` for the AI chat:
 
-## Learn More
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
-To learn more about Next.js, take a look at the following resources:
+The app works without this — chat shows an error message if the key is missing.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Commands
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Command                  | Description                                |
+| ------------------------ | ------------------------------------------ |
+| `npm run dev`            | Development server                         |
+| `npm run build`          | Production build                           |
+| `npm run lint`           | ESLint                                     |
+| `npm run test`           | Vitest unit/component tests (47 tests)     |
+| `npm run test:e2e`       | Playwright E2E tests (requires dev server) |
+| `npx prettier --check .` | Check formatting                           |
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+├── app/                    # Next.js App Router + API routes
+│   └── api/                # /chat, /screenshot, /weather
+├── components/
+│   ├── os/                 # Window, Desktop, Taskbar, ChatPanel, Wallpaper
+│   ├── apps/               # AboutApp, ProjectsApp, TerminalApp, etc.
+│   ├── widgets/            # Clock, CPU, Weather, Music, Notes
+│   └── theme/              # ThemeProvider
+├── store/                  # Zustand slices (window, theme, widget, chat, music)
+├── hooks/                  # useMediaQuery
+├── types/                  # TypeScript interfaces
+└── lib/                    # Constants, RAG pipeline, utilities
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Design System
+
+Three themes defined entirely via CSS custom properties — no hardcoded colors in components:
+
+- **Retro 2D** — warm browns, pixel fonts, sharp corners, glowing shadows
+- **Neon City** — dark background, cyan/magenta/green accents, neon glow effects
+- **Classic Editorial** — cream/sepia tones, serif typography, subtle shadows
+
+All theming tokens live in `src/app/globals.css` via `@theme inline`.
+
+## Testing
+
+- **47 unit/component tests** across 5 files (all Zustand slices, Window, Taskbar, ControlPanel)
+- **4 E2E specs** (theme switching, window lifecycle, mobile layout, localStorage persistence)
+- Run `npm run test` for unit tests, `npm run test:e2e` for Playwright (needs dev server running)
+
+## Deployment
+
+```bash
+npm run build
+npm start
+```
+
+Deploy to Vercel, Netlify, or any Node.js hosting. The app is fully static except for the 3 API routes (`/api/chat`, `/api/screenshot`, `/api/weather`).
+
+## License
+
+MIT
