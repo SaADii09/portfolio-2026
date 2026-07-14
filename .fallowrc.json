@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": ["src/app/**/*.tsx", "scripts/**/*.ts"],
+  "ignorePatterns": ["**/*.generated.ts", "**/*.d.ts", ".next/**", "out/**"],
+  "ignoreDependencies": ["@tailwindcss/postcss", "@types/node", "@types/react", "@types/react-dom"],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "unused-files": "warn",
+    "unused-exports": "warn",
+    "unused-types": "warn",
+    "circular-dependency": "warn"
+  },
+  "production": {
+    "deadCode": true,
+    "health": true,
+    "dupes": false
+  },
+  "health": {
+    "maxCyclomatic": 15,
+    "maxCognitive": 12,
+    "ignore": ["**/*.test.*", "**/*.spec.*", "**/*.stories.*"],
+    "thresholdOverrides": [
+      {
+        "files": ["**/*.test.*", "**/*.spec.*"],
+        "maxCyclomatic": 30,
+        "maxCognitive": 25,
+        "reason": "Test suites: describe/it blocks are long by design"
+      }
+    ]
+  },
+  "duplicates": {
+    "mode": "mild",
+    "minTokens": 50,
+    "minLines": 5,
+    "threshold": 5,
+    "ignore": ["**/*.test.*", "**/*.spec.*", ".next/**"],
+    "skipLocal": true
+  },
+  "audit": {
+    "gate": "new-only"
+  },
+  "overrides": [
+    {
+      "files": ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"],
+      "rules": {
+        "unused-exports": "off",
+        "unused-types": "off"
+      }
+    }
+  ]
+}

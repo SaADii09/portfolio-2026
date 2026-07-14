@@ -6,7 +6,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "fallow": "npx fallow",
+    "fallow:dead-code": "npx fallow dead-code",
+    "fallow:dupes": "npx fallow dupes",
+    "fallow:health": "npx fallow health",
+    "fallow:audit": "npx fallow audit",
+    "fallow:fix": "npx fallow fix --dry-run",
+    "validate:fallow": "tsx scripts/validate-fallow.ts",
+    "validate:all": "npm run lint && npm run format:check && npm run test && npm run fallow:audit"
   },
   "dependencies": {
     "@types/howler": "^2.2.13",
@@ -19,13 +34,21 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.4.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "jsdom": "^26.0.0",
+    "prettier": "^3.5.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.19.3",
+    "typescript": "^5",
+    "vitest": "^3.1.1"
   }
 }

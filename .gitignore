@@ -47,6 +47,17 @@ yarn-error.log*
 # vercel
 .vercel
 
+# fallow
+.fallow/
+
+# prettier
+.prettier-cache
+
+# testing
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

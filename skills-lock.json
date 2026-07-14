@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "fallow": {
+      "source": "fallow-rs/fallow-skills",
+      "sourceType": "github",
+      "skillPath": "fallow/skills/fallow/SKILL.md",
+      "computedHash": "907c504fdcf4e9b7c28235aa8e9b06dd09c0d98f157ef405912fbef5a87c008d"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",

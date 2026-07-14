@@ -1,0 +1,12 @@
+.next/
+out/
+build/
+dist/
+node_modules/
+coverage/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+pnpm-lock.yaml
+bun.lockb
+.fallow/
