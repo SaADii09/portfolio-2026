@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-os-bg: var(--bg-primary);
+  --color-os-surface: var(--bg-secondary);
+  --color-os-surface-alt: var(--bg-tertiary);
+  --color-os-accent: var(--accent-1);
+  --color-os-accent-alt: var(--accent-2);
+  --color-os-accent-tertiary: var(--accent-3);
+  --color-os-text: var(--text-primary);
+  --color-os-muted: var(--text-secondary);
+  --color-os-border: var(--border);
+  --radius-os: var(--radius);
+  --shadow-os: var(--shadow);
+  --font-family-display: var(--font-display);
+  --font-family-body: var(--font-body);
+  --spacing-taskbar: var(--taskbar-height);
+}
+
+:root,
+[data-theme="retro"] {
+  --bg-primary: #2d1b14;
+  --bg-secondary: #4a3728;
+  --bg-tertiary: #6b5344;
+  --accent-1: #ff9f1c;
+  --accent-2: #ffbf00;
+  --accent-3: #2ec4b6;
+  --text-primary: #fff8e7;
+  --text-secondary: #d4a373;
+  --border: #ff9f1c;
+  --shadow: 8px 8px 0px #1a0f0a;
+  --radius: 0px;
+  --font-display: var(--font-press-start-2p), cursive;
+  --font-body: var(--font-vt323), monospace;
+  --window-border-width: 4px;
+  --taskbar-height: 48px;
+}
+
+[data-theme="neon"] {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a2e;
+  --accent-1: #00f5ff;
+  --accent-2: #ff00ff;
+  --accent-3: #39ff14;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0b0;
+  --border: rgba(0, 245, 255, 0.4);
+  --shadow: 0 0 20px rgba(0, 245, 255, 0.15);
+  --radius: 12px;
+  --font-display: var(--font-orbitron), sans-serif;
+  --font-body: var(--font-rajdhani), sans-serif;
+  --window-border-width: 1px;
+  --taskbar-height: 52px;
+}
+
+[data-theme="editorial"] {
+  --bg-primary: #f5f0e8;
+  --bg-secondary: #ede8e0;
+  --bg-tertiary: #e5e0d8;
+  --accent-1: #1a1a1a;
+  --accent-2: #8b4513;
+  --accent-3: #2f4f4f;
+  --text-primary: #1a1a1a;
+  --text-secondary: #4a4a4a;
+  --border: #d4cfc7;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --radius: 4px;
+  --font-display: var(--font-crimson-pro), serif;
+  --font-body: var(--font-inter), sans-serif;
+  --window-border-width: 1px;
+  --taskbar-height: 44px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--font-body);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
