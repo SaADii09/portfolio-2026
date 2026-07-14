@@ -47,7 +47,7 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
     const id = generateId();
     const existing = get().windows;
     const maxZ = existing.reduce((max, w) => Math.max(max, w.zIndex), INITIAL_Z_INDEX);
-    const offset = (existing.length % 10) * 30;
+    const offset = (existing.length % 8) * 50;
 
     const win: WindowInstance = {
       id,

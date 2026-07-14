@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useRef, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { useState, useCallback, useRef, type ReactNode } from "react";
+import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { useLongPress } from "@/hooks/useLongPress";
 import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT } from "@/lib/constants";
-import { X, Minus, Maximize2, Minimize2, ExternalLink } from "lucide-react";
+import { X, Minus, Maximize2, Minimize2, ExternalLink, Target } from "lucide-react";
+import { ContextMenu } from "./ContextMenu";
 
 interface WindowProps {
   id: string;
@@ -23,11 +25,55 @@ export function Window({ id, children }: WindowProps) {
   const maximizeWindow = useStore((s) => s.maximizeWindow);
   const restoreWindow = useStore((s) => s.restoreWindow);
   const closeWindow = useStore((s) => s.closeWindow);
-  const setWindowOpacity = useStore((s) => s.setWindowOpacity);
   const activeWindowId = useStore((s) => s.activeWindowId);
   const isMobile = useIsMobile();
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const dragRef = useRef({ sx: 0, sy: 0, wx: 0, wy: 0 });
+  const rafRef = useRef(0);
+  const windowElRef = useRef<HTMLDivElement>(null);
+
+  const getWindowMenuItems = useCallback(() => {
+    if (!win) return [];
+    return [
+      {
+        label: "Focus",
+        icon: Target,
+        onClick: () => focusWindow(id),
+      },
+      {
+        label: "Minimize",
+        icon: Minimize2,
+        onClick: () => minimizeWindow(id),
+      },
+      {
+        label: win.isMaximized ? "Restore Size" : "Maximize",
+        icon: Maximize2,
+        onClick: () => {
+          if (win.isMaximized) restoreWindow(id);
+          else maximizeWindow(id);
+        },
+      },
+      { label: "", separator: true as const, onClick: () => {} },
+      {
+        label: "Close",
+        icon: X,
+        danger: true,
+        onClick: () => closeWindow(id),
+      },
+    ];
+  }, [win, id, focusWindow, minimizeWindow, maximizeWindow, restoreWindow, closeWindow]);
+
+  const openContextMenu = useCallback(
+    (e: React.PointerEvent | React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({ x: e.clientX, y: e.clientY });
+    },
+    [],
+  );
+
+  const { onPointerDown: lpDown, onPointerMove: lpMove, onPointerUp: lpUp, onContextMenu: lpContext } = useLongPress({ onLongPress: openContextMenu });
 
   const handleHeaderDown = useCallback(
     (e: React.PointerEvent) => {
@@ -36,14 +82,31 @@ export function Window({ id, children }: WindowProps) {
       dragRef.current = { sx: e.clientX, sy: e.clientY, wx: win.x, wy: win.y };
       focusWindow(id);
 
+      const el = windowElRef.current;
+      if (el) el.classList.add("os-dragging");
+
+      let pendingX = win.x;
+      let pendingY = win.y;
+      let rafScheduled = false;
+
       const onMove = (e: PointerEvent) => {
-        updateWindowPosition(
-          id,
-          dragRef.current.wx + e.clientX - dragRef.current.sx,
-          dragRef.current.wy + e.clientY - dragRef.current.sy,
-        );
+        pendingX = dragRef.current.wx + e.clientX - dragRef.current.sx;
+        pendingY = dragRef.current.wy + e.clientY - dragRef.current.sy;
+        if (el) {
+          el.style.transform = `translate(${pendingX}px, ${pendingY}px)`;
+        }
+        if (!rafScheduled) {
+          rafScheduled = true;
+          rafRef.current = requestAnimationFrame(() => {
+            updateWindowPosition(id, pendingX, pendingY);
+            rafScheduled = false;
+          });
+        }
       };
       const onUp = () => {
+        if (el) el.classList.remove("os-dragging");
+        cancelAnimationFrame(rafRef.current);
+        updateWindowPosition(id, pendingX, pendingY);
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
       };
@@ -60,12 +123,21 @@ export function Window({ id, children }: WindowProps) {
       e.stopPropagation();
       focusWindow(id);
 
+      const el = windowElRef.current;
+      if (el) el.classList.add("os-dragging");
+
       const sx = e.clientX;
       const sy = e.clientY;
       const sw = win.width;
       const sh = win.height;
       const wx = win.x;
       const wy = win.y;
+
+      let pendingW = sw;
+      let pendingH = sh;
+      let pendingX = wx;
+      let pendingY = wy;
+      let rafScheduled = false;
 
       const onMove = (e: PointerEvent) => {
         const dx = e.clientX - sx;
@@ -87,11 +159,32 @@ export function Window({ id, children }: WindowProps) {
           newY = wy + (sh - newH);
         }
 
-        updateWindowSize(id, newW, newH);
-        updateWindowPosition(id, newX, newY);
+        pendingW = newW;
+        pendingH = newH;
+        pendingX = newX;
+        pendingY = newY;
+
+        if (el) {
+          el.style.transform = `translate(${newX}px, ${newY}px)`;
+          el.style.width = `${newW}px`;
+          el.style.height = `${newH}px`;
+        }
+
+        if (!rafScheduled) {
+          rafScheduled = true;
+          rafRef.current = requestAnimationFrame(() => {
+            updateWindowSize(id, pendingW, pendingH);
+            updateWindowPosition(id, pendingX, pendingY);
+            rafScheduled = false;
+          });
+        }
       };
 
       const onUp = () => {
+        if (el) el.classList.remove("os-dragging");
+        cancelAnimationFrame(rafRef.current);
+        updateWindowSize(id, pendingW, pendingH);
+        updateWindowPosition(id, pendingX, pendingY);
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
       };
@@ -99,6 +192,28 @@ export function Window({ id, children }: WindowProps) {
       document.addEventListener("pointerup", onUp);
     },
     [win, id, focusWindow, updateWindowSize, updateWindowPosition],
+  );
+
+  const mergedHeaderDown = useCallback(
+    (e: React.PointerEvent) => {
+      lpDown(e);
+      handleHeaderDown(e);
+    },
+    [lpDown, handleHeaderDown],
+  );
+
+  const mergedHeaderMove = useCallback(
+    (e: React.PointerEvent) => {
+      lpMove(e);
+    },
+    [lpMove],
+  );
+
+  const mergedHeaderUp = useCallback(
+    (e: React.PointerEvent) => {
+      lpUp(e);
+    },
+    [lpUp],
   );
 
   if (!win) return null;
@@ -116,7 +231,7 @@ export function Window({ id, children }: WindowProps) {
     sw: "bottom-0 left-0 w-3 h-3 cursor-nesw-resize",
   };
 
-  const renderResizeHandles = () => {
+  const renderDesktopResizeHandles = () => {
     if (win.isMaximized) return null;
     return (
       <>
@@ -131,59 +246,89 @@ export function Window({ id, children }: WindowProps) {
     );
   };
 
-  if (isMobile) {
-    const mobileW = win.isMaximized
-      ? (typeof window !== "undefined" ? window.innerWidth : 375)
-      : Math.min(win.width, (typeof window !== "undefined" ? window.innerWidth : 375) - 32);
-    const mobileH = win.isMaximized
-      ? (typeof window !== "undefined" ? window.innerHeight - 52 : 760)
-      : Math.min(win.height, (typeof window !== "undefined" ? window.innerHeight - 140 : 500));
+  const renderMobileGripHandles = () => {
+    if (win.isMaximized) return null;
+    return (
+      <>
+        <div
+          className="os-mobile-grip os-mobile-grip-s"
+          onPointerDown={(e) => handleResizeDown(e, "s")}
+        />
+        <div
+          className="os-mobile-grip os-mobile-grip-e"
+          onPointerDown={(e) => handleResizeDown(e, "e")}
+        />
+        <div
+          className="os-mobile-grip os-mobile-grip-w"
+          onPointerDown={(e) => handleResizeDown(e, "w")}
+        />
+      </>
+    );
+  };
 
-    const mobileX = win.isMaximized ? 0 : Math.max(0, Math.min(win.x, (typeof window !== "undefined" ? window.innerWidth : 375) - mobileW));
-    const mobileY = win.isMaximized ? 0 : Math.max(0, Math.min(win.y, (typeof window !== "undefined" ? window.innerHeight - 100 : 700) - mobileH));
+  const windowStyle = (x: number, y: number, w: number, h: number, maximized: boolean) => ({
+    transform: maximized ? "translate(0, 0)" : `translate(${x}px, ${y}px)`,
+    width: maximized ? "100%" : w,
+    height: maximized ? "calc(100vh - var(--taskbar-height, 48px))" : h,
+    zIndex: win.zIndex,
+    borderRadius: maximized ? 0 : "var(--radius)",
+    boxShadow: isActive ? "var(--shadow-window-active)" : "var(--shadow-window)",
+  });
+
+  const renderContextMenu = () => (
+    <AnimatePresence>
+      {contextMenu && (
+        <ContextMenu
+          items={getWindowMenuItems()}
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+    </AnimatePresence>
+  );
+
+  if (isMobile) {
+    const vw = typeof window !== "undefined" ? window.innerWidth : 375;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 812;
+    const mobileW = win.isMaximized ? vw : Math.min(win.width, vw - 32);
+    const mobileH = win.isMaximized ? vh - 52 : Math.min(win.height, vh - 140);
+    const mobileX = win.isMaximized ? 0 : Math.max(0, Math.min(win.x, vw - mobileW));
+    const mobileY = win.isMaximized ? 0 : Math.max(0, Math.min(win.y, vh - mobileH));
 
     return (
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: win.opacity }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        transition={{ type: "spring", damping: 22, stiffness: 300 }}
+      <div
+        ref={windowElRef}
         onPointerDown={() => !isActive && focusWindow(id)}
-        className="absolute bg-os-surface shadow-os border overflow-hidden flex flex-col"
-        style={{
-          left: mobileX,
-          top: mobileY,
-          width: mobileW,
-          height: mobileH,
-          zIndex: win.zIndex,
-          borderRadius: win.isMaximized ? 0 : undefined,
-          borderColor: isActive ? "var(--border)" : "transparent",
-        }}
+        className={`absolute glass overflow-hidden flex flex-col os-window-enter ${isActive ? "glass-border-active" : "glass-border"}`}
+        style={windowStyle(mobileX, mobileY, mobileW, mobileH, win.isMaximized)}
       >
         <div
           className="os-drag-handle flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing"
           style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }}
-          onPointerDown={handleHeaderDown}
+          onPointerDown={mergedHeaderDown}
+          onPointerMove={mergedHeaderMove}
+          onPointerUp={mergedHeaderUp}
+          onContextMenu={lpContext}
         >
           <span className="font-display text-xs truncate tracking-wide">{win.title}</span>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => minimizeWindow(id)}
-              className="flex items-center justify-center w-5 h-5 rounded-os hover:opacity-70 transition-opacity"
+              className="flex items-center justify-center w-5 h-5 rounded-os transition-all hover:scale-110 active:scale-95"
               aria-label="Minimize"
             >
               <Minus size={12} />
             </button>
             <button
               onClick={() => (win.isMaximized ? restoreWindow(id) : maximizeWindow(id))}
-              className="flex items-center justify-center w-5 h-5 rounded-os hover:opacity-70 transition-opacity"
+              className="flex items-center justify-center w-5 h-5 rounded-os transition-all hover:scale-110 active:scale-95"
               aria-label={win.isMaximized ? "Restore" : "Maximize"}
             >
               {win.isMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
             </button>
             <button
               onClick={() => closeWindow(id)}
-              className="flex items-center justify-center w-5 h-5 rounded-os hover:opacity-70 transition-opacity"
+              className="flex items-center justify-center w-5 h-5 rounded-os transition-all hover:scale-110 active:scale-95"
               aria-label="Close"
             >
               <X size={12} />
@@ -193,10 +338,9 @@ export function Window({ id, children }: WindowProps) {
 
         {win.type === "iframe" && win.url && (
           <div
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-body border-b"
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-body border-b glass"
             style={{
-              background: "var(--bg-tertiary)",
-              borderColor: "var(--border)",
+              borderColor: "color-mix(in srgb, var(--border) 40%, transparent)",
               color: "var(--text-secondary)",
             }}
           >
@@ -205,7 +349,7 @@ export function Window({ id, children }: WindowProps) {
               href={win.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:opacity-70 transition-opacity shrink-0"
+              className="transition-all hover:scale-110 shrink-0"
               style={{ color: "var(--accent-1)" }}
               aria-label="Open external"
             >
@@ -218,81 +362,59 @@ export function Window({ id, children }: WindowProps) {
           {children}
         </div>
 
-        {renderResizeHandles()}
-      </motion.div>
+        {renderMobileGripHandles()}
+        {renderContextMenu()}
+      </div>
     );
   }
 
-  const tbH = "calc(100vh - var(--taskbar-height, 48px))";
-
   return (
-    <motion.div
-      initial={{ scale: 0.85, opacity: 0 }}
-      animate={{ scale: 1, opacity: win.opacity }}
-      exit={{ scale: 0.85, opacity: 0 }}
-      transition={{ type: "spring", damping: 20, stiffness: 300 }}
+    <div
+      ref={windowElRef}
       onPointerDown={() => !isActive && focusWindow(id)}
-      className="absolute bg-os-surface shadow-os border overflow-hidden flex flex-col"
-      style={{
-        left: win.isMaximized ? 0 : win.x,
-        top: win.isMaximized ? 0 : win.y,
-        width: win.isMaximized ? "100%" : win.width,
-        height: win.isMaximized ? tbH : win.height,
-        zIndex: win.zIndex,
-        borderRadius: win.isMaximized ? 0 : undefined,
-        borderColor: isActive ? "var(--border)" : "transparent",
-      }}
+      className={`absolute glass overflow-hidden flex flex-col os-window-enter ${isActive ? "glass-border-active" : "glass-border"}`}
+      style={windowStyle(win.x, win.y, win.width, win.height, win.isMaximized)}
     >
       <div
         className="os-drag-handle flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing select-none"
         style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }}
         onPointerDown={handleHeaderDown}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setContextMenu({ x: e.clientX, y: e.clientY });
+        }}
       >
         <span className="font-display text-xs truncate tracking-wide">{win.title}</span>
-        <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min="0.1"
-            max="1"
-            step="0.05"
-            value={win.opacity}
-            onChange={(e) => setWindowOpacity(id, Number(e.target.value))}
-            className="w-14 h-1 accent-os-accent cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
-            aria-label="Window opacity"
-            onPointerDown={(e) => e.stopPropagation()}
-          />
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => minimizeWindow(id)}
-              className="flex items-center justify-center w-5 h-5 rounded-os hover:opacity-70 transition-opacity"
-              aria-label="Minimize"
-            >
-              <Minus size={12} />
-            </button>
-            <button
-              onClick={() => (win.isMaximized ? restoreWindow(id) : maximizeWindow(id))}
-              className="flex items-center justify-center w-5 h-5 rounded-os hover:opacity-70 transition-opacity"
-              aria-label={win.isMaximized ? "Restore" : "Maximize"}
-            >
-              {win.isMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-            </button>
-            <button
-              onClick={() => closeWindow(id)}
-              className="flex items-center justify-center w-5 h-5 rounded-os hover:opacity-70 transition-opacity"
-              aria-label="Close"
-            >
-              <X size={12} />
-            </button>
-          </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => minimizeWindow(id)}
+            className="flex items-center justify-center w-5 h-5 rounded-os transition-all hover:scale-110 active:scale-95"
+            aria-label="Minimize"
+          >
+            <Minus size={12} />
+          </button>
+          <button
+            onClick={() => (win.isMaximized ? restoreWindow(id) : maximizeWindow(id))}
+            className="flex items-center justify-center w-5 h-5 rounded-os transition-all hover:scale-110 active:scale-95"
+            aria-label={win.isMaximized ? "Restore" : "Maximize"}
+          >
+            {win.isMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+          </button>
+          <button
+            onClick={() => closeWindow(id)}
+            className="flex items-center justify-center w-5 h-5 rounded-os transition-all hover:scale-110 active:scale-95"
+            aria-label="Close"
+          >
+            <X size={12} />
+          </button>
         </div>
       </div>
 
       {win.type === "iframe" && win.url && (
         <div
-          className="flex items-center gap-2 px-3 py-1.5 text-xs font-body border-b"
+          className="flex items-center gap-2 px-3 py-1.5 text-xs font-body border-b glass"
           style={{
-            background: "var(--bg-tertiary)",
-            borderColor: "var(--border)",
+            borderColor: "color-mix(in srgb, var(--border) 40%, transparent)",
             color: "var(--text-secondary)",
           }}
         >
@@ -301,7 +423,7 @@ export function Window({ id, children }: WindowProps) {
             href={win.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:opacity-70 transition-opacity shrink-0"
+            className="transition-all hover:scale-110 shrink-0"
             style={{ color: "var(--accent-1)" }}
             aria-label="Open external"
           >
@@ -312,7 +434,8 @@ export function Window({ id, children }: WindowProps) {
 
       <div className="os-window-content flex-1 p-4 font-body text-sm text-os-text">{children}</div>
 
-      {renderResizeHandles()}
-    </motion.div>
+      {renderDesktopResizeHandles()}
+      {renderContextMenu()}
+    </div>
   );
 }

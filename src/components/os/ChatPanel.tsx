@@ -52,7 +52,7 @@ export function ChatPanel() {
         {!chatOpen && (
           <button
             onClick={toggleChat}
-            className="fixed bottom-20 right-4 z-[9997] flex items-center justify-center w-12 h-12 rounded-full shadow-lg transition-opacity hover:opacity-80"
+            className="fixed bottom-20 right-4 z-[9997] flex items-center justify-center w-12 h-12 rounded-full transition-all hover:scale-110 active:scale-95 glow-sm"
             style={{
               background: "var(--accent-1)",
               color: "var(--bg-primary)",
@@ -70,13 +70,14 @@ export function ChatPanel() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              className="fixed left-0 right-0 z-[9997] flex flex-col"
+              className="fixed left-0 right-0 z-[9997] flex flex-col glass-heavy border"
               style={{
                 bottom: "var(--taskbar-height, 52px)",
                 height: "60%",
-                background: "var(--bg-secondary)",
                 borderTopLeftRadius: "var(--radius)",
                 borderTopRightRadius: "var(--radius)",
+                borderColor: "color-mix(in srgb, var(--accent-1) 15%, transparent)",
+                boxShadow: "var(--shadow-glass)",
               }}
             >
               <div className="flex items-center justify-center pt-2 pb-1">
@@ -93,13 +94,19 @@ export function ChatPanel() {
                   color: "var(--bg-primary)",
                 }}
               >
-                <span className="font-display text-xs tracking-wide">
+                <span className="font-display text-xs tracking-wide flex items-center gap-2">
                   Dev Chat
-                  {isLoading && <span className="ml-1.5 opacity-70 text-[10px]">typing...</span>}
+                  {isLoading && (
+                    <span className="flex items-center gap-0.5 opacity-70">
+                      <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </span>
+                  )}
                 </span>
                 <button
                   onClick={toggleChat}
-                  className="flex items-center justify-center min-w-[44px] min-h-[44px] hover:opacity-70 transition-opacity"
+                  className="flex items-center justify-center min-w-[44px] min-h-[44px] transition-all hover:scale-110 active:scale-95"
                   aria-label="Close chat"
                 >
                   <X size={16} />
@@ -118,8 +125,11 @@ export function ChatPanel() {
                 )}
 
                 {messages.map((msg) => (
-                  <div
+                  <motion.div
                     key={msg.id}
+                    initial={{ y: 6, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ type: "spring", damping: 20, stiffness: 300 }}
                     className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
                   >
                     <div
@@ -139,8 +149,11 @@ export function ChatPanel() {
                         className="rounded-os px-3 py-2 leading-relaxed break-words"
                         style={{
                           background:
-                            msg.role === "user" ? "var(--accent-1)" : "var(--bg-tertiary)",
+                            msg.role === "user"
+                              ? "linear-gradient(135deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 60%, var(--accent-1)))"
+                              : "color-mix(in srgb, var(--bg-tertiary) 70%, transparent)",
                           color: msg.role === "user" ? "var(--bg-primary)" : "var(--text-primary)",
+                          backdropFilter: msg.role !== "user" ? "blur(8px)" : undefined,
                         }}
                       >
                         {msg.content}
@@ -159,13 +172,13 @@ export function ChatPanel() {
                         {formatTime(msg.timestamp)}
                       </span>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
 
               <div
                 className="flex items-center gap-2 p-3 border-t"
-                style={{ borderColor: "var(--border)" }}
+                style={{ borderColor: "color-mix(in srgb, var(--border) 40%, transparent)" }}
               >
                 <input
                   value={input}
@@ -173,17 +186,16 @@ export function ChatPanel() {
                   onKeyDown={handleKeyDown}
                   placeholder="Type a message..."
                   disabled={isLoading}
-                  className="flex-1 px-3 py-2.5 text-xs font-body rounded-os outline-none border min-h-[44px]"
+                  className="flex-1 px-3 py-2.5 text-xs font-body rounded-os outline-none border glass min-h-[44px] focus:glow-sm transition-shadow"
                   style={{
-                    background: "var(--bg-primary)",
                     color: "var(--text-primary)",
-                    borderColor: "var(--border)",
+                    borderColor: "color-mix(in srgb, var(--border) 40%, transparent)",
                   }}
                 />
                 <button
                   onClick={handleSend}
                   disabled={!input.trim() || isLoading}
-                  className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-os transition-opacity hover:opacity-80 disabled:opacity-30"
+                  className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-os transition-all hover:scale-105 active:scale-95 disabled:opacity-30"
                   style={{
                     background: "var(--accent-1)",
                     color: "var(--bg-primary)",
@@ -199,12 +211,11 @@ export function ChatPanel() {
       </>
     );
   }
-
   if (!chatOpen) {
     return (
       <button
         onClick={toggleChat}
-        className="fixed right-0 top-1/3 z-[9997] flex items-center justify-center w-8 h-12 rounded-l-os transition-opacity hover:opacity-80"
+        className="fixed right-0 top-1/3 z-[9997] flex items-center justify-center w-8 h-12 rounded-l-os transition-all hover:w-10 glow-sm"
         style={{
           background: "var(--accent-1)",
           color: "var(--bg-primary)",
@@ -222,11 +233,12 @@ export function ChatPanel() {
       animate={{ x: 0 }}
       exit={{ x: 320 }}
       transition={{ type: "spring", damping: 25, stiffness: 300 }}
-      className="fixed right-0 top-0 z-[9997] flex h-full flex-col"
+      className="fixed right-0 top-0 z-[9997] flex flex-col glass-heavy border"
       style={{
         width: chatExpanded ? 280 : 240,
-        background: "var(--bg-secondary)",
-        borderLeft: "1px solid var(--border)",
+        bottom: "var(--taskbar-height, 48px)",
+        borderColor: "color-mix(in srgb, var(--accent-1) 15%, transparent)",
+        boxShadow: "var(--shadow-glass)",
       }}
     >
       <div
@@ -236,21 +248,27 @@ export function ChatPanel() {
           color: "var(--bg-primary)",
         }}
       >
-        <span className="font-display text-xs tracking-wide">
+        <span className="font-display text-xs tracking-wide flex items-center gap-2">
           Dev Chat
-          {isLoading && <span className="ml-1.5 opacity-70 text-[10px]">typing...</span>}
+          {isLoading && (
+            <span className="flex items-center gap-0.5 opacity-70">
+              <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }} />
+            </span>
+          )}
         </span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setChatExpanded(!chatExpanded)}
-            className="flex items-center justify-center w-5 h-5 rounded-sm hover:opacity-70 transition-opacity"
+            className="flex items-center justify-center w-5 h-5 rounded-sm transition-all hover:scale-110 active:scale-95"
             aria-label={chatExpanded ? "Collapse" : "Expand"}
           >
             {chatExpanded ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
           </button>
           <button
             onClick={toggleChat}
-            className="flex items-center justify-center w-5 h-5 rounded-sm hover:opacity-70 transition-opacity"
+            className="flex items-center justify-center w-5 h-5 rounded-sm transition-all hover:scale-110 active:scale-95"
             aria-label="Close chat"
           >
             <X size={12} />
@@ -272,8 +290,11 @@ export function ChatPanel() {
             )}
 
             {messages.map((msg) => (
-              <div
+              <motion.div
                 key={msg.id}
+                initial={{ y: 6, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ type: "spring", damping: 20, stiffness: 300 }}
                 className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
               >
                 <div
@@ -292,8 +313,12 @@ export function ChatPanel() {
                   <div
                     className="rounded-os px-2.5 py-1.5 leading-relaxed break-words"
                     style={{
-                      background: msg.role === "user" ? "var(--accent-1)" : "var(--bg-tertiary)",
+                      background:
+                        msg.role === "user"
+                          ? "linear-gradient(135deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 60%, var(--accent-1)))"
+                          : "color-mix(in srgb, var(--bg-tertiary) 70%, transparent)",
                       color: msg.role === "user" ? "var(--bg-primary)" : "var(--text-primary)",
+                      backdropFilter: msg.role !== "user" ? "blur(8px)" : undefined,
                     }}
                   >
                     {msg.content}
@@ -312,13 +337,13 @@ export function ChatPanel() {
                     {formatTime(msg.timestamp)}
                   </span>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
 
           <div
             className="flex items-center gap-1.5 p-2.5 border-t"
-            style={{ borderColor: "var(--border)" }}
+            style={{ borderColor: "color-mix(in srgb, var(--border) 40%, transparent)" }}
           >
             <input
               value={input}
@@ -326,17 +351,16 @@ export function ChatPanel() {
               onKeyDown={handleKeyDown}
               placeholder="Type a message..."
               disabled={isLoading}
-              className="flex-1 px-2.5 py-1.5 text-xs font-body rounded-os outline-none border"
+              className="flex-1 px-2.5 py-1.5 text-xs font-body rounded-os outline-none border glass focus:glow-sm transition-shadow"
               style={{
-                background: "var(--bg-primary)",
                 color: "var(--text-primary)",
-                borderColor: "var(--border)",
+                borderColor: "color-mix(in srgb, var(--border) 40%, transparent)",
               }}
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              className="flex items-center justify-center w-7 h-7 rounded-os transition-opacity hover:opacity-80 disabled:opacity-30"
+              className="flex items-center justify-center w-7 h-7 rounded-os transition-all hover:scale-105 active:scale-95 disabled:opacity-30"
               style={{
                 background: "var(--accent-1)",
                 color: "var(--bg-primary)",

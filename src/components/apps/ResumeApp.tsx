@@ -79,8 +79,9 @@ export function ResumeApp() {
         <h3 className="font-display text-xs mb-2.5 text-os-accent">Experience</h3>
         <div className="flex flex-col gap-3">
           {EXPERIENCE.map((exp, i) => (
-            <div key={i} className="p-3 rounded-os" style={{ background: "var(--bg-tertiary)" }}>
-              <div className="flex items-start justify-between gap-2 mb-1.5">
+            <div key={i} className="relative p-3 rounded-os glass-light border" style={{ borderColor: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }}>
+              <div className="absolute left-0 top-0 bottom-0 w-[2px] rounded-full" style={{ background: "var(--accent-1)" }} />
+              <div className="flex items-start justify-between gap-2 mb-1.5 pl-2">
                 <div>
                   <p className="font-display text-[11px]">{exp.role}</p>
                   <p className="text-[10px]" style={{ color: "var(--text-secondary)" }}>
@@ -88,14 +89,14 @@ export function ResumeApp() {
                   </p>
                 </div>
                 <span
-                  className="text-[9px] whitespace-nowrap px-1.5 py-0.5 rounded-os"
-                  style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}
+                  className="text-[9px] whitespace-nowrap px-1.5 py-0.5 rounded-os glass"
+                  style={{ color: "var(--text-secondary)" }}
                 >
                   {exp.period}
                 </span>
               </div>
               <ul
-                className="list-disc list-inside text-xs leading-relaxed space-y-0.5"
+                className="list-disc list-inside text-xs leading-relaxed space-y-0.5 pl-2"
                 style={{ color: "var(--text-primary)" }}
               >
                 {exp.items.map((item, j) => (
@@ -123,8 +124,8 @@ export function ResumeApp() {
                 {group.items.map((s) => (
                   <span
                     key={s}
-                    className="px-1.5 py-0.5 text-[10px] rounded-os"
-                    style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)" }}
+                    className="px-1.5 py-0.5 text-[10px] rounded-os glass glass-border transition-all hover:glow-sm"
+                    style={{ color: "var(--text-primary)" }}
                   >
                     {s}
                   </span>

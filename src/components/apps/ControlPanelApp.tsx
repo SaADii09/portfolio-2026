@@ -18,7 +18,7 @@ const THEMES: { name: ThemeName; label: string; colors: string[] }[] = [
   {
     name: "editorial",
     label: "Classic Editorial",
-    colors: ["#1a1a1a", "#8b4513", "#2f4f4f"],
+    colors: ["#f7a501", "#23251d", "#2c84e0"],
   },
 ];
 

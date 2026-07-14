@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { useLongPress } from "@/hooks/useLongPress";
 import { Window } from "@/components/os/Window";
 import { Taskbar } from "@/components/os/Taskbar";
 import { ChatPanel } from "@/components/os/ChatPanel";
@@ -21,7 +22,18 @@ import { ControlPanelApp } from "@/components/apps/ControlPanelApp";
 import { TerminalApp } from "@/components/apps/TerminalApp";
 import { ContactApp } from "@/components/apps/ContactApp";
 import { ResumeApp } from "@/components/apps/ResumeApp";
-import { User, FolderKanban, FileText, Terminal, Mail, Settings } from "lucide-react";
+import { ContextMenu } from "@/components/os/ContextMenu";
+import {
+  User,
+  FolderKanban,
+  FileText,
+  Terminal,
+  Mail,
+  Settings,
+  RefreshCw,
+  Monitor,
+  Info,
+} from "lucide-react";
 
 const DESKTOP_ICONS = [
   { id: "about", label: "About Me", icon: User, component: "about" },
@@ -81,6 +93,14 @@ export function Desktop() {
   const clampAllWindows = useStore((s) => s.clampAllWindows);
   const initDone = useRef(false);
   const isMobile = useIsMobile();
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [iconContextMenu, setIconContextMenu] = useState<{
+    component: string;
+    label: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (initDone.current) return;
@@ -104,10 +124,10 @@ export function Desktop() {
     const w = typeof window !== "undefined" ? window.innerWidth : 1024;
 
     addWidget("clock", "Clock", w - 220, 20);
-    addWidget("weather", "Weather", w - 220, 110);
-    addWidget("cpu", "CPU", w - 220, 200);
-    addWidget("music", "Music", w - 220, 290);
-    addWidget("notes", "Notes", w - 220, 380);
+    addWidget("weather", "Weather", w - 220, 130);
+    addWidget("cpu", "CPU", w - 220, 240);
+    addWidget("music", "Music", w - 220, 350);
+    addWidget("notes", "Notes", w - 220, 460);
 
     clampAllWindows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,6 +149,85 @@ export function Desktop() {
     });
   };
 
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      window.location.reload();
+    }, 350);
+  }, []);
+
+  const handleOpenApp = useCallback(
+    (component: string, title: string) => {
+      const existing = windows.find((w) => w.component === component);
+      if (existing) {
+        if (existing.isMinimized) useStore.getState().restoreWindow(existing.id);
+        useStore.getState().focusWindow(existing.id);
+        return;
+      }
+      openWindow({ title, type: "app", component });
+    },
+    [windows, openWindow],
+  );
+
+  const openIconContextMenu = useCallback(
+    (component: string, label: string, e: React.MouseEvent | React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIconContextMenu({ component, label, x: e.clientX, y: e.clientY });
+    },
+    [],
+  );
+
+  const getIconMenuItems = useCallback(
+    (component: string, label: string) => [
+      {
+        label: "Open",
+        icon: Monitor,
+        onClick: () => handleOpenApp(component, label),
+      },
+      { label: "", separator: true as const, onClick: () => {} },
+      {
+        label: "Properties",
+        icon: Info,
+        onClick: () => {
+          const existing = windows.find((w) => w.component === "about");
+          if (existing) {
+            if (existing.isMinimized) useStore.getState().restoreWindow(existing.id);
+            useStore.getState().focusWindow(existing.id);
+          } else {
+            openWindow({ title: "About Me", type: "app", component: "about" });
+          }
+        },
+      },
+    ],
+    [handleOpenApp, windows, openWindow],
+  );
+
+  const contextMenuItems = [
+    {
+      label: "Refresh",
+      icon: RefreshCw,
+      onClick: handleRefresh,
+    },
+    { label: "", separator: true as const, onClick: () => {} },
+    ...DESKTOP_ICONS.map((app) => ({
+      label: app.label,
+      icon: app.icon,
+      onClick: () => handleOpenApp(app.component, app.label),
+    })),
+    { label: "", separator: true as const, onClick: () => {} },
+    {
+      label: "About DevOS",
+      icon: Info,
+      onClick: () => handleOpenApp("about", "About Me"),
+    },
+  ];
+
   if (isMobile) {
     return (
       <div className="relative w-full h-screen overflow-hidden bg-os-bg">
@@ -144,19 +243,12 @@ export function Desktop() {
           <div className="flex items-center justify-center">
             <div className="grid grid-cols-3 gap-4 p-4">
               {DESKTOP_ICONS.map((app) => (
-                <button
+                <DesktopIconMobile
                   key={app.id}
-                  onClick={() => handleIconDoubleClick(app)}
-                  className="flex flex-col items-center gap-1.5 p-2 rounded-os transition-colors hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-os-accent"
-                  title={`Open ${app.label}`}
-                >
-                  <div className="w-12 h-12 flex items-center justify-center rounded-os bg-os-surface">
-                    <app.icon size={22} className="text-os-accent" />
-                  </div>
-                  <span className="text-[10px] font-body text-center leading-tight text-os-text">
-                    {app.label}
-                  </span>
-                </button>
+                  app={app}
+                  onDoubleClick={() => handleIconDoubleClick(app)}
+                  onContextMenu={(e) => openIconContextMenu(app.component, app.label, e)}
+                />
               ))}
             </div>
           </div>
@@ -176,6 +268,16 @@ export function Desktop() {
             ))}
         </AnimatePresence>
 
+        <AnimatePresence>
+          {iconContextMenu && (
+            <ContextMenu
+              items={getIconMenuItems(iconContextMenu.component, iconContextMenu.label)}
+              position={{ x: iconContextMenu.x, y: iconContextMenu.y }}
+              onClose={() => setIconContextMenu(null)}
+            />
+          )}
+        </AnimatePresence>
+
         <ChatPanel />
         <Taskbar />
       </div>
@@ -187,16 +289,19 @@ export function Desktop() {
       <Wallpaper />
       <ChatPanel />
 
-      <div className="flex-1 relative overflow-hidden">
-        <div className="absolute top-4 left-4 flex flex-col gap-4 z-10">
+      <div className="flex-1 relative overflow-hidden" onContextMenu={handleContextMenu}>
+        <div
+          className={`absolute top-4 left-4 flex flex-col gap-4 z-10 ${isRefreshing ? "os-refresh-blink" : ""}`}
+        >
           {DESKTOP_ICONS.map((app) => (
             <button
               key={app.id}
               onDoubleClick={() => handleIconDoubleClick(app)}
-              className="flex flex-col items-center gap-1 w-16 p-1.5 rounded-os transition-colors hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-os-accent"
+              onContextMenu={(e) => openIconContextMenu(app.component, app.label, e)}
+              className="flex flex-col items-center gap-1 w-16 p-1.5 rounded-os transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-1 focus:ring-os-accent"
               title={`Open ${app.label}`}
             >
-              <div className="w-10 h-10 flex items-center justify-center rounded-os bg-os-surface">
+              <div className="w-10 h-10 flex items-center justify-center rounded-os glass glass-border transition-all hover:glow-sm">
                 <app.icon size={22} className="text-os-accent" />
               </div>
               <span className="text-[10px] font-body text-center leading-tight text-os-text">
@@ -229,7 +334,58 @@ export function Desktop() {
         </AnimatePresence>
       </div>
 
+      <AnimatePresence>
+        {contextMenu && (
+          <ContextMenu
+            items={contextMenuItems}
+            position={contextMenu}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {iconContextMenu && (
+          <ContextMenu
+            items={getIconMenuItems(iconContextMenu.component, iconContextMenu.label)}
+            position={{ x: iconContextMenu.x, y: iconContextMenu.y }}
+            onClose={() => setIconContextMenu(null)}
+          />
+        )}
+      </AnimatePresence>
+
       <Taskbar />
     </div>
+  );
+}
+
+function DesktopIconMobile({
+  app,
+  onDoubleClick,
+  onContextMenu,
+}: {
+  app: (typeof DESKTOP_ICONS)[number];
+  onDoubleClick: () => void;
+  onContextMenu: (e: React.MouseEvent | React.PointerEvent) => void;
+}) {
+  const longPress = useLongPress({ onLongPress: onContextMenu });
+
+  return (
+    <button
+      onClick={onDoubleClick}
+      onPointerDown={longPress.onPointerDown}
+      onPointerMove={longPress.onPointerMove}
+      onPointerUp={longPress.onPointerUp}
+      onContextMenu={longPress.onContextMenu}
+      className="flex flex-col items-center gap-1.5 p-2 rounded-os transition-all hover:scale-105 active:scale-95 focus:outline-none focus:ring-1 focus:ring-os-accent"
+      title={`Open ${app.label}`}
+    >
+      <div className="w-12 h-12 flex items-center justify-center rounded-os glass glass-border transition-all hover:glow-sm">
+        <app.icon size={22} className="text-os-accent" />
+      </div>
+      <span className="text-[10px] font-body text-center leading-tight text-os-text">
+        {app.label}
+      </span>
+    </button>
   );
 }

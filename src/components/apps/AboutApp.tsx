@@ -38,7 +38,7 @@ export function AboutApp() {
             ].map((skill) => (
               <span
                 key={skill}
-                className="px-2 py-0.5 text-xs rounded-os bg-os-surface-alt text-os-text"
+                className="px-2 py-0.5 text-xs rounded-os glass glass-border text-os-text transition-all hover:glow-sm hover:scale-105"
               >
                 {skill}
               </span>
