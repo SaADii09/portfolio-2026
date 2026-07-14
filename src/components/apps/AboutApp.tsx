@@ -5,30 +5,26 @@ import { FileText } from "lucide-react";
 export function AboutApp() {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="font-display text-base text-os-accent">
-        About Me
-      </h2>
+      <h2 className="font-display text-base text-os-accent">About Me</h2>
 
       <div className="flex flex-col gap-3 font-body text-sm leading-relaxed text-os-text">
         <p>
-          Full-stack software engineer with 2.5+ years of professional experience
-          building production-grade web applications and AI-powered systems.
+          Full-stack software engineer with 2.5+ years of professional experience building
+          production-grade web applications and AI-powered systems.
         </p>
         <p>
-          Specialized in the JavaScript/TypeScript ecosystem (Next.js, Node.js)
-          with hands-on expertise in AI engineering, RAG pipelines,
-          LangChain/LangGraph agents, and OpenAI API integrations.
+          Specialized in the JavaScript/TypeScript ecosystem (Next.js, Node.js) with hands-on
+          expertise in AI engineering, RAG pipelines, LangChain/LangGraph agents, and OpenAI API
+          integrations.
         </p>
         <p>
-          Proven record of delivering end-to-end SaaS and AI-driven products,
-          from system architecture to production deployment, across CRM, job
-          portal, and real-time communication platforms.
+          Proven record of delivering end-to-end SaaS and AI-driven products, from system
+          architecture to production deployment, across CRM, job portal, and real-time communication
+          platforms.
         </p>
 
         <div className="mt-2">
-          <h3 className="font-display text-xs mb-2 text-os-accent">
-            Core Skills
-          </h3>
+          <h3 className="font-display text-xs mb-2 text-os-accent">Core Skills</h3>
           <div className="flex flex-wrap gap-1.5">
             {[
               "Next.js",

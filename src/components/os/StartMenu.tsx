@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useStore } from "@/store";
-import { User, FolderKanban, FileText, Terminal, Mail } from "lucide-react";
+import { User, FolderKanban, FileText, Terminal, Mail, Settings } from "lucide-react";
 
 interface StartMenuProps {
   onClose: () => void;
@@ -11,6 +11,7 @@ interface StartMenuProps {
 const APPS = [
   { id: "about", title: "About Me", icon: User, component: "about" },
   { id: "projects", title: "Projects", icon: FolderKanban, component: "projects" },
+  { id: "control-panel", title: "Control Panel", icon: Settings, component: "control-panel" },
   { id: "resume", title: "Resume", icon: FileText, component: "resume" },
   { id: "terminal", title: "Terminal", icon: Terminal, component: "terminal" },
   { id: "contact", title: "Contact", icon: Mail, component: "contact" },
@@ -18,8 +19,16 @@ const APPS = [
 
 export function StartMenu({ onClose }: StartMenuProps) {
   const openWindow = useStore((s) => s.openWindow);
+  const windows = useStore((s) => s.windows);
 
   const handleLaunch = (app: (typeof APPS)[number]) => {
+    const existing = windows.find((w) => w.component === app.component);
+    if (existing) {
+      if (existing.isMinimized) useStore.getState().restoreWindow(existing.id);
+      useStore.getState().focusWindow(existing.id);
+      onClose();
+      return;
+    }
     openWindow({
       title: app.title,
       type: "app",

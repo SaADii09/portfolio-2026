@@ -1,12 +1,5 @@
 import type { Metadata } from "next";
-import {
-  Press_Start_2P,
-  VT323,
-  Orbitron,
-  Rajdhani,
-  Crimson_Pro,
-  Inter,
-} from "next/font/google";
+import { Press_Start_2P, VT323, Orbitron, Rajdhani, Crimson_Pro, Inter } from "next/font/google";
 import "./globals.css";
 
 const pressStart2p = Press_Start_2P({

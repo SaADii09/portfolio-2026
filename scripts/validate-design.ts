@@ -61,7 +61,7 @@ function walkDir(dir: string): string[] {
         }
       }
     }
-  } catch { }
+  } catch {}
   return files;
 }
 
@@ -71,19 +71,20 @@ function isAllowedColorFile(filePath: string): boolean {
 
 // ── Checkers ─────────────────────────────────────────
 
-function checkHardcodedColors(
-  content: string,
-  filePath: string,
-  lines: string[]
-): void {
-  if (isAllowedColorFile(filePath) || DYNAMIC_COLOR_CONTEXTS.has(filePath.split("\\").pop() || filePath.split("/").pop() || "")) return;
+function checkHardcodedColors(content: string, filePath: string, lines: string[]): void {
+  if (
+    isAllowedColorFile(filePath) ||
+    DYNAMIC_COLOR_CONTEXTS.has(filePath.split("\\").pop() || filePath.split("/").pop() || "")
+  )
+    return;
 
-  const colorRegex = /(?<!['"`]var\(--)(?<!['"`])(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b|rgba?\([^)]+\)|hsla?\([^)]+\))/gi;
+  const colorRegex =
+    /(?<!['"`]var\(--)(?<!['"`])(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b|rgba?\([^)]+\)|hsla?\([^)]+\))/gi;
   const excludePatterns = [
-    /['"`]\/\/[^'"]*['"`]/,  // URLs
-    /['"`]#[^'"]*['"`]/,      // hash fragments
-    /\/\/.*/,                  // line comments
-    /\*.*\*/,                  // block comments
+    /['"`]\/\/[^'"]*['"`]/, // URLs
+    /['"`]#[^'"]*['"`]/, // hash fragments
+    /\/\/.*/, // line comments
+    /\*.*\*/, // block comments
   ];
 
   for (const match of content.matchAll(colorRegex)) {
@@ -120,11 +121,13 @@ function getTailwindSuggestion(color: string): string {
   // Match against theme values
   for (const theme of Object.values(THEMES)) {
     for (const [token, value] of Object.entries(theme)) {
-      if (value.toLowerCase() === lower || value.toLowerCase().includes(lower) || lower.includes(value.toLowerCase())) {
+      if (
+        value.toLowerCase() === lower ||
+        value.toLowerCase().includes(lower) ||
+        lower.includes(value.toLowerCase())
+      ) {
         const cssVar = `var(--${token.replace(/_/g, "-")})`;
-        const twClass = Object.entries(TAILWIND_TOKEN_MAP).find(
-          ([, v]) => v === cssVar
-        )?.[0];
+        const twClass = Object.entries(TAILWIND_TOKEN_MAP).find(([, v]) => v === cssVar)?.[0];
         return twClass
           ? `Use Tailwind class "${twClass}" (maps to ${cssVar})`
           : `Use CSS variable ${cssVar}`;
@@ -134,10 +137,7 @@ function getTailwindSuggestion(color: string): string {
   return "";
 }
 
-function checkInlineStyleViolations(
-  content: string,
-  filePath: string,
-): void {
+function checkInlineStyleViolations(content: string, filePath: string): void {
   if (filePath.endsWith(".css")) return;
 
   const styleRegex = /style=\{([^}]+)\}/g;
@@ -162,10 +162,7 @@ function checkInlineStyleViolations(
     const propRegex = /(\w+):\s*(['"`][^'"`]+['"`]|\d+)/g;
     for (const propMatch of styleContent.matchAll(propRegex)) {
       const propName = propMatch[1];
-      if (
-        !ALLOWED_INLINE_STYLE_PROPS.has(propName) &&
-        !propName.startsWith("--")
-      ) {
+      if (!ALLOWED_INLINE_STYLE_PROPS.has(propName) && !propName.startsWith("--")) {
         violations.push({
           file: filePath,
           line,
@@ -179,21 +176,42 @@ function checkInlineStyleViolations(
   }
 }
 
-function checkTailwindTokenUsage(
-  content: string,
-  filePath: string,
-): void {
+function checkTailwindTokenUsage(content: string, filePath: string): void {
   if (filePath.endsWith(".css") || filePath.endsWith(".json")) return;
   const lines = content.split("\n");
 
   // Check for common non-token Tailwind classes that have token equivalents
   const nonTokenPatterns: [RegExp, string, string][] = [
-    [/bg-(red|blue|green|yellow|purple|pink|indigo|gray|slate|zinc|neutral|stone|orange|amber|lime|emerald|teal|cyan|sky|violet|fuchsia|rose)-\d{2,3}/g, "Use bg-os-bg, bg-os-surface, or bg-os-accent instead of hardcoded Tailwind colors", "WARN"],
-    [/text-(red|blue|green|yellow|purple|pink|indigo|gray|slate|zinc|neutral|stone|orange|amber|lime|emerald|teal|cyan|sky|violet|fuchsia|rose)-\d{2,3}/g, "Use text-os-text or text-os-muted instead of hardcoded Tailwind text colors", "WARN"],
-    [/rounded-(none|sm|md|lg|xl|2xl|3xl|full)/g, "Use rounded-os (maps to theme radius) instead of hardcoded rounded-*", "WARN"],
-    [/shadow-(sm|md|lg|xl|2xl|inner|none)/g, "Use shadow-os (maps to theme shadow) instead of hardcoded shadow-*", "WARN"],
-    [/font-(sans|serif|mono)/g, "Use font-display or font-body (maps to theme fonts) instead of hardcoded font-*", "WARN"],
-    [/border-(red|blue|green|yellow|purple|pink|indigo|gray|slate|zinc|neutral|stone|orange|amber|lime|emerald|teal|cyan|sky|violet|fuchsia|rose)-\d{2,3}/g, "Use border-os (maps to theme border color) instead of hardcoded border-*", "WARN"],
+    [
+      /bg-(red|blue|green|yellow|purple|pink|indigo|gray|slate|zinc|neutral|stone|orange|amber|lime|emerald|teal|cyan|sky|violet|fuchsia|rose)-\d{2,3}/g,
+      "Use bg-os-bg, bg-os-surface, or bg-os-accent instead of hardcoded Tailwind colors",
+      "WARN",
+    ],
+    [
+      /text-(red|blue|green|yellow|purple|pink|indigo|gray|slate|zinc|neutral|stone|orange|amber|lime|emerald|teal|cyan|sky|violet|fuchsia|rose)-\d{2,3}/g,
+      "Use text-os-text or text-os-muted instead of hardcoded Tailwind text colors",
+      "WARN",
+    ],
+    [
+      /rounded-(none|sm|md|lg|xl|2xl|3xl|full)/g,
+      "Use rounded-os (maps to theme radius) instead of hardcoded rounded-*",
+      "WARN",
+    ],
+    [
+      /shadow-(sm|md|lg|xl|2xl|inner|none)/g,
+      "Use shadow-os (maps to theme shadow) instead of hardcoded shadow-*",
+      "WARN",
+    ],
+    [
+      /font-(sans|serif|mono)/g,
+      "Use font-display or font-body (maps to theme fonts) instead of hardcoded font-*",
+      "WARN",
+    ],
+    [
+      /border-(red|blue|green|yellow|purple|pink|indigo|gray|slate|zinc|neutral|stone|orange|amber|lime|emerald|teal|cyan|sky|violet|fuchsia|rose)-\d{2,3}/g,
+      "Use border-os (maps to theme border color) instead of hardcoded border-*",
+      "WARN",
+    ],
   ];
 
   for (const [regex, msg, severity] of nonTokenPatterns) {
@@ -218,10 +236,7 @@ function checkTailwindTokenUsage(
   }
 }
 
-function checkFontUsage(
-  content: string,
-  filePath: string,
-): void {
+function checkFontUsage(content: string, filePath: string): void {
   if (isAllowedColorFile(filePath)) return;
 
   const fontFamilyRegex = /fontFamily:\s*['"`][^'"`]+['"`]/g;
@@ -278,15 +293,13 @@ function main(): void {
 
   for (const v of violations) {
     const icon = v.severity === "ERROR" ? "❌" : v.severity === "WARN" ? "⚠️" : "ℹ️";
-    console.log(
-      `${icon} [${v.severity}] ${v.file}:${v.line}:${v.column}`
-    );
+    console.log(`${icon} [${v.severity}] ${v.file}:${v.line}:${v.column}`);
     console.log(`   ${v.message}`);
     console.log(`   💡 ${v.suggestion}\n`);
   }
 
   console.log(
-    `\nSummary: ${errors.length} errors, ${warnings.length} warnings, ${infos.length} infos`
+    `\nSummary: ${errors.length} errors, ${warnings.length} warnings, ${infos.length} infos`,
   );
 
   if (failOn.length > 0) {

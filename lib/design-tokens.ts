@@ -109,9 +109,11 @@ export const DYNAMIC_COLOR_CONTEXTS = new Set([
 ]);
 
 export function isHardcodedColor(value: string): boolean {
-  return /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b/i.test(value)
-    || /^rgb(a)?\(/.test(value)
-    || /^hsl(a)?\(/.test(value);
+  return (
+    /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b/i.test(value) ||
+    /^rgb(a)?\(/.test(value) ||
+    /^hsl(a)?\(/.test(value)
+  );
 }
 
 export function getTokenForColor(color: string): string | null {

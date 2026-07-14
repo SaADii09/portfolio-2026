@@ -4,3 +4,5 @@ export const INITIAL_Z_INDEX = 100;
 export const DEFAULT_WINDOW_WIDTH = 400;
 export const DEFAULT_WINDOW_HEIGHT = 320;
 export const TASKBAR_HEIGHT = 48;
+export const MOBILE_BREAKPOINT = 768;
+export const MOBILE_MIN_TOUCH = 44;

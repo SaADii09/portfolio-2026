@@ -13,6 +13,17 @@ function generateId(): string {
   return `win-${nextId++}-${Date.now()}`;
 }
 
+function clampToViewport(w: WindowInstance): WindowInstance {
+  if (typeof window === "undefined") return w;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  return {
+    ...w,
+    x: Math.max(0, Math.min(w.x, vw - Math.min(w.width, vw))),
+    y: Math.max(0, Math.min(w.y, vh - Math.min(w.height, vh) - 60)),
+  };
+}
+
 export interface WindowSlice {
   windows: WindowInstance[];
   activeWindowId: string | null;
@@ -25,6 +36,7 @@ export interface WindowSlice {
   updateWindowPosition: (id: string, x: number, y: number) => void;
   updateWindowSize: (id: string, width: number, height: number) => void;
   setWindowOpacity: (id: string, opacity: number) => void;
+  clampAllWindows: () => void;
 }
 
 export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
@@ -34,10 +46,7 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
   openWindow: (config) => {
     const id = generateId();
     const existing = get().windows;
-    const maxZ = existing.reduce(
-      (max, w) => Math.max(max, w.zIndex),
-      INITIAL_Z_INDEX
-    );
+    const maxZ = existing.reduce((max, w) => Math.max(max, w.zIndex), INITIAL_Z_INDEX);
     const offset = (existing.length % 10) * 30;
 
     const win: WindowInstance = {
@@ -69,42 +78,29 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
       windows: s.windows.filter((w) => w.id !== id),
       activeWindowId:
         s.activeWindowId === id
-          ? s.windows.filter((w) => w.id !== id).at(-1)?.id ?? null
+          ? (s.windows.filter((w) => w.id !== id).at(-1)?.id ?? null)
           : s.activeWindowId,
     }));
   },
 
   focusWindow: (id) => {
-    const maxZ = get().windows.reduce(
-      (max, w) => Math.max(max, w.zIndex),
-      INITIAL_Z_INDEX
-    );
+    const maxZ = get().windows.reduce((max, w) => Math.max(max, w.zIndex), INITIAL_Z_INDEX);
     set((s) => ({
-      windows: s.windows.map((w) =>
-        w.id === id ? { ...w, zIndex: maxZ + 1 } : w
-      ),
+      windows: s.windows.map((w) => (w.id === id ? { ...w, zIndex: maxZ + 1 } : w)),
       activeWindowId: id,
     }));
   },
 
   minimizeWindow: (id) => {
     set((s) => ({
-      windows: s.windows.map((w) =>
-        w.id === id ? { ...w, isMinimized: true } : w
-      ),
+      windows: s.windows.map((w) => (w.id === id ? { ...w, isMinimized: true } : w)),
     }));
   },
 
   maximizeWindow: (id) => {
     set((s) => ({
       windows: s.windows.map((w) =>
-        w.id === id
-          ? {
-              ...w,
-              isMaximized: true,
-              isMinimized: false,
-            }
-          : w
+        w.id === id ? { ...w, isMaximized: true, isMinimized: false } : w,
       ),
     }));
   },
@@ -112,9 +108,7 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
   restoreWindow: (id) => {
     set((s) => ({
       windows: s.windows.map((w) =>
-        w.id === id
-          ? { ...w, isMaximized: false, isMinimized: false }
-          : w
+        w.id === id ? { ...w, isMaximized: false, isMinimized: false } : w,
       ),
     }));
   },
@@ -134,16 +128,20 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
               width: Math.max(MIN_WINDOW_WIDTH, width),
               height: Math.max(MIN_WINDOW_HEIGHT, height),
             }
-          : w
+          : w,
       ),
     }));
   },
 
   setWindowOpacity: (id, opacity) => {
     set((s) => ({
-      windows: s.windows.map((w) =>
-        w.id === id ? { ...w, opacity } : w
-      ),
+      windows: s.windows.map((w) => (w.id === id ? { ...w, opacity } : w)),
+    }));
+  },
+
+  clampAllWindows: () => {
+    set((s) => ({
+      windows: s.windows.map(clampToViewport),
     }));
   },
 });
