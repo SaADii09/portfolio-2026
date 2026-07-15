@@ -170,11 +170,11 @@ describe("widgetSlice", () => {
   });
 
   it("adds a widget", () => {
-    store.addWidget("clock", "Clock", 100, 100);
+    store.addWidget("cpu", "CPU", 100, 100);
     expect(store.widgets).toHaveLength(1);
     const w = store.widgets[0];
-    expect(w.type).toBe("clock");
-    expect(w.title).toBe("Clock");
+    expect(w.type).toBe("cpu");
+    expect(w.title).toBe("CPU");
     expect(w.x).toBe(100);
     expect(w.y).toBe(100);
     expect(w.isPinned).toBe(false);

@@ -233,10 +233,11 @@ export function ChatPanel() {
       animate={{ x: 0 }}
       exit={{ x: 320 }}
       transition={{ type: "spring", damping: 25, stiffness: 300 }}
-      className="fixed right-0 top-0 z-[9997] flex flex-col glass-heavy border"
+      className="fixed right-0 z-[9997] flex flex-col glass-heavy border"
       style={{
+        top: 36,
         width: chatExpanded ? 280 : 240,
-        bottom: "var(--taskbar-height, 48px)",
+        bottom: 0,
         borderColor: "color-mix(in srgb, var(--accent-1) 15%, transparent)",
         boxShadow: "var(--shadow-glass)",
       }}

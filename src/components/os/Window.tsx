@@ -269,7 +269,11 @@ export function Window({ id, children }: WindowProps) {
   const windowStyle = (x: number, y: number, w: number, h: number, maximized: boolean) => ({
     transform: maximized ? "translate(0, 0)" : `translate(${x}px, ${y}px)`,
     width: maximized ? "100%" : w,
-    height: maximized ? "calc(100vh - var(--taskbar-height, 48px))" : h,
+    height: maximized
+      ? isMobile
+        ? "calc(100vh - 32px - 52px)"
+        : "calc(100vh - 36px - 76px)"
+      : h,
     zIndex: win.zIndex,
     borderRadius: maximized ? 0 : "var(--radius)",
     boxShadow: isActive ? "var(--shadow-window-active)" : "var(--shadow-window)",
@@ -291,7 +295,7 @@ export function Window({ id, children }: WindowProps) {
     const vw = typeof window !== "undefined" ? window.innerWidth : 375;
     const vh = typeof window !== "undefined" ? window.innerHeight : 812;
     const mobileW = win.isMaximized ? vw : Math.min(win.width, vw - 32);
-    const mobileH = win.isMaximized ? vh - 52 : Math.min(win.height, vh - 140);
+    const mobileH = win.isMaximized ? vh - 84 : Math.min(win.height, vh - 140);
     const mobileX = win.isMaximized ? 0 : Math.max(0, Math.min(win.x, vw - mobileW));
     const mobileY = win.isMaximized ? 0 : Math.max(0, Math.min(win.y, vh - mobileH));
 

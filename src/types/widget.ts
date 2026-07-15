@@ -1,4 +1,4 @@
-export type WidgetType = "clock" | "cpu" | "weather" | "music" | "notes";
+export type WidgetType = "cpu" | "weather" | "music" | "notes";
 
 export interface WidgetInstance {
   id: string;

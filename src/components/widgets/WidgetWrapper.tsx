@@ -65,10 +65,12 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
     (x: number, y: number, widgetW: number, widgetH: number) => {
       const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
       const vh = typeof window !== "undefined" ? window.innerHeight : 768;
-      const taskbarH = 60;
+      const isMobile = vw < 768;
+      const topBoundary = isMobile ? 32 : 36;
+      const bottomBoundary = isMobile ? 52 : 76;
 
       let finalX = Math.max(0, Math.min(x, vw - widgetW));
-      let finalY = Math.max(0, Math.min(y, vh - widgetH - taskbarH));
+      let finalY = Math.max(topBoundary, Math.min(y, vh - widgetH - bottomBoundary));
 
       const others = widgets.filter((w) => w.id !== id && !w.isCollapsed);
       for (const other of others) {
@@ -98,7 +100,7 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
       }
 
       finalX = Math.max(0, Math.min(finalX, vw - widgetW));
-      finalY = Math.max(0, Math.min(finalY, vh - widgetH - taskbarH));
+      finalY = Math.max(topBoundary, Math.min(finalY, vh - widgetH - bottomBoundary));
 
       return { finalX, finalY };
     },
@@ -244,7 +246,7 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
       style={{
         transform: `translate(${widget.x}px, ${widget.y}px)`,
         width: widget.width,
-        zIndex: widget.isPinned ? 9998 : 50,
+        zIndex: widget.isPinned ? 9996 : 50,
         borderRadius: "var(--radius)",
         borderColor: widget.isPinned
           ? "color-mix(in srgb, var(--accent-1) 40%, transparent)"

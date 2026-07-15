@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useStore } from "@/store";
-import { Play, Pause, SkipBack, SkipForward, Volume2 } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
 
 const BAR_COUNT = 12;
 
@@ -16,11 +16,9 @@ function buildBarConfig() {
 export function MusicWidget() {
   const isPlaying = useStore((s) => s.isPlaying);
   const currentTrack = useStore((s) => s.currentTrack);
-  const volume = useStore((s) => s.volume);
   const togglePlay = useStore((s) => s.togglePlay);
   const nextTrack = useStore((s) => s.nextTrack);
   const prevTrack = useStore((s) => s.prevTrack);
-  const setVolume = useStore((s) => s.setVolume);
   const bars = useMemo(() => buildBarConfig(), []);
 
   return (
@@ -79,19 +77,6 @@ export function MusicWidget() {
             }}
           />
         ))}
-      </div>
-
-      <div className="flex items-center gap-1.5">
-        <Volume2 size={10} style={{ color: "var(--text-secondary)" }} />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(volume * 100)}
-          onChange={(e) => setVolume(Number(e.target.value) / 100)}
-          className="flex-1 h-1 accent-os-accent cursor-pointer"
-          aria-label="Volume"
-        />
       </div>
 
       <style>{`

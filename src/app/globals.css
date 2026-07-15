@@ -17,6 +17,13 @@
   --spacing-taskbar: var(--taskbar-height);
 }
 
+:root {
+  /* Chrome safe zones — single source of truth */
+  --topbar-height: 36px;
+  --dock-height: 76px; /* 64px dock body + 12px bottom margin */
+  /* Mobile overrides applied via media query below */
+}
+
 :root,
 [data-theme="retro"] {
   --bg-primary: #2d1b14;
@@ -431,4 +438,13 @@ select,
   left: -10px;
   transform: translateY(-50%);
   cursor: ew-resize;
+}
+
+/* ── Mobile Safe Zones ──────────────────────────────── */
+
+@media (max-width: 768px) {
+  :root {
+    --topbar-height: 24px;
+    --dock-height: 0px;
+  }
 }

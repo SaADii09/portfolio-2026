@@ -6,12 +6,13 @@ import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
 import { Window } from "@/components/os/Window";
+import { Dock } from "@/components/os/Dock";
+import { TopBar } from "@/components/os/TopBar";
 import { Taskbar } from "@/components/os/Taskbar";
 import { ChatPanel } from "@/components/os/ChatPanel";
 import { Wallpaper } from "@/components/os/Wallpaper";
 import { WebView } from "@/components/os/WebView";
 import { WidgetWrapper } from "@/components/widgets/WidgetWrapper";
-import { ClockWidget } from "@/components/widgets/ClockWidget";
 import { CpuWidget } from "@/components/widgets/CpuWidget";
 import { WeatherWidget } from "@/components/widgets/WeatherWidget";
 import { MusicWidget } from "@/components/widgets/MusicWidget";
@@ -70,8 +71,6 @@ function renderAppContent(component?: string, url?: string) {
 
 function renderWidgetContent(type: string, widgetId: string) {
   switch (type) {
-    case "clock":
-      return <ClockWidget />;
     case "cpu":
       return <CpuWidget />;
     case "weather":
@@ -123,11 +122,10 @@ export function Desktop() {
 
     const w = typeof window !== "undefined" ? window.innerWidth : 1024;
 
-    addWidget("clock", "Clock", w - 220, 20);
-    addWidget("weather", "Weather", w - 220, 130);
-    addWidget("cpu", "CPU", w - 220, 240);
-    addWidget("music", "Music", w - 220, 350);
-    addWidget("notes", "Notes", w - 220, 460);
+    addWidget("weather", "Weather", w - 220, 20);
+    addWidget("cpu", "CPU", w - 220, 130);
+    addWidget("music", "Music", w - 220, 240);
+    addWidget("notes", "Notes", w - 220, 350);
 
     clampAllWindows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -231,7 +229,10 @@ export function Desktop() {
   if (isMobile) {
     return (
       <div className="relative w-full h-screen overflow-hidden bg-os-bg">
-        <div className="absolute inset-0 pb-[var(--taskbar-height,52px)] overflow-auto">
+        <TopBar />
+
+        {/* Desktop surface: widgets + icons — scrollable */}
+        <div className="absolute inset-0 pb-[var(--taskbar-height,52px)] pt-8 overflow-auto">
           <div className="flex gap-3 p-3 overflow-x-auto flex-shrink-0">
             {widgets.map((w) => (
               <WidgetWrapper key={w.id} id={w.id}>
@@ -254,19 +255,25 @@ export function Desktop() {
           </div>
         </div>
 
-        <AnimatePresence>
-          {windows
-            .filter((w) => !w.isMinimized)
-            .map((w) => (
-              <Window key={w.id} id={w.id}>
-                {w.type === "iframe" && w.url ? (
-                  <WebView url={w.url} />
-                ) : (
-                  renderAppContent(w.component)
-                )}
-              </Window>
-            ))}
-        </AnimatePresence>
+        {/* Mobile content zone: physically bounded between status bar and taskbar */}
+        <div
+          className="absolute overflow-hidden"
+          style={{ top: 32, bottom: 52, left: 0, right: 0 }}
+        >
+          <AnimatePresence>
+            {windows
+              .filter((w) => !w.isMinimized)
+              .map((w) => (
+                <Window key={w.id} id={w.id}>
+                  {w.type === "iframe" && w.url ? (
+                    <WebView url={w.url} />
+                  ) : (
+                    renderAppContent(w.component)
+                  )}
+                </Window>
+              ))}
+          </AnimatePresence>
+        </div>
 
         <AnimatePresence>
           {iconContextMenu && (
@@ -285,11 +292,17 @@ export function Desktop() {
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden flex flex-col bg-os-bg">
+    <div className="relative w-full h-screen overflow-hidden bg-os-bg">
       <Wallpaper />
+      <TopBar />
       <ChatPanel />
 
-      <div className="flex-1 relative overflow-hidden" onContextMenu={handleContextMenu}>
+      {/* Content safe zone: physically bounded between TopBar and Dock */}
+      <div
+        className="absolute overflow-hidden"
+        style={{ top: 36, bottom: 76, left: 0, right: 0 }}
+        onContextMenu={handleContextMenu}
+      >
         <div
           className={`absolute top-4 left-4 flex flex-col gap-4 z-10 ${isRefreshing ? "os-refresh-blink" : ""}`}
         >
@@ -311,14 +324,12 @@ export function Desktop() {
           ))}
         </div>
 
-        {/* Widgets */}
         {widgets.map((w) => (
           <WidgetWrapper key={w.id} id={w.id}>
             {renderWidgetContent(w.type, w.id)}
           </WidgetWrapper>
         ))}
 
-        {/* Windows */}
         <AnimatePresence>
           {windows
             .filter((w) => !w.isMinimized)
@@ -354,7 +365,7 @@ export function Desktop() {
         )}
       </AnimatePresence>
 
-      <Taskbar />
+      <Dock />
     </div>
   );
 }

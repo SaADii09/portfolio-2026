@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useState, useCallback } from "react";
+import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
-import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
 import {
   Monitor,
-  Palette,
   Settings,
   User,
   FolderKanban,
@@ -20,17 +18,10 @@ import {
   X,
   Target,
 } from "lucide-react";
-import type { ThemeName } from "@/types/theme";
 import { StartMenu } from "./StartMenu";
 import { ContextMenu } from "./ContextMenu";
 
-const THEMES: { name: ThemeName; label: string; color: string }[] = [
-  { name: "retro", label: "Retro 2D", color: "#ff9f1c" },
-  { name: "neon", label: "Neon City", color: "#ff00ff" },
-  { name: "editorial", label: "Classic Editorial", color: "#f7a501" },
-];
-
-const APP_ICONS: Record<string, typeof Home> = {
+const APP_ICONS: Record<string, typeof Monitor> = {
   about: User,
   projects: FolderKanban,
   "control-panel": Settings,
@@ -46,44 +37,21 @@ export function Taskbar() {
   const minimizeWindow = useStore((s) => s.minimizeWindow);
   const maximizeWindow = useStore((s) => s.maximizeWindow);
   const closeWindow = useStore((s) => s.closeWindow);
-  const openWindow = useStore((s) => s.openWindow);
-  const theme = useStore((s) => s.theme);
-  const setTheme = useStore((s) => s.setTheme);
   const [startOpen, setStartOpen] = useState(false);
-  const [time, setTime] = useState("");
-  const [contextMenu, setContextMenu] = useState<{ windowId: string; x: number; y: number } | null>(null);
-  const isMobile = useIsMobile();
+  const [contextMenu, setContextMenu] = useState<{
+    windowId: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setTime(now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-    };
-    tick();
-    const id = setInterval(tick, 10000);
-    return () => clearInterval(id);
-  }, []);
-
-  const handleAppChipClick = useCallback((id: string) => {
-    const w = useStore.getState().windows.find((w) => w.id === id);
-    if (w?.isMinimized) restoreWindow(id);
-    else focusWindow(id);
-  }, [focusWindow, restoreWindow]);
-
-  const handleAppChipContextMenu = useCallback((e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    setContextMenu({ windowId: id, x: e.clientX, y: e.clientY });
-  }, []);
-
-  const handleOpenSettings = () => {
-    const existing = windows.find((w) => w.component === "control-panel");
-    if (existing) {
-      if (existing.isMinimized) restoreWindow(existing.id);
-      focusWindow(existing.id);
-      return;
-    }
-    openWindow({ title: "Control Panel", type: "app", component: "control-panel" });
-  };
+  const handleAppChipClick = useCallback(
+    (id: string) => {
+      const w = useStore.getState().windows.find((w) => w.id === id);
+      if (w?.isMinimized) restoreWindow(id);
+      else focusWindow(id);
+    },
+    [focusWindow, restoreWindow],
+  );
 
   const getWindowMenuItems = (windowId: string) => {
     const w = windows.find((w) => w.id === windowId);
@@ -124,26 +92,26 @@ export function Taskbar() {
     ];
   };
 
-  if (isMobile) {
-    return (
-      <>
-        <div
-          className="flex items-center justify-around px-2 fixed bottom-0 left-0 right-0 z-[9999] glass-heavy"
-          style={{
-            height: "var(--taskbar-height, 52px)",
-            borderTop: "1px solid color-mix(in srgb, var(--accent-1) 10%, transparent)",
-            boxShadow: "var(--shadow-glass)",
-          }}
+  return (
+    <>
+      <div
+        className="flex items-center px-2 fixed bottom-0 left-0 right-0 z-[9999] glass-heavy"
+        style={{
+          height: "var(--taskbar-height, 52px)",
+          borderTop: "1px solid color-mix(in srgb, var(--accent-1) 10%, transparent)",
+          boxShadow: "var(--shadow-glass)",
+        }}
+      >
+        <button
+          onClick={() => setStartOpen((v) => !v)}
+          className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-os transition-all hover:scale-110 active:scale-95"
+          style={{ color: "var(--text-primary)" }}
+          aria-label="Home"
         >
-          <button
-            onClick={() => setStartOpen((v) => !v)}
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-os transition-all hover:scale-110 active:scale-95"
-            style={{ color: "var(--text-primary)" }}
-            aria-label="Home"
-          >
-            <Home size={20} />
-          </button>
+          <Home size={20} />
+        </button>
 
+        <div className="flex-1 flex items-center justify-center gap-1 overflow-x-auto">
           {windows.map((w) => (
             <MobileTaskbarButton
               key={w.id}
@@ -155,36 +123,9 @@ export function Taskbar() {
               }}
             />
           ))}
-
-          <button
-            onClick={handleOpenSettings}
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-os transition-all hover:scale-110 active:scale-95"
-            style={{ color: "var(--text-secondary)" }}
-            aria-label="Settings"
-          >
-            <Settings size={20} />
-          </button>
         </div>
+      </div>
 
-        <AnimatePresence>
-          {startOpen && <StartMenu onClose={() => setStartOpen(false)} />}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {contextMenu && (
-            <ContextMenu
-              items={getWindowMenuItems(contextMenu.windowId)}
-              position={{ x: contextMenu.x, y: contextMenu.y }}
-              onClose={() => setContextMenu(null)}
-            />
-          )}
-        </AnimatePresence>
-      </>
-    );
-  }
-
-  return (
-    <>
       <AnimatePresence>
         {startOpen && <StartMenu onClose={() => setStartOpen(false)} />}
       </AnimatePresence>
@@ -198,83 +139,6 @@ export function Taskbar() {
           />
         )}
       </AnimatePresence>
-
-      <div
-        className="flex items-center gap-2 px-3 z-[9999] glass-heavy"
-        style={{
-          height: "var(--taskbar-height, 48px)",
-          borderTop: "1px solid color-mix(in srgb, var(--accent-1) 10%, transparent)",
-          boxShadow: "var(--shadow-glass)",
-        }}
-      >
-        <button
-          onClick={() => setStartOpen((v) => !v)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-os transition-all hover:scale-105 active:scale-95"
-          style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }}
-        >
-          <Monitor size={14} />
-          Start
-        </button>
-
-        <div className="flex-1 flex items-center gap-1 overflow-x-auto">
-          {windows.map((w) => (
-            <button
-              key={w.id}
-              onClick={() => handleAppChipClick(w.id)}
-              onContextMenu={(e) => handleAppChipContextMenu(e, w.id)}
-              className="relative px-2.5 py-1 text-xs font-body rounded-os whitespace-nowrap transition-all hover:scale-105 active:scale-95"
-              style={{
-                background: w.isMinimized ? "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)" : "var(--accent-3)",
-                color: "var(--text-primary)",
-                opacity: w.isMinimized ? 0.6 : 1,
-              }}
-            >
-              {w.title}
-              {!w.isMinimized && (
-                <motion.div
-                  layoutId="activeChipIndicator"
-                  className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full"
-                  style={{ background: "var(--accent-1)" }}
-                  transition={{ type: "spring", damping: 20, stiffness: 300 }}
-                />
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleOpenSettings}
-            className="flex items-center justify-center w-6 h-6 rounded-os transition-all hover:scale-110 active:scale-95"
-            style={{ color: "var(--text-secondary)" }}
-            aria-label="Open Settings"
-            title="Settings"
-          >
-            <Settings size={14} />
-          </button>
-
-          <Palette size={14} className="text-os-muted" />
-
-          {THEMES.map((t) => (
-            <button
-              key={t.name}
-              onClick={() => setTheme(t.name)}
-              className="w-5 h-5 rounded-full border-2 transition-all hover:scale-125"
-              style={{
-                background: t.color,
-                borderColor: theme === t.name ? "var(--accent-1)" : "transparent",
-                boxShadow: theme === t.name
-                  ? `0 0 8px ${t.color}, 0 0 16px color-mix(in srgb, ${t.color} 40%, transparent)`
-                  : "none",
-              }}
-              aria-label={t.label}
-              title={t.label}
-            />
-          ))}
-        </div>
-
-        <span className="font-display text-xs min-w-[48px] text-right text-os-muted">{time}</span>
-      </div>
     </>
   );
 }
@@ -289,7 +153,7 @@ function MobileTaskbarButton({
   onLongPress: (e: React.PointerEvent) => void;
 }) {
   const longPress = useLongPress({ onLongPress });
-  const Icon = w.component ? APP_ICONS[w.component] : null;
+  const Icon = w.component ? APP_ICONS[w.component] ?? Monitor : Monitor;
 
   return (
     <button
@@ -305,7 +169,7 @@ function MobileTaskbarButton({
       }}
       aria-label={w.title}
     >
-      {Icon ? <Icon size={20} /> : <Monitor size={20} />}
+      <Icon size={20} />
     </button>
   );
 }
