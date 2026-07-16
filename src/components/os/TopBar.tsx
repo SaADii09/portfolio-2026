@@ -368,6 +368,12 @@ function DesktopControlContent({ onClose }: { onClose: () => void }) {
   const prevTrack = useStore((s) => s.prevTrack);
   const openWindow = useStore((s) => s.openWindow);
   const windows = useStore((s) => s.windows);
+  const glassBlur = useStore((s) => s.glassBlur);
+  const glassSaturate = useStore((s) => s.glassSaturate);
+  const glassOpacity = useStore((s) => s.glassOpacity);
+  const setGlassBlur = useStore((s) => s.setGlassBlur);
+  const setGlassSaturate = useStore((s) => s.setGlassSaturate);
+  const setGlassOpacity = useStore((s) => s.setGlassOpacity);
 
   const handleOpenSettings = () => {
     const existing = windows.find((w) => w.component === "control-panel");
@@ -418,6 +424,29 @@ function DesktopControlContent({ onClose }: { onClose: () => void }) {
               <span className="text-[9px] font-body">{t.label}</span>
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="h-px" style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }} />
+
+      <div>
+        <span className="text-[10px] font-body block mb-1.5" style={{ color: "var(--text-secondary)" }}>Glass</span>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <label className="text-[9px] w-10 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>Blur</label>
+            <input type="range" min={0} max={40} value={glassBlur} onChange={(e) => setGlassBlur(Number(e.target.value))} className="flex-1 h-1 accent-os-accent cursor-pointer" aria-label="Glass blur" />
+            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>{glassBlur}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-[9px] w-10 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>Sat</label>
+            <input type="range" min={100} max={250} step={5} value={glassSaturate} onChange={(e) => setGlassSaturate(Number(e.target.value))} className="flex-1 h-1 accent-os-accent cursor-pointer" aria-label="Glass saturation" />
+            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>{glassSaturate}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-[9px] w-10 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>Tint</label>
+            <input type="range" min={5} max={100} step={5} value={glassOpacity} onChange={(e) => setGlassOpacity(Number(e.target.value))} className="flex-1 h-1 accent-os-accent cursor-pointer" aria-label="Glass tint" />
+            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>{glassOpacity}%</span>
+          </div>
         </div>
       </div>
 
@@ -627,6 +656,8 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
   const setVolume = useStore((s) => s.setVolume);
   const openWindow = useStore((s) => s.openWindow);
   const windows = useStore((s) => s.windows);
+  const glassBlur = useStore((s) => s.glassBlur);
+  const setGlassBlur = useStore((s) => s.setGlassBlur);
 
   const handleOpenSettings = () => {
     const existing = windows.find((w) => w.component === "control-panel");
@@ -671,6 +702,12 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
         <div className="flex-1 h-1 rounded-full" style={{ background: "var(--bg-tertiary)" }}>
           <div className="h-full w-3/4 rounded-full" style={{ background: "var(--accent-1)" }} />
         </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-body w-5 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>Glass</span>
+        <input type="range" min={0} max={40} value={glassBlur} onChange={(e) => setGlassBlur(Number(e.target.value))} className="flex-1 h-1 accent-os-accent cursor-pointer" aria-label="Glass blur" />
+        <span className="text-[10px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>{glassBlur}px</span>
       </div>
 
       <div className="flex items-center gap-2">

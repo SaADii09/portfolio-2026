@@ -78,6 +78,7 @@ export function Window({ id, children }: WindowProps) {
   const handleHeaderDown = useCallback(
     (e: React.PointerEvent) => {
       if (!win || win.isMaximized) return;
+      if ((e.target as HTMLElement).closest("button")) return;
       e.preventDefault();
       dragRef.current = { sx: e.clientX, sy: e.clientY, wx: win.x, wy: win.y };
       focusWindow(id);

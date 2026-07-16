@@ -58,7 +58,7 @@ export function ProjectsApp() {
           <button
             key={i}
             onClick={() => handleProjectClick(p)}
-            className="group p-3 rounded-os glass glass-border text-left transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
+            className="group p-3 rounded-os glass glass-pos glass-border text-left transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
           >
             <h3 className="font-display text-xs mb-1 text-os-accent group-hover:glow-accent">{p.title}</h3>
             <p className="font-body text-sm leading-relaxed mb-2 text-os-text">{p.desc}</p>
@@ -66,7 +66,7 @@ export function ProjectsApp() {
               {p.tech.map((t) => (
                 <span
                   key={t}
-                  className="px-1.5 py-0.5 text-[10px] rounded-os glass text-os-muted"
+                  className="px-1.5 py-0.5 text-[10px] rounded-os glass glass-pos text-os-muted"
                 >
                   {t}
                 </span>

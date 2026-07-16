@@ -22,6 +22,9 @@ export const useStore = create<AppStore>()(
       partialize: (state) => ({
         theme: state.theme,
         customTokens: state.customTokens,
+        glassBlur: state.glassBlur,
+        glassSaturate: state.glassSaturate,
+        glassOpacity: state.glassOpacity,
         windows: state.windows,
         widgets: state.widgets,
         music: { volume: state.volume, currentTrack: state.currentTrack },

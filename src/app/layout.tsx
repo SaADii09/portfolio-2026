@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Press_Start_2P, VT323, Orbitron, Rajdhani, IBM_Plex_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const pressStart2p = Press_Start_2P({
@@ -54,7 +55,10 @@ export default function RootLayout({
       data-theme="retro"
       className={`${pressStart2p.variable} ${vt323.variable} ${orbitron.variable} ${rajdhani.variable} ${ibmPlexSans.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

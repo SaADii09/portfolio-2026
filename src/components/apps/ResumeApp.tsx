@@ -89,7 +89,7 @@ export function ResumeApp() {
                   </p>
                 </div>
                 <span
-                  className="text-[9px] whitespace-nowrap px-1.5 py-0.5 rounded-os glass"
+                  className="text-[9px] whitespace-nowrap px-1.5 py-0.5 rounded-os glass glass-pos"
                   style={{ color: "var(--text-secondary)" }}
                 >
                   {exp.period}
@@ -124,7 +124,7 @@ export function ResumeApp() {
                 {group.items.map((s) => (
                   <span
                     key={s}
-                    className="px-1.5 py-0.5 text-[10px] rounded-os glass glass-border transition-all hover:glow-sm"
+                    className="px-1.5 py-0.5 text-[10px] rounded-os glass glass-pos glass-border transition-all hover:glow-sm"
                     style={{ color: "var(--text-primary)" }}
                   >
                     {s}

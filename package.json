@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@types/howler": "^2.2.13",
+    "@vercel/analytics": "^2.0.1",
     "framer-motion": "^12.42.2",
     "howler": "^2.2.4",
     "lucide-react": "^1.24.0",

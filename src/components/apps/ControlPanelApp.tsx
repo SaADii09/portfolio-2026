@@ -2,7 +2,7 @@
 
 import { useStore } from "@/store";
 import type { ThemeName } from "@/types/theme";
-import { Play, Pause, SkipBack, SkipForward, Volume2 } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, RotateCcw } from "lucide-react";
 
 const THEMES: { name: ThemeName; label: string; colors: string[] }[] = [
   {
@@ -28,6 +28,14 @@ export function ControlPanelApp() {
   const customTokens = useStore((s) => s.customTokens);
   const updateCustomToken = useStore((s) => s.updateCustomToken);
   const resetCustomTokens = useStore((s) => s.resetCustomTokens);
+
+  const glassBlur = useStore((s) => s.glassBlur);
+  const glassSaturate = useStore((s) => s.glassSaturate);
+  const glassOpacity = useStore((s) => s.glassOpacity);
+  const setGlassBlur = useStore((s) => s.setGlassBlur);
+  const setGlassSaturate = useStore((s) => s.setGlassSaturate);
+  const setGlassOpacity = useStore((s) => s.setGlassOpacity);
+  const resetGlass = useStore((s) => s.resetGlass);
 
   const isPlaying = useStore((s) => s.isPlaying);
   const currentTrack = useStore((s) => s.currentTrack);
@@ -61,6 +69,77 @@ export function ControlPanelApp() {
               </div>
             </button>
           ))}
+        </div>
+      </section>
+
+      {/* Glass Controls */}
+      <section>
+        <div className="flex items-center justify-between mb-2.5">
+          <h3 className="font-display text-xs text-os-accent">Glass</h3>
+          <button
+            onClick={resetGlass}
+            className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-os transition-opacity hover:opacity-70"
+            style={{ color: "var(--text-secondary)" }}
+            aria-label="Reset glass"
+          >
+            <RotateCcw size={9} /> Reset
+          </button>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] w-12 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+              Blur
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={40}
+              step={1}
+              value={glassBlur}
+              onChange={(e) => setGlassBlur(Number(e.target.value))}
+              className="flex-1 h-1 accent-os-accent cursor-pointer"
+              aria-label="Glass blur intensity"
+            />
+            <span className="text-[9px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>
+              {glassBlur}px
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] w-12 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+              Saturate
+            </label>
+            <input
+              type="range"
+              min={100}
+              max={250}
+              step={5}
+              value={glassSaturate}
+              onChange={(e) => setGlassSaturate(Number(e.target.value))}
+              className="flex-1 h-1 accent-os-accent cursor-pointer"
+              aria-label="Glass saturation"
+            />
+            <span className="text-[9px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>
+              {glassSaturate}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] w-12 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+              Tint
+            </label>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              step={5}
+              value={glassOpacity}
+              onChange={(e) => setGlassOpacity(Number(e.target.value))}
+              className="flex-1 h-1 accent-os-accent cursor-pointer"
+              aria-label="Glass tint opacity"
+            />
+            <span className="text-[9px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>
+              {glassOpacity}%
+            </span>
+          </div>
         </div>
       </section>
 

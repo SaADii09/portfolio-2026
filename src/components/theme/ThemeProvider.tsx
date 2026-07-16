@@ -2,10 +2,13 @@
 
 import { useEffect } from "react";
 import { useStore } from "@/store";
+import { useGlassGlare } from "@/hooks/useGlassGlare";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useStore((s) => s.theme);
   const customTokens = useStore((s) => s.customTokens);
+
+  useGlassGlare();
 
   useEffect(() => {
     const root = document.documentElement;

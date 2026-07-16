@@ -151,9 +151,8 @@ export function ChatPanel() {
                           background:
                             msg.role === "user"
                               ? "linear-gradient(135deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 60%, var(--accent-1)))"
-                              : "color-mix(in srgb, var(--bg-tertiary) 70%, transparent)",
+                              : undefined,
                           color: msg.role === "user" ? "var(--bg-primary)" : "var(--text-primary)",
-                          backdropFilter: msg.role !== "user" ? "blur(8px)" : undefined,
                         }}
                       >
                         {msg.content}
@@ -186,7 +185,7 @@ export function ChatPanel() {
                   onKeyDown={handleKeyDown}
                   placeholder="Type a message..."
                   disabled={isLoading}
-                  className="flex-1 px-3 py-2.5 text-xs font-body rounded-os outline-none border glass min-h-[44px] focus:glow-sm transition-shadow"
+                  className="flex-1 px-3 py-2.5 text-xs font-body rounded-os outline-none border glass glass-pos min-h-[44px] focus:glow-sm transition-shadow"
                   style={{
                     color: "var(--text-primary)",
                     borderColor: "color-mix(in srgb, var(--border) 40%, transparent)",
@@ -317,9 +316,8 @@ export function ChatPanel() {
                       background:
                         msg.role === "user"
                           ? "linear-gradient(135deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 60%, var(--accent-1)))"
-                          : "color-mix(in srgb, var(--bg-tertiary) 70%, transparent)",
+                          : undefined,
                       color: msg.role === "user" ? "var(--bg-primary)" : "var(--text-primary)",
-                      backdropFilter: msg.role !== "user" ? "blur(8px)" : undefined,
                     }}
                   >
                     {msg.content}
@@ -352,7 +350,7 @@ export function ChatPanel() {
               onKeyDown={handleKeyDown}
               placeholder="Type a message..."
               disabled={isLoading}
-              className="flex-1 px-2.5 py-1.5 text-xs font-body rounded-os outline-none border glass focus:glow-sm transition-shadow"
+              className="flex-1 px-2.5 py-1.5 text-xs font-body rounded-os outline-none border glass glass-pos focus:glow-sm transition-shadow"
               style={{
                 color: "var(--text-primary)",
                 borderColor: "color-mix(in srgb, var(--border) 40%, transparent)",
