@@ -1,5 +1,6 @@
 import { StateCreator } from "zustand";
 import { WindowInstance, WindowConfig } from "@/types/window";
+import { clampWindowSize, clampWindowPosition } from "@/lib/boundaries";
 import {
   MIN_WINDOW_WIDTH,
   MIN_WINDOW_HEIGHT,
@@ -17,14 +18,9 @@ function clampToViewport(w: WindowInstance): WindowInstance {
   if (typeof window === "undefined") return w;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const isMobile = vw < 768;
-  const topBar = isMobile ? 32 : 36;
-  const bottomBar = isMobile ? 52 : 76;
-  return {
-    ...w,
-    x: Math.max(0, Math.min(w.x, vw - Math.min(w.width, vw))),
-    y: Math.max(topBar, Math.min(w.y, vh - Math.min(w.height, vh) - bottomBar)),
-  };
+  const size = clampWindowSize(w.width, w.height, vw, vh);
+  const pos = clampWindowPosition(w.x, w.y, size.width, size.height, vw, vh);
+  return { ...w, ...size, ...pos };
 }
 
 export interface WindowSlice {

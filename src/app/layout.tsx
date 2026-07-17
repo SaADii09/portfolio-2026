@@ -53,8 +53,16 @@ export default function RootLayout({
     <html
       lang="en"
       data-theme="retro"
+      suppressHydrationWarning
       className={`${pressStart2p.variable} ${vt323.variable} ${orbitron.variable} ${rajdhani.variable} ${ibmPlexSans.variable}`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var d=document.documentElement;var r=localStorage.getItem("devos-store");if(r){var o=JSON.parse(r);var s=o&&o.state;var t=s&&s.theme;if(t){d.setAttribute("data-theme",t);var c=s.customTokens;if(c){for(var k in c){if(c.hasOwnProperty(k)){d.style.setProperty("--"+k,c[k])}}}d.setAttribute("data-boot-visit","returning")}else{d.setAttribute("data-boot-visit","first")}}else{d.setAttribute("data-boot-visit","first")}}catch(e){document.documentElement.setAttribute("data-boot-visit","first")}})()`,
+          }}
+        />
+      </head>
       <body>
         {children}
         <Analytics />

@@ -5,6 +5,7 @@ import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
+import { getViewportBounds } from "@/lib/boundaries";
 import { ChevronDown, ChevronRight, GripVertical, Pin, PinOff, Trash2 } from "lucide-react";
 import { ContextMenu } from "@/components/os/ContextMenu";
 
@@ -65,12 +66,10 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
     (x: number, y: number, widgetW: number, widgetH: number) => {
       const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
       const vh = typeof window !== "undefined" ? window.innerHeight : 768;
-      const isMobile = vw < 768;
-      const topBoundary = isMobile ? 32 : 36;
-      const bottomBoundary = isMobile ? 52 : 76;
+      const bounds = getViewportBounds(vw);
 
       let finalX = Math.max(0, Math.min(x, vw - widgetW));
-      let finalY = Math.max(topBoundary, Math.min(y, vh - widgetH - bottomBoundary));
+      let finalY = Math.max(bounds.topBar, Math.min(y, vh - widgetH - bounds.bottomBar));
 
       const others = widgets.filter((w) => w.id !== id && !w.isCollapsed);
       for (const other of others) {
@@ -100,7 +99,7 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
       }
 
       finalX = Math.max(0, Math.min(finalX, vw - widgetW));
-      finalY = Math.max(topBoundary, Math.min(finalY, vh - widgetH - bottomBoundary));
+      finalY = Math.max(bounds.topBar, Math.min(finalY, vh - widgetH - bounds.bottomBar));
 
       return { finalX, finalY };
     },

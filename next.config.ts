@@ -11,7 +11,6 @@ const csp = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["192.168.100.52"],
   headers: async () => [
     {
       source: "/(.*)",

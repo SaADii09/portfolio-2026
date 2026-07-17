@@ -5,6 +5,8 @@ import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
+import { useViewportClamp } from "@/hooks/useViewportClamp";
+import { getViewportBounds } from "@/lib/boundaries";
 import { Window } from "@/components/os/Window";
 import { Dock } from "@/components/os/Dock";
 import { TopBar } from "@/components/os/TopBar";
@@ -92,6 +94,7 @@ export function Desktop() {
   const clampAllWindows = useStore((s) => s.clampAllWindows);
   const initDone = useRef(false);
   const isMobile = useIsMobile();
+  useViewportClamp();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [iconContextMenu, setIconContextMenu] = useState<{
     component: string;
@@ -120,14 +123,18 @@ export function Desktop() {
 
     if (deduped.length > 0) return;
 
-    const w = typeof window !== "undefined" ? window.innerWidth : 1024;
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+    const bounds = getViewportBounds(vw);
 
-    addWidget("weather", "Weather", w - 220, 20);
-    addWidget("cpu", "CPU", w - 220, 130);
-    addWidget("music", "Music", w - 220, 240);
-    addWidget("notes", "Notes", w - 220, 350);
+    addWidget("weather", "Weather", vw - 220, bounds.topBar + 10);
+    addWidget("cpu", "CPU", vw - 220, bounds.topBar + 120);
+    addWidget("music", "Music", vw - 220, bounds.topBar + 230);
+    addWidget("notes", "Notes", vw - 220, bounds.topBar + 340);
 
     clampAllWindows();
+    const store = useStore.getState();
+    store.clampAllWidgets();
+    store.resolveAllWidgetCollisions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

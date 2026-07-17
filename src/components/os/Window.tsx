@@ -5,6 +5,7 @@ import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
+import { clampWindowSize, clampWindowPosition, clampDragPosition } from "@/lib/boundaries";
 import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT } from "@/lib/constants";
 import { X, Minus, Maximize2, Minimize2, ExternalLink, Target } from "lucide-react";
 import { ContextMenu } from "./ContextMenu";
@@ -91,8 +92,13 @@ export function Window({ id, children }: WindowProps) {
       let rafScheduled = false;
 
       const onMove = (e: PointerEvent) => {
-        pendingX = dragRef.current.wx + e.clientX - dragRef.current.sx;
-        pendingY = dragRef.current.wy + e.clientY - dragRef.current.sy;
+        const rawX = dragRef.current.wx + e.clientX - dragRef.current.sx;
+        const rawY = dragRef.current.wy + e.clientY - dragRef.current.sy;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const clamped = clampDragPosition(rawX, rawY, win.width, vw, vh);
+        pendingX = clamped.x;
+        pendingY = clamped.y;
         if (el) {
           el.style.transform = `translate(${pendingX}px, ${pendingY}px)`;
         }
@@ -159,6 +165,15 @@ export function Window({ id, children }: WindowProps) {
           newH = Math.max(MIN_WINDOW_HEIGHT, sh - dy);
           newY = wy + (sh - newH);
         }
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const size = clampWindowSize(newW, newH, vw, vh);
+        const pos = clampWindowPosition(newX, newY, size.width, size.height, vw, vh);
+        newW = size.width;
+        newH = size.height;
+        newX = pos.x;
+        newY = pos.y;
 
         pendingW = newW;
         pendingH = newH;
