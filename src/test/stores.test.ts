@@ -1,8 +1,20 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createWindowSlice, WindowSlice } from "@/store/windowSlice";
 import { createThemeSlice, ThemeSlice } from "@/store/themeSlice";
 import { createWidgetSlice, WidgetSlice } from "@/store/widgetSlice";
 import { createMusicSlice, MusicSlice } from "@/store/musicSlice";
+
+// jsdom has no Web Audio API — stub the synth engine so music slice logic is testable
+vi.mock("@/lib/audio-engine", () => ({
+  getSynthEngine: () => ({
+    play: vi.fn(),
+    pause: vi.fn(),
+    stop: vi.fn(),
+    setVolume: vi.fn(),
+    destroy: vi.fn(),
+    isPlaying: false,
+  }),
+}));
 
 type Slice = WindowSlice & ThemeSlice & WidgetSlice & MusicSlice;
 
@@ -13,12 +25,15 @@ function createTestStore(): Slice {
     Object.assign(store, val);
   };
   const get = () => store;
+  // The slices only use `set`/`get`; the third `api` argument is never referenced at
+  // runtime, so a stub keeps the StateCreator signature satisfied without a cast error.
+  const api = {} as never;
   Object.assign(
     store,
-    createWindowSlice(set, get),
-    createThemeSlice(set, get),
-    createWidgetSlice(set, get),
-    createMusicSlice(set, get),
+    createWindowSlice(set, get, api),
+    createThemeSlice(set, get, api),
+    createWidgetSlice(set, get, api),
+    createMusicSlice(set, get, api),
   );
   return store;
 }

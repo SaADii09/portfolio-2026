@@ -1,70 +1,78 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { Taskbar } from "@/components/os/Taskbar";
 
-vi.mock("@/hooks/useMediaQuery", () => ({
-  useIsMobile: () => false,
+vi.mock("@/components/os/StartMenu", () => ({
+  StartMenu: () => <div data-testid="start-menu" />,
 }));
 
-const mockFocus = vi.fn();
-const mockRestore = vi.fn();
-const mockOpenWindow = vi.fn();
-const mockSetTheme = vi.fn();
+const mocks = vi.hoisted(() => {
+  const focusWindow = vi.fn();
+  const restoreWindow = vi.fn();
+  const state = {
+    windows: [
+      {
+        id: "win-1",
+        title: "About",
+        component: "about",
+        isMinimized: false,
+        isMaximized: false,
+      },
+      {
+        id: "win-2",
+        title: "Terminal",
+        component: "terminal",
+        isMinimized: true,
+        isMaximized: false,
+      },
+    ],
+    focusWindow,
+    restoreWindow,
+    minimizeWindow: vi.fn(),
+    maximizeWindow: vi.fn(),
+    closeWindow: vi.fn(),
+    openWindow: vi.fn(),
+  };
+  return { state, focusWindow, restoreWindow };
+});
 
 vi.mock("@/store", () => ({
-  useStore: (selector: (s: unknown) => unknown) => {
-    const state = {
-      windows: [
-        {
-          id: "win-1",
-          title: "About",
-          component: "about",
-          isMinimized: false,
-        },
-        {
-          id: "win-2",
-          title: "Terminal",
-          component: "terminal",
-          isMinimized: true,
-        },
-      ],
-      focusWindow: mockFocus,
-      restoreWindow: mockRestore,
-      openWindow: mockOpenWindow,
-      theme: "retro" as const,
-      setTheme: mockSetTheme,
-    };
-    return selector(state);
-  },
+  useStore: Object.assign((selector: (s: unknown) => unknown) => selector(mocks.state), {
+    getState: () => mocks.state,
+  }),
 }));
 
-describe("Taskbar (desktop)", () => {
-  it("renders Start button", () => {
-    render(<Taskbar />);
-    expect(screen.getByText("Start")).toBeDefined();
+describe("Taskbar (mobile)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it("renders window chips for each open window", () => {
+  it("renders the Home button", () => {
     render(<Taskbar />);
-    expect(screen.getByText("About")).toBeDefined();
-    expect(screen.getByText("Terminal")).toBeDefined();
+    expect(screen.getByLabelText("Home")).toBeDefined();
   });
 
-  it("renders theme toggle buttons", () => {
+  it("renders a button for each open window", () => {
     render(<Taskbar />);
-    expect(screen.getByLabelText("Retro 2D")).toBeDefined();
-    expect(screen.getByLabelText("Neon City")).toBeDefined();
-    expect(screen.getByLabelText("Classic Editorial")).toBeDefined();
+    expect(screen.getByLabelText("About")).toBeDefined();
+    expect(screen.getByLabelText("Terminal")).toBeDefined();
   });
 
-  it("renders Settings button", () => {
+  it("focuses a non-minimized window when its button is tapped", () => {
     render(<Taskbar />);
-    expect(screen.getByLabelText("Open Settings")).toBeDefined();
+    fireEvent.click(screen.getByLabelText("About"));
+    expect(mocks.focusWindow).toHaveBeenCalledWith("win-1");
   });
 
-  it("shows current time", () => {
+  it("restores a minimized window when its button is tapped", () => {
     render(<Taskbar />);
-    const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    expect(screen.getByText(now)).toBeDefined();
+    fireEvent.click(screen.getByLabelText("Terminal"));
+    expect(mocks.restoreWindow).toHaveBeenCalledWith("win-2");
+  });
+
+  it("opens the Start menu from the Home button", () => {
+    render(<Taskbar />);
+    fireEvent.click(screen.getByLabelText("Home"));
+    expect(screen.getByTestId("start-menu")).toBeDefined();
   });
 });

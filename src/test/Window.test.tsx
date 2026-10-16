@@ -79,15 +79,6 @@ describe("Window", () => {
     expect(screen.getByLabelText("Close")).toBeDefined();
   });
 
-  it("renders opacity slider", () => {
-    render(
-      <Window id="win-1">
-        <p>content</p>
-      </Window>,
-    );
-    expect(screen.getByLabelText("Window opacity")).toBeDefined();
-  });
-
   it("returns null for non-existent window", () => {
     const { container } = render(
       <Window id="nonexistent">

@@ -1,20 +1,23 @@
 import { test, expect } from "@playwright/test";
+import { gotoApp } from "./utils";
 
 test.describe("LocalStorage persistence", () => {
   test("saves theme preference to localStorage", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await gotoApp(page);
 
-    await page.getByLabel("Neon City").click();
-    const store = await page.evaluate(() => localStorage.getItem("devos-store"));
-    expect(store).not.toBeNull();
-    const parsed = JSON.parse(store!);
-    expect(parsed.state?.theme).toBe("neon");
+    await page.getByLabel("Control Center").click();
+    await page.getByLabel("Neon").click();
+
+    await expect
+      .poll(async () => {
+        const store = await page.evaluate(() => localStorage.getItem("devos-store"));
+        return JSON.parse(store ?? "{}").state?.theme;
+      })
+      .toBe("neon");
   });
 
   test("restores theme from localStorage on reload", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await gotoApp(page);
 
     await page.evaluate(() => {
       const store = JSON.parse(localStorage.getItem("devos-store") || "{}");
@@ -23,18 +26,18 @@ test.describe("LocalStorage persistence", () => {
     });
 
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 15000 });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "editorial");
   });
 
   test("preserves windows after reload", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await gotoApp(page);
 
-    await page.getByLabel("About Me").first().click();
+    await page.getByTitle("Open About Me").dblclick();
+    await expect(page.getByRole("heading", { name: "About Me" })).toBeVisible();
 
     await page.reload();
-    await page.waitForLoadState("networkidle");
-    await expect(page.getByText("About Me")).toBeVisible();
+    await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 15000 });
+    await expect(page.getByRole("heading", { name: "About Me" })).toBeVisible();
   });
 });
