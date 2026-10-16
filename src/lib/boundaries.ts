@@ -54,6 +54,49 @@ export function clampWidgetBounds(
   };
 }
 
+export function resolveWidgetCollisions(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  others: Array<{ x: number; y: number; width?: number; isCollapsed: boolean }>,
+  vw: number,
+  vh: number,
+) {
+  const { topBar, bottomBar } = getViewportBounds(vw);
+
+  let finalX = Math.max(0, Math.min(x, vw - w));
+  let finalY = Math.max(topBar, Math.min(y, vh - h - bottomBar));
+
+  for (const other of others) {
+    const ox = other.x;
+    const oy = other.y;
+    const ow = other.width || DEFAULT_WIDGET_W;
+    const oh = DEFAULT_WIDGET_H;
+
+    const overlaps =
+      finalX < ox + ow && finalX + w > ox && finalY < oy + oh && finalY + h > oy;
+
+    if (overlaps) {
+      const pushRight = ox + ow - finalX;
+      const pushLeft = finalX + w - ox;
+      const pushDown = oy + oh - finalY;
+      const pushUp = finalY + h - oy;
+      const minPush = Math.min(pushRight, pushLeft, pushDown, pushUp);
+
+      if (minPush === pushRight) finalX = ox + ow + 4;
+      else if (minPush === pushLeft) finalX = ox - w - 4;
+      else if (minPush === pushDown) finalY = oy + oh + 4;
+      else finalY = oy - h - 4;
+    }
+  }
+
+  finalX = Math.max(0, Math.min(finalX, vw - w));
+  finalY = Math.max(topBar, Math.min(finalY, vh - h - bottomBar));
+
+  return { x: finalX, y: finalY };
+}
+
 export function clampDragPosition(
   x: number,
   y: number,
