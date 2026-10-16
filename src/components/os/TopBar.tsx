@@ -6,6 +6,7 @@ import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { openApp } from "@/lib/os-actions";
 import type { ThemeName } from "@/types/theme";
+import { GlassSlider } from "./GlassSlider";
 import {
   Grid3X3,
   Volume2,
@@ -507,68 +508,35 @@ function DesktopControlContent({ onClose }: { onClose: () => void }) {
           Glass
         </span>
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <label
-              className="text-[9px] w-10 flex-shrink-0"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Blur
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={40}
-              value={glassBlur}
-              onChange={(e) => setGlassBlur(Number(e.target.value))}
-              className="flex-1 h-1 accent-os-accent cursor-pointer"
-              aria-label="Glass blur"
-            />
-            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>
-              {glassBlur}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <label
-              className="text-[9px] w-10 flex-shrink-0"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Sat
-            </label>
-            <input
-              type="range"
-              min={100}
-              max={250}
-              step={5}
-              value={glassSaturate}
-              onChange={(e) => setGlassSaturate(Number(e.target.value))}
-              className="flex-1 h-1 accent-os-accent cursor-pointer"
-              aria-label="Glass saturation"
-            />
-            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>
-              {glassSaturate}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <label
-              className="text-[9px] w-10 flex-shrink-0"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Tint
-            </label>
-            <input
-              type="range"
-              min={5}
-              max={100}
-              step={5}
-              value={glassOpacity}
-              onChange={(e) => setGlassOpacity(Number(e.target.value))}
-              className="flex-1 h-1 accent-os-accent cursor-pointer"
-              aria-label="Glass tint"
-            />
-            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>
-              {glassOpacity}%
-            </span>
-          </div>
+          <GlassSlider
+            label="Blur"
+            value={glassBlur}
+            min={0}
+            max={40}
+            onChange={setGlassBlur}
+            format={(v) => `${v}`}
+            ariaLabel="Glass blur"
+          />
+          <GlassSlider
+            label="Sat"
+            value={glassSaturate}
+            min={100}
+            max={250}
+            step={5}
+            onChange={setGlassSaturate}
+            format={(v) => `${v}`}
+            ariaLabel="Glass saturation"
+          />
+          <GlassSlider
+            label="Tint"
+            value={glassOpacity}
+            min={5}
+            max={100}
+            step={5}
+            onChange={setGlassOpacity}
+            format={(v) => `${v}%`}
+            ariaLabel="Glass tint"
+          />
         </div>
       </div>
 
@@ -579,21 +547,17 @@ function DesktopControlContent({ onClose }: { onClose: () => void }) {
 
       <div className="flex items-center gap-2">
         <Volume2 size={12} style={{ color: "var(--text-secondary)" }} />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(volume * 100)}
-          onChange={(e) => setVolume(Number(e.target.value) / 100)}
-          className="flex-1 h-1 accent-os-accent cursor-pointer"
-          aria-label="Volume"
-        />
-        <span
-          className="text-[9px] font-body w-6 text-right"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          {Math.round(volume * 100)}
-        </span>
+        <div className="flex-1 min-w-0">
+          <GlassSlider
+            label=""
+            value={Math.round(volume * 100)}
+            min={0}
+            max={100}
+            onChange={(v) => setVolume(v / 100)}
+            format={(v) => `${v}`}
+            ariaLabel="Volume"
+          />
+        </div>
       </div>
 
       <div
@@ -875,44 +839,30 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <span
-          className="text-[10px] font-body w-5 flex-shrink-0"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          Glass
-        </span>
-        <input
-          type="range"
-          min={0}
-          max={40}
-          value={glassBlur}
-          onChange={(e) => setGlassBlur(Number(e.target.value))}
-          className="flex-1 h-1 accent-os-accent cursor-pointer"
-          aria-label="Glass blur"
-        />
-        <span className="text-[10px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>
-          {glassBlur}px
-        </span>
-      </div>
+      <GlassSlider
+        label="Glass"
+        value={glassBlur}
+        min={0}
+        max={40}
+        onChange={setGlassBlur}
+        format={(v) => `${v}px`}
+        ariaLabel="Glass blur"
+        compact
+      />
 
       <div className="flex items-center gap-2">
         <Volume2 size={14} style={{ color: "var(--text-secondary)" }} />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(volume * 100)}
-          onChange={(e) => setVolume(Number(e.target.value) / 100)}
-          className="flex-1 h-1 accent-os-accent cursor-pointer"
-          aria-label="Volume"
-        />
-        <span
-          className="text-[10px] font-body w-6 text-right"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          {Math.round(volume * 100)}
-        </span>
+        <div className="flex-1 min-w-0">
+          <GlassSlider
+            label=""
+            value={Math.round(volume * 100)}
+            min={0}
+            max={100}
+            onChange={(v) => setVolume(v / 100)}
+            format={(v) => `${v}`}
+            ariaLabel="Volume"
+          />
+        </div>
       </div>
 
       <div
