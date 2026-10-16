@@ -5,13 +5,22 @@ import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
-import { getViewportBounds } from "@/lib/boundaries";
+import { useDragPosition } from "@/hooks/useDragPosition";
+import { clampWidgetBounds, resolveWidgetCollisions } from "@/lib/boundaries";
 import { ChevronDown, ChevronRight, GripVertical, Pin, PinOff, Trash2 } from "lucide-react";
 import { ContextMenu } from "@/components/os/ContextMenu";
 
 interface WidgetWrapperProps {
   id: string;
   children: ReactNode;
+}
+
+function viewportWidth() {
+  return typeof window !== "undefined" ? window.innerWidth : 1024;
+}
+
+function viewportHeight() {
+  return typeof window !== "undefined" ? window.innerHeight : 768;
 }
 
 export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
@@ -24,8 +33,6 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
   const isMobile = useIsMobile();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
-  const dragRef = useRef({ sx: 0, sy: 0, wx: 0, wy: 0 });
-  const rafRef = useRef(0);
   const widgetElRef = useRef<HTMLDivElement>(null);
 
   const getWidgetMenuItems = useCallback(() => {
@@ -64,91 +71,27 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
     onContextMenu: lpContext,
   } = useLongPress({ onLongPress: openContextMenu });
 
-  const resolveCollisions = useCallback(
-    (x: number, y: number, widgetW: number, widgetH: number) => {
-      const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
-      const vh = typeof window !== "undefined" ? window.innerHeight : 768;
-      const bounds = getViewportBounds(vw);
-
-      let finalX = Math.max(0, Math.min(x, vw - widgetW));
-      let finalY = Math.max(bounds.topBar, Math.min(y, vh - widgetH - bounds.bottomBar));
-
+  const { handlePointerDown } = useDragPosition({
+    elementRef: widgetElRef,
+    posX: widget?.x ?? 0,
+    posY: widget?.y ?? 0,
+    disabled: !widget || widget.isPinned || isMobile,
+    clamp: (x, y) =>
+      clampWidgetBounds(x, y, widget?.width || 200, 100, viewportWidth(), viewportHeight()),
+    onCommit: (x, y) => {
       const others = widgets.filter((w) => w.id !== id && !w.isCollapsed);
-      for (const other of others) {
-        const ox = other.x;
-        const oy = other.y;
-        const ow = other.width || 200;
-        const oh = 100;
-
-        const overlaps =
-          finalX < ox + ow && finalX + widgetW > ox && finalY < oy + oh && finalY + widgetH > oy;
-
-        if (overlaps) {
-          const pushRight = ox + ow - finalX;
-          const pushLeft = finalX + widgetW - ox;
-          const pushDown = oy + oh - finalY;
-          const pushUp = finalY + widgetH - oy;
-          const minPush = Math.min(pushRight, pushLeft, pushDown, pushUp);
-
-          if (minPush === pushRight) finalX = ox + ow + 4;
-          else if (minPush === pushLeft) finalX = ox - widgetW - 4;
-          else if (minPush === pushDown) finalY = oy + oh + 4;
-          else finalY = oy - widgetH - 4;
-        }
-      }
-
-      finalX = Math.max(0, Math.min(finalX, vw - widgetW));
-      finalY = Math.max(bounds.topBar, Math.min(finalY, vh - widgetH - bounds.bottomBar));
-
-      return { finalX, finalY };
+      const p = resolveWidgetCollisions(
+        x,
+        y,
+        widget?.width || 200,
+        100,
+        others,
+        viewportWidth(),
+        viewportHeight(),
+      );
+      updateWidgetPosition(id, p.x, p.y);
     },
-    [widgets, id],
-  );
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (!widget || widget.isPinned || isMobile) return;
-      e.preventDefault();
-      dragRef.current = { sx: e.clientX, sy: e.clientY, wx: widget.x, wy: widget.y };
-
-      const el = widgetElRef.current;
-      if (el) el.classList.add("os-dragging");
-      const widgetW = widget.width || 200;
-      const widgetH = 100;
-
-      let pendingX = widget.x;
-      let pendingY = widget.y;
-      let rafScheduled = false;
-
-      const onMove = (e: PointerEvent) => {
-        pendingX = dragRef.current.wx + e.clientX - dragRef.current.sx;
-        pendingY = dragRef.current.wy + e.clientY - dragRef.current.sy;
-        if (el) {
-          el.style.transform = `translate(${pendingX}px, ${pendingY}px)`;
-        }
-        if (!rafScheduled) {
-          rafScheduled = true;
-          rafRef.current = requestAnimationFrame(() => {
-            updateWidgetPosition(id, pendingX, pendingY);
-            rafScheduled = false;
-          });
-        }
-      };
-
-      const onUp = () => {
-        if (el) el.classList.remove("os-dragging");
-        cancelAnimationFrame(rafRef.current);
-        const { finalX, finalY } = resolveCollisions(pendingX, pendingY, widgetW, widgetH);
-        updateWidgetPosition(id, finalX, finalY);
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-      };
-
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-    },
-    [widget, id, updateWidgetPosition, isMobile, resolveCollisions],
-  );
+  });
 
   const mergedHeaderDown = useCallback(
     (e: React.PointerEvent) => {
