@@ -22,14 +22,24 @@ const menuVariants = {
   visible: {
     y: 0,
     opacity: 1,
-    transition: { type: "spring" as const, damping: 25, stiffness: 350, staggerChildren: 0.04, delayChildren: 0.06 },
+    transition: {
+      type: "spring" as const,
+      damping: 25,
+      stiffness: 350,
+      staggerChildren: 0.04,
+      delayChildren: 0.06,
+    },
   },
   exit: { y: 20, opacity: 0, transition: { duration: 0.15 } },
 };
 
 const itemVariants = {
   hidden: { x: -8, opacity: 0 },
-  visible: { x: 0, opacity: 1, transition: { type: "spring" as const, damping: 20, stiffness: 300 } },
+  visible: {
+    x: 0,
+    opacity: 1,
+    transition: { type: "spring" as const, damping: 20, stiffness: 300 },
+  },
 };
 
 export function StartMenu({ onClose }: StartMenuProps) {

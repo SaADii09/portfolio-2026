@@ -40,15 +40,7 @@ export const SKILLS: SkillCategory[] = [
   {
     category: "Languages",
     icon: "Code2",
-    items: [
-      "JavaScript (ES2024+)",
-      "TypeScript",
-      "Python",
-      "C#",
-      "HTML5",
-      "CSS3",
-      "SQL",
-    ],
+    items: ["JavaScript (ES2024+)", "TypeScript", "Python", "C#", "HTML5", "CSS3", "SQL"],
   },
   {
     category: "Frontend & Mobile",
@@ -134,15 +126,7 @@ export const SKILLS: SkillCategory[] = [
   {
     category: "Integrations & Payments",
     icon: "Plug",
-    items: [
-      "Stripe",
-      "Clerk",
-      "Twilio",
-      "Facebook API",
-      "LinkedIn API",
-      "n8n",
-      "Postman",
-    ],
+    items: ["Stripe", "Clerk", "Twilio", "Facebook API", "LinkedIn API", "n8n", "Postman"],
   },
   {
     category: "Architecture & Patterns",

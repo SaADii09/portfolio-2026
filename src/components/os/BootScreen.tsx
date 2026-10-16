@@ -51,9 +51,7 @@ export function BootScreen({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (phase !== "glitch") return;
-    const prefersReduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (prefersReduced) return;
 
     try {
@@ -92,17 +90,11 @@ export function BootScreen({ children }: { children: React.ReactNode }) {
           <pre className="boot-ascii">{DEVOS_ASCII}</pre>
           <div className="boot-spinner">
             {[0, 1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="boot-dot"
-                style={{ animationDelay: `${i * 0.15}s` }}
-              />
+              <div key={i} className="boot-dot" style={{ animationDelay: `${i * 0.15}s` }} />
             ))}
           </div>
           <p className="boot-status" suppressHydrationWarning>
-            {isReturning
-              ? "Restoring your session..."
-              : "Creating your session..."}
+            {isReturning ? "Restoring your session..." : "Creating your session..."}
           </p>
           <p className="boot-version">v1.0</p>
         </div>

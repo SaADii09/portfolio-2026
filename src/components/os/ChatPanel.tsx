@@ -98,9 +98,18 @@ export function ChatPanel() {
                   Dev Chat
                   {isLoading && (
                     <span className="flex items-center gap-0.5 opacity-70">
-                      <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }} />
+                      <span
+                        className="w-1 h-1 rounded-full bg-current animate-bounce"
+                        style={{ animationDelay: "0ms" }}
+                      />
+                      <span
+                        className="w-1 h-1 rounded-full bg-current animate-bounce"
+                        style={{ animationDelay: "150ms" }}
+                      />
+                      <span
+                        className="w-1 h-1 rounded-full bg-current animate-bounce"
+                        style={{ animationDelay: "300ms" }}
+                      />
                     </span>
                   )}
                 </span>
@@ -252,9 +261,18 @@ export function ChatPanel() {
           Dev Chat
           {isLoading && (
             <span className="flex items-center gap-0.5 opacity-70">
-              <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }} />
+              <span
+                className="w-1 h-1 rounded-full bg-current animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              />
+              <span
+                className="w-1 h-1 rounded-full bg-current animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              />
+              <span
+                className="w-1 h-1 rounded-full bg-current animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              />
             </span>
           )}
         </span>

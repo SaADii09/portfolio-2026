@@ -87,7 +87,10 @@ export function ControlPanelApp() {
         </div>
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
-            <label className="text-[10px] w-12 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+            <label
+              className="text-[10px] w-12 flex-shrink-0"
+              style={{ color: "var(--text-secondary)" }}
+            >
               Blur
             </label>
             <input
@@ -105,7 +108,10 @@ export function ControlPanelApp() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-[10px] w-12 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+            <label
+              className="text-[10px] w-12 flex-shrink-0"
+              style={{ color: "var(--text-secondary)" }}
+            >
               Saturate
             </label>
             <input
@@ -123,7 +129,10 @@ export function ControlPanelApp() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-[10px] w-12 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+            <label
+              className="text-[10px] w-12 flex-shrink-0"
+              style={{ color: "var(--text-secondary)" }}
+            >
               Tint
             </label>
             <input

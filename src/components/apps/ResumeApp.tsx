@@ -7,17 +7,14 @@ export function ResumeApp() {
     <div className="flex flex-col gap-5 font-body text-sm">
       {/* Experience */}
       <div>
-        <h3 className="font-display text-xs mb-2.5 text-os-accent">
-          Experience
-        </h3>
+        <h3 className="font-display text-xs mb-2.5 text-os-accent">Experience</h3>
         <div className="flex flex-col gap-3">
           {EXPERIENCE.map((exp, i) => (
             <div
               key={i}
               className="relative p-3 rounded-os glass-light border"
               style={{
-                borderColor:
-                  "color-mix(in srgb, var(--accent-1) 10%, transparent)",
+                borderColor: "color-mix(in srgb, var(--accent-1) 10%, transparent)",
               }}
             >
               <div
@@ -27,16 +24,10 @@ export function ResumeApp() {
               <div className="flex items-start justify-between gap-2 mb-1.5 pl-2">
                 <div>
                   <p className="font-display text-[11px]">{exp.role}</p>
-                  <p
-                    className="text-[10px]"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
+                  <p className="text-[10px]" style={{ color: "var(--text-secondary)" }}>
                     {exp.company} — {exp.location}
                   </p>
-                  <p
-                    className="text-[9px] mt-0.5"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
+                  <p className="text-[9px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
                     {exp.type} · {exp.mode}
                     {exp.note ? ` · ${exp.note}` : ""}
                   </p>
@@ -103,9 +94,7 @@ export function ResumeApp() {
 
       {/* Education */}
       <div>
-        <h3 className="font-display text-xs mb-1.5 text-os-accent">
-          Education
-        </h3>
+        <h3 className="font-display text-xs mb-1.5 text-os-accent">Education</h3>
         {EDUCATION.map((edu, i) => (
           <p key={i} className="text-xs">
             {edu.degree} in {edu.field} —{" "}
@@ -119,9 +108,7 @@ export function ResumeApp() {
       {/* Certifications */}
       {CERTIFICATIONS.length > 0 && (
         <div>
-          <h3 className="font-display text-xs mb-1.5 text-os-accent">
-            Certifications
-          </h3>
+          <h3 className="font-display text-xs mb-1.5 text-os-accent">Certifications</h3>
           {CERTIFICATIONS.map((cert, i) => (
             <p key={i} className="text-xs">
               {cert.name} —{" "}

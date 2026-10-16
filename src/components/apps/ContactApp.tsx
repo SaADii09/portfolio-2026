@@ -31,11 +31,9 @@ export function ContactApp() {
     const e: FormErrors = {};
     if (!form.name.trim()) e.name = "Name is required";
     if (!form.email.trim()) e.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      e.email = "Invalid email format";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Invalid email format";
     if (!form.message.trim()) e.message = "Message is required";
-    else if (form.message.trim().length < 10)
-      e.message = "Message must be at least 10 characters";
+    else if (form.message.trim().length < 10) e.message = "Message must be at least 10 characters";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -77,10 +75,7 @@ export function ContactApp() {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-col gap-4 font-body text-sm"
-    >
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 font-body text-sm">
       <div>
         <h2 className="font-display text-base text-os-accent">Contact</h2>
         <div className="flex flex-col gap-1 mt-1">
@@ -110,10 +105,7 @@ export function ContactApp() {
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          className="text-xs"
-          style={{ color: "var(--text-secondary)" }}
-        >
+        <label className="text-xs" style={{ color: "var(--text-secondary)" }}>
           Name *
         </label>
         <input
@@ -128,20 +120,14 @@ export function ContactApp() {
           placeholder="Your name"
         />
         {errors.name && (
-          <span
-            className="text-[10px] flex items-center gap-1"
-            style={{ color: "#ff4444" }}
-          >
+          <span className="text-[10px] flex items-center gap-1" style={{ color: "#ff4444" }}>
             <AlertCircle size={10} /> {errors.name}
           </span>
         )}
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          className="text-xs"
-          style={{ color: "var(--text-secondary)" }}
-        >
+        <label className="text-xs" style={{ color: "var(--text-secondary)" }}>
           Email *
         </label>
         <input
@@ -157,20 +143,14 @@ export function ContactApp() {
           placeholder="your@email.com"
         />
         {errors.email && (
-          <span
-            className="text-[10px] flex items-center gap-1"
-            style={{ color: "#ff4444" }}
-          >
+          <span className="text-[10px] flex items-center gap-1" style={{ color: "#ff4444" }}>
             <AlertCircle size={10} /> {errors.email}
           </span>
         )}
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          className="text-xs"
-          style={{ color: "var(--text-secondary)" }}
-        >
+        <label className="text-xs" style={{ color: "var(--text-secondary)" }}>
           Message *
         </label>
         <textarea
@@ -186,10 +166,7 @@ export function ContactApp() {
           placeholder="Your message (min 10 characters)"
         />
         {errors.message && (
-          <span
-            className="text-[10px] flex items-center gap-1"
-            style={{ color: "#ff4444" }}
-          >
+          <span className="text-[10px] flex items-center gap-1" style={{ color: "#ff4444" }}>
             <AlertCircle size={10} /> {errors.message}
           </span>
         )}

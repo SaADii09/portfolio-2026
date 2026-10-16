@@ -22,9 +22,7 @@ export function useGlassGlare() {
       const pending = pendingRef.current;
       if (!pending) return;
 
-      const el = (pending.target.closest(
-        ".glass, .glass-heavy, .glass-light"
-      ) as HTMLElement | null);
+      const el = pending.target.closest(".glass, .glass-heavy, .glass-light") as HTMLElement | null;
       if (el) {
         const rect = el.getBoundingClientRect();
         el.style.setProperty("--mouse-x", `${pending.x - rect.left}px`);

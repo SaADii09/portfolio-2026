@@ -16,9 +16,7 @@ export function AboutApp() {
         ))}
 
         <div className="mt-2">
-          <h3 className="font-display text-xs mb-2 text-os-accent">
-            Core Skills
-          </h3>
+          <h3 className="font-display text-xs mb-2 text-os-accent">Core Skills</h3>
           <div className="flex flex-wrap gap-1.5">
             {TOP_SKILLS.map((skill) => (
               <span

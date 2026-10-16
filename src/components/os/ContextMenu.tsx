@@ -56,9 +56,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
   const itemH = isMobile ? 44 : 36;
   const menuH = items.length * itemH;
   const x = Math.min(position.x, vw - menuW - 8);
-  const y = position.y + menuH > vh - 60
-    ? position.y - menuH - 4
-    : position.y + 4;
+  const y = position.y + menuH > vh - 60 ? position.y - menuH - 4 : position.y + 4;
 
   return (
     <motion.div
@@ -98,9 +96,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
               }}
               className="w-full flex items-center gap-2.5 px-3 text-xs font-body transition-all"
               style={{
-                color: item.danger
-                  ? "var(--accent-2)"
-                  : "var(--text-primary)",
+                color: item.danger ? "var(--accent-2)" : "var(--text-primary)",
                 paddingBlock: isMobile ? "12px" : "6px",
               }}
               onMouseEnter={(e) => {

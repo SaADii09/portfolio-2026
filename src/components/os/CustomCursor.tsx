@@ -28,7 +28,9 @@ export function CustomCursor() {
         const inner = innerRef.current;
         const trail = trailOuterRef.current;
         if (inner) {
-          inner.style.transform = hovering ? "translate(-50%, -50%) scale(1.4)" : "translate(-50%, -50%) scale(1)";
+          inner.style.transform = hovering
+            ? "translate(-50%, -50%) scale(1.4)"
+            : "translate(-50%, -50%) scale(1)";
         }
         if (trail) {
           trail.style.transform = hovering
@@ -69,14 +71,28 @@ export function CustomCursor() {
       <div
         ref={trailOuterRef}
         className="os-cursor-pos"
-        style={{ position: "fixed", top: 0, left: 0, pointerEvents: "none", zIndex: 99999, transition: "transform 80ms ease-out" }}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          pointerEvents: "none",
+          zIndex: 99999,
+          transition: "transform 80ms ease-out",
+        }}
       >
         <div ref={trailInnerRef} className={`os-cursor-trail os-cursor-trail-${theme}`} />
       </div>
       <div
         ref={outerRef}
         className="os-cursor-pos"
-        style={{ position: "fixed", top: 0, left: 0, pointerEvents: "none", zIndex: 100000, transition: "transform 60ms ease-out" }}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          pointerEvents: "none",
+          zIndex: 100000,
+          transition: "transform 60ms ease-out",
+        }}
       >
         <div
           ref={innerRef}

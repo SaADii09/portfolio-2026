@@ -8,12 +8,9 @@ export function ProjectsApp() {
   const windows = useStore((s) => s.windows);
 
   const handleProjectClick = (p: (typeof PROJECTS)[number]) => {
-    const existing = windows.find(
-      (w) => w.type === "iframe" && w.url === p.url,
-    );
+    const existing = windows.find((w) => w.type === "iframe" && w.url === p.url);
     if (existing) {
-      if (existing.isMinimized)
-        useStore.getState().restoreWindow(existing.id);
+      if (existing.isMinimized) useStore.getState().restoreWindow(existing.id);
       useStore.getState().focusWindow(existing.id);
       return;
     }
@@ -48,9 +45,7 @@ export function ProjectsApp() {
                 {p.category}
               </span>
             </div>
-            <p className="font-body text-sm leading-relaxed mb-2 text-os-text">
-              {p.description}
-            </p>
+            <p className="font-body text-sm leading-relaxed mb-2 text-os-text">{p.description}</p>
             <div className="flex flex-wrap gap-1">
               {p.tech.map((t) => (
                 <span

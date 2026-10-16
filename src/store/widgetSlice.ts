@@ -88,20 +88,12 @@ export const createWidgetSlice: StateCreator<WidgetSlice> = (set) => ({
           const b = sorted[j];
           const bw = b.width || DEFAULT_WIDGET_W;
           const bh = b.height || DEFAULT_WIDGET_H;
-          const overlaps =
-            a.x < b.x + bw && a.x + aw > b.x && a.y < b.y + bh && a.y + ah > b.y;
+          const overlaps = a.x < b.x + bw && a.x + aw > b.x && a.y < b.y + bh && a.y + ah > b.y;
           if (overlaps) {
             sorted[j] = { ...b, y: a.y + ah + 4 };
           }
         }
-        const clamped = clampWidgetBounds(
-          a.x,
-          a.y,
-          aw,
-          ah,
-          vw,
-          vh,
-        );
+        const clamped = clampWidgetBounds(a.x, a.y, aw, ah, vw, vh);
         sorted[i] = { ...a, ...clamped };
       }
       return { widgets: sorted };

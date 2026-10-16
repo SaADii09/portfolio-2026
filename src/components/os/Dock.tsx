@@ -50,13 +50,10 @@ export function Dock() {
     [windows, focusWindow, restoreWindow],
   );
 
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent, id: string) => {
-      e.preventDefault();
-      setContextMenu({ windowId: id, x: e.clientX, y: e.clientY });
-    },
-    [],
-  );
+  const handleContextMenu = useCallback((e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    setContextMenu({ windowId: id, x: e.clientX, y: e.clientY });
+  }, []);
 
   const getWindowMenuItems = (windowId: string) => {
     const w = windows.find((w) => w.id === windowId);
@@ -156,7 +153,7 @@ function DockIcon({
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const Icon = w.component ? APP_ICONS[w.component] ?? Monitor : Monitor;
+  const Icon = w.component ? (APP_ICONS[w.component] ?? Monitor) : Monitor;
 
   return (
     <div className="relative flex flex-col items-center">

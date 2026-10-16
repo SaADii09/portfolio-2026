@@ -1,11 +1,12 @@
 import { StateCreator } from "zustand";
 import { ThemeName } from "@/types/theme";
 
-const THEME_GLASS_DEFAULTS: Record<ThemeName, { blur: number; saturate: number; opacity: number }> = {
-  retro: { blur: 0, saturate: 100, opacity: 70 },
-  neon: { blur: 24, saturate: 225, opacity: 60 },
-  editorial: { blur: 20, saturate: 160, opacity: 70 },
-};
+const THEME_GLASS_DEFAULTS: Record<ThemeName, { blur: number; saturate: number; opacity: number }> =
+  {
+    retro: { blur: 0, saturate: 100, opacity: 70 },
+    neon: { blur: 24, saturate: 225, opacity: 60 },
+    editorial: { blur: 20, saturate: 160, opacity: 70 },
+  };
 
 export interface ThemeSlice {
   theme: ThemeName;

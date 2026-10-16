@@ -188,15 +188,18 @@ export function Wallpaper() {
             x: Math.random() * w,
             y: theme === "retro" ? h + 10 : Math.random() * h,
             vx: (Math.random() - 0.5) * (p.depth < 0.5 ? 0.25 : 0.55),
-            vy: theme === "retro"
-              ? -(Math.random() * (p.depth < 0.5 ? 0.15 : 0.33) + 0.05)
-              : (Math.random() - 0.5) * (p.depth < 0.5 ? 0.15 : 0.33),
-            size: theme === "editorial"
-              ? Math.random() * (p.depth < 0.5 ? 3 : 5) + (p.depth < 0.5 ? 1 : 2)
-              : Math.random() * (p.depth < 0.5 ? 2 : 4) + (p.depth < 0.5 ? 0.5 : 1),
-            alpha: theme === "editorial"
-              ? Math.random() * (p.depth < 0.5 ? 0.25 : 0.4) + (p.depth < 0.5 ? 0.2 : 0.5)
-              : Math.random() * (p.depth < 0.5 ? 0.15 : 0.4) + (p.depth < 0.5 ? 0.05 : 0.1),
+            vy:
+              theme === "retro"
+                ? -(Math.random() * (p.depth < 0.5 ? 0.15 : 0.33) + 0.05)
+                : (Math.random() - 0.5) * (p.depth < 0.5 ? 0.15 : 0.33),
+            size:
+              theme === "editorial"
+                ? Math.random() * (p.depth < 0.5 ? 3 : 5) + (p.depth < 0.5 ? 1 : 2)
+                : Math.random() * (p.depth < 0.5 ? 2 : 4) + (p.depth < 0.5 ? 0.5 : 1),
+            alpha:
+              theme === "editorial"
+                ? Math.random() * (p.depth < 0.5 ? 0.25 : 0.4) + (p.depth < 0.5 ? 0.2 : 0.5)
+                : Math.random() * (p.depth < 0.5 ? 0.15 : 0.4) + (p.depth < 0.5 ? 0.05 : 0.1),
             life: 0,
             maxLife: Math.random() * (p.depth < 0.5 ? 400 : 300) + (p.depth < 0.5 ? 300 : 200),
             depth: p.depth,

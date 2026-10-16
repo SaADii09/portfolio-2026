@@ -8,10 +8,38 @@ interface TrackPreset {
 }
 
 const TRACK_PRESETS: Record<string, TrackPreset> = {
-  t1: { waveform: "sawtooth", notes: [261.63, 329.63, 392, 523.25], tempo: 0.4, filterFreq: 800, lfoRate: 2, gain: 0.3 },
-  t2: { waveform: "square", notes: [440, 554.37, 659.25, 880], tempo: 0.2, filterFreq: 1200, lfoRate: 6, gain: 0.15 },
-  t3: { waveform: "sine", notes: [130.81, 164.81, 196, 261.63], tempo: 0.6, filterFreq: 400, lfoRate: 0.5, gain: 0.4 },
-  t4: { waveform: "triangle", notes: [329.63, 392, 493.88, 659.25], tempo: 0.5, filterFreq: 2000, lfoRate: 3, gain: 0.25 },
+  t1: {
+    waveform: "sawtooth",
+    notes: [261.63, 329.63, 392, 523.25],
+    tempo: 0.4,
+    filterFreq: 800,
+    lfoRate: 2,
+    gain: 0.3,
+  },
+  t2: {
+    waveform: "square",
+    notes: [440, 554.37, 659.25, 880],
+    tempo: 0.2,
+    filterFreq: 1200,
+    lfoRate: 6,
+    gain: 0.15,
+  },
+  t3: {
+    waveform: "sine",
+    notes: [130.81, 164.81, 196, 261.63],
+    tempo: 0.6,
+    filterFreq: 400,
+    lfoRate: 0.5,
+    gain: 0.4,
+  },
+  t4: {
+    waveform: "triangle",
+    notes: [329.63, 392, 493.88, 659.25],
+    tempo: 0.5,
+    filterFreq: 2000,
+    lfoRate: 3,
+    gain: 0.25,
+  },
 };
 
 export class SynthEngine {
@@ -50,7 +78,9 @@ export class SynthEngine {
 
   private stopOscillators() {
     for (const osc of this.oscillators) {
-      try { osc.stop(); } catch {}
+      try {
+        osc.stop();
+      } catch {}
     }
     this.oscillators = [];
   }
