@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { useGlassControls, useMusicControls } from "@/hooks/useOsSelectors";
 import { openApp } from "@/lib/os-actions";
 import type { ThemeName } from "@/types/theme";
 import { GlassSlider } from "./GlassSlider";
@@ -436,19 +437,16 @@ function CalendarPanel() {
 function DesktopControlContent({ onClose }: { onClose: () => void }) {
   const theme = useStore((s) => s.theme);
   const setTheme = useStore((s) => s.setTheme);
-  const volume = useStore((s) => s.volume);
-  const setVolume = useStore((s) => s.setVolume);
-  const isPlaying = useStore((s) => s.isPlaying);
-  const currentTrack = useStore((s) => s.currentTrack);
-  const togglePlay = useStore((s) => s.togglePlay);
-  const nextTrack = useStore((s) => s.nextTrack);
-  const prevTrack = useStore((s) => s.prevTrack);
-  const glassBlur = useStore((s) => s.glassBlur);
-  const glassSaturate = useStore((s) => s.glassSaturate);
-  const glassOpacity = useStore((s) => s.glassOpacity);
-  const setGlassBlur = useStore((s) => s.setGlassBlur);
-  const setGlassSaturate = useStore((s) => s.setGlassSaturate);
-  const setGlassOpacity = useStore((s) => s.setGlassOpacity);
+  const { volume, setVolume, isPlaying, currentTrack, togglePlay, nextTrack, prevTrack } =
+    useMusicControls();
+  const {
+    glassBlur,
+    glassSaturate,
+    glassOpacity,
+    setGlassBlur,
+    setGlassSaturate,
+    setGlassOpacity,
+  } = useGlassControls();
 
   const handleOpenSettings = () => {
     openApp("control-panel");
@@ -804,10 +802,8 @@ function MobileTopBar() {
 function MobileControlContent({ onClose }: { onClose: () => void }) {
   const theme = useStore((s) => s.theme);
   const setTheme = useStore((s) => s.setTheme);
-  const volume = useStore((s) => s.volume);
-  const setVolume = useStore((s) => s.setVolume);
-  const glassBlur = useStore((s) => s.glassBlur);
-  const setGlassBlur = useStore((s) => s.setGlassBlur);
+  const { volume, setVolume } = useMusicControls();
+  const { glassBlur, setGlassBlur } = useGlassControls();
   const openPalette = useStore((s) => s.openPalette);
 
   const handleOpenSettings = () => {

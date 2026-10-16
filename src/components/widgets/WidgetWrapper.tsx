@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef, type ReactNode } from "react";
+import { useCallback, useRef, type ReactNode } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import { useLongPress } from "@/hooks/useLongPress";
+import { useContextMenuLongPress } from "@/hooks/useContextMenuLongPress";
+import { useHeaderDragHandlers } from "@/hooks/useHeaderDragHandlers";
 import { useDragPosition } from "@/hooks/useDragPosition";
 import { clampWidgetBounds, resolveWidgetCollisions } from "@/lib/boundaries";
 import { ChevronDown, ChevronRight, GripVertical, Pin, PinOff, Trash2 } from "lucide-react";
@@ -31,7 +32,7 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
   const toggleWidgetPin = useStore((s) => s.toggleWidgetPin);
   const removeWidget = useStore((s) => s.removeWidget);
   const isMobile = useIsMobile();
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const { contextMenu, openContextMenuAt, closeContextMenu, longPress } = useContextMenuLongPress();
 
   const widgetElRef = useRef<HTMLDivElement>(null);
 
@@ -57,19 +58,6 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
       },
     ];
   }, [widget, id, toggleWidgetPin, toggleWidgetCollapse, removeWidget]);
-
-  const openContextMenu = useCallback((e: React.PointerEvent | React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  }, []);
-
-  const {
-    onPointerDown: lpDown,
-    onPointerMove: lpMove,
-    onPointerUp: lpUp,
-    onContextMenu: lpContext,
-  } = useLongPress({ onLongPress: openContextMenu });
 
   const { handlePointerDown } = useDragPosition({
     elementRef: widgetElRef,
@@ -97,24 +85,7 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
     },
   });
 
-  const mergedHeaderDown = useCallback(
-    (e: React.PointerEvent) => {
-      lpDown(e);
-      handlePointerDown(e);
-    },
-    [lpDown, handlePointerDown],
-  );
-
-  const mergedHeaderMove = useCallback(
-    (e: React.PointerEvent) => {
-      lpMove(e);
-    },
-    [lpMove],
-  );
-
-  const mergedHeaderUp = useCallback(() => {
-    lpUp();
-  }, [lpUp]);
+  const { headerDown, headerMove, headerUp } = useHeaderDragHandlers(longPress, handlePointerDown);
 
   if (!widget) return null;
 
@@ -137,10 +108,10 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
           <div
             className="flex items-center gap-1 px-2 py-1 select-none"
             style={{ background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)" }}
-            onPointerDown={mergedHeaderDown}
-            onPointerMove={mergedHeaderMove}
-            onPointerUp={mergedHeaderUp}
-            onContextMenu={lpContext}
+            onPointerDown={headerDown}
+            onPointerMove={headerMove}
+            onPointerUp={headerUp}
+            onContextMenu={longPress.onContextMenu}
           >
             <span
               className="flex-1 font-display text-[10px] tracking-wide truncate"
@@ -173,7 +144,7 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
             <ContextMenu
               items={getWidgetMenuItems()}
               position={contextMenu}
-              onClose={() => setContextMenu(null)}
+              onClose={closeContextMenu}
             />
           )}
         </AnimatePresence>
@@ -204,12 +175,12 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
         <div
           className="flex items-center gap-1 px-2 py-1 cursor-grab active:cursor-grabbing select-none"
           style={{ background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)" }}
-          onPointerDown={mergedHeaderDown}
-          onPointerMove={mergedHeaderMove}
-          onPointerUp={mergedHeaderUp}
+          onPointerDown={headerDown}
+          onPointerMove={headerMove}
+          onPointerUp={headerUp}
           onContextMenu={(e) => {
             e.preventDefault();
-            setContextMenu({ x: e.clientX, y: e.clientY });
+            openContextMenuAt(e.clientX, e.clientY);
           }}
         >
           <GripVertical size={12} style={{ color: "var(--text-secondary)" }} />
@@ -259,7 +230,7 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
           <ContextMenu
             items={getWidgetMenuItems()}
             position={contextMenu}
-            onClose={() => setContextMenu(null)}
+            onClose={closeContextMenu}
           />
         )}
       </AnimatePresence>

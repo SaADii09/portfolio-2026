@@ -2,6 +2,7 @@
 
 import { useStore } from "@/store";
 import type { ThemeName } from "@/types/theme";
+import { useGlassControls, useMusicControls } from "@/hooks/useOsSelectors";
 import { GlassSlider } from "@/components/os/GlassSlider";
 import { Play, Pause, SkipBack, SkipForward, Volume2, RotateCcw } from "lucide-react";
 
@@ -23,6 +24,25 @@ const THEMES: { name: ThemeName; label: string; colors: string[] }[] = [
   },
 ];
 
+const COLOR_FALLBACKS: Record<string, string> = {
+  "accent-1": "#ff9f1c",
+  "bg-primary": "#2d1b14",
+};
+
+/** Current custom token, or its default when the user has not picked one. */
+function colorValue(tokens: Record<string, string>, key: string) {
+  return tokens[key] || COLOR_FALLBACKS[key];
+}
+
+/** Transport glyph + label for the current playback state. */
+function playLabel(isPlaying: boolean) {
+  return isPlaying ? "Pause" : "Play";
+}
+
+function playIcon(isPlaying: boolean) {
+  return isPlaying ? <Pause size={16} /> : <Play size={16} />;
+}
+
 export function ControlPanelApp() {
   const theme = useStore((s) => s.theme);
   const setTheme = useStore((s) => s.setTheme);
@@ -30,21 +50,18 @@ export function ControlPanelApp() {
   const updateCustomToken = useStore((s) => s.updateCustomToken);
   const resetCustomTokens = useStore((s) => s.resetCustomTokens);
 
-  const glassBlur = useStore((s) => s.glassBlur);
-  const glassSaturate = useStore((s) => s.glassSaturate);
-  const glassOpacity = useStore((s) => s.glassOpacity);
-  const setGlassBlur = useStore((s) => s.setGlassBlur);
-  const setGlassSaturate = useStore((s) => s.setGlassSaturate);
-  const setGlassOpacity = useStore((s) => s.setGlassOpacity);
-  const resetGlass = useStore((s) => s.resetGlass);
+  const {
+    glassBlur,
+    glassSaturate,
+    glassOpacity,
+    setGlassBlur,
+    setGlassSaturate,
+    setGlassOpacity,
+    resetGlass,
+  } = useGlassControls();
 
-  const isPlaying = useStore((s) => s.isPlaying);
-  const currentTrack = useStore((s) => s.currentTrack);
-  const volume = useStore((s) => s.volume);
-  const togglePlay = useStore((s) => s.togglePlay);
-  const nextTrack = useStore((s) => s.nextTrack);
-  const prevTrack = useStore((s) => s.prevTrack);
-  const setVolume = useStore((s) => s.setVolume);
+  const { isPlaying, currentTrack, volume, togglePlay, nextTrack, prevTrack, setVolume } =
+    useMusicControls();
 
   return (
     <div className="flex flex-col gap-5 font-body text-sm">
@@ -130,7 +147,7 @@ export function ControlPanelApp() {
             </label>
             <input
               type="color"
-              value={customTokens["accent-1"] || "#ff9f1c"}
+              value={colorValue(customTokens, "accent-1")}
               onChange={(e) => updateCustomToken("accent-1", e.target.value)}
               className="w-7 h-7 rounded-os border cursor-pointer"
               style={{ borderColor: "var(--border)" }}
@@ -142,7 +159,7 @@ export function ControlPanelApp() {
             </label>
             <input
               type="color"
-              value={customTokens["bg-primary"] || "#2d1b14"}
+              value={colorValue(customTokens, "bg-primary")}
               onChange={(e) => updateCustomToken("bg-primary", e.target.value)}
               className="w-7 h-7 rounded-os border cursor-pointer"
               style={{ borderColor: "var(--border)" }}
@@ -182,9 +199,9 @@ export function ControlPanelApp() {
               onClick={togglePlay}
               className="flex items-center justify-center w-8 h-8 rounded-os transition-opacity hover:opacity-80"
               style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }}
-              aria-label={isPlaying ? "Pause" : "Play"}
+              aria-label={playLabel(isPlaying)}
             >
-              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+              {playIcon(isPlaying)}
             </button>
             <button
               onClick={nextTrack}

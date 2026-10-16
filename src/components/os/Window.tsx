@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef, type ReactNode } from "react";
+import { useCallback, useRef, type ReactNode } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import { useLongPress } from "@/hooks/useLongPress";
+import { useContextMenuLongPress } from "@/hooks/useContextMenuLongPress";
+import { useHeaderDragHandlers } from "@/hooks/useHeaderDragHandlers";
 import { useDragPosition } from "@/hooks/useDragPosition";
 import { clampWindowSize, clampWindowPosition, clampDragPosition } from "@/lib/boundaries";
 import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT } from "@/lib/constants";
@@ -29,7 +30,7 @@ export function Window({ id, children }: WindowProps) {
   const closeWindow = useStore((s) => s.closeWindow);
   const activeWindowId = useStore((s) => s.activeWindowId);
   const isMobile = useIsMobile();
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const { contextMenu, openContextMenuAt, closeContextMenu, longPress } = useContextMenuLongPress();
 
   const rafRef = useRef(0);
   const windowElRef = useRef<HTMLDivElement>(null);
@@ -65,19 +66,6 @@ export function Window({ id, children }: WindowProps) {
     ];
   }, [win, id, focusWindow, minimizeWindow, maximizeWindow, restoreWindow, closeWindow]);
 
-  const openContextMenu = useCallback((e: React.PointerEvent | React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  }, []);
-
-  const {
-    onPointerDown: lpDown,
-    onPointerMove: lpMove,
-    onPointerUp: lpUp,
-    onContextMenu: lpContext,
-  } = useLongPress({ onLongPress: openContextMenu });
-
   const { handlePointerDown } = useDragPosition({
     elementRef: windowElRef,
     posX: win?.x ?? 0,
@@ -88,6 +76,8 @@ export function Window({ id, children }: WindowProps) {
       clampDragPosition(x, y, win?.width ?? 0, window.innerWidth, window.innerHeight),
     onCommit: (x, y) => updateWindowPosition(id, x, y),
   });
+
+  const { headerDown, headerMove, headerUp } = useHeaderDragHandlers(longPress, handlePointerDown);
 
   const handleResizeDown = useCallback(
     (e: React.PointerEvent, edge: Edge) => {
@@ -176,25 +166,6 @@ export function Window({ id, children }: WindowProps) {
     [win, id, focusWindow, updateWindowSize, updateWindowPosition],
   );
 
-  const mergedHeaderDown = useCallback(
-    (e: React.PointerEvent) => {
-      lpDown(e);
-      handlePointerDown(e);
-    },
-    [lpDown, handlePointerDown],
-  );
-
-  const mergedHeaderMove = useCallback(
-    (e: React.PointerEvent) => {
-      lpMove(e);
-    },
-    [lpMove],
-  );
-
-  const mergedHeaderUp = useCallback(() => {
-    lpUp();
-  }, [lpUp]);
-
   if (!win) return null;
 
   const isActive = activeWindowId === win.id;
@@ -260,7 +231,7 @@ export function Window({ id, children }: WindowProps) {
         <ContextMenu
           items={getWindowMenuItems()}
           position={contextMenu}
-          onClose={() => setContextMenu(null)}
+          onClose={closeContextMenu}
         />
       )}
     </AnimatePresence>
@@ -284,10 +255,10 @@ export function Window({ id, children }: WindowProps) {
         <div
           className="os-drag-handle flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing"
           style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }}
-          onPointerDown={mergedHeaderDown}
-          onPointerMove={mergedHeaderMove}
-          onPointerUp={mergedHeaderUp}
-          onContextMenu={lpContext}
+          onPointerDown={headerDown}
+          onPointerMove={headerMove}
+          onPointerUp={headerUp}
+          onContextMenu={longPress.onContextMenu}
         >
           <span className="font-display text-xs truncate tracking-wide">{win.title}</span>
           <div className="flex items-center gap-2 shrink-0">
@@ -360,7 +331,7 @@ export function Window({ id, children }: WindowProps) {
         onPointerDown={handlePointerDown}
         onContextMenu={(e) => {
           e.preventDefault();
-          setContextMenu({ x: e.clientX, y: e.clientY });
+          openContextMenuAt(e.clientX, e.clientY);
         }}
       >
         <span className="font-display text-xs truncate tracking-wide">{win.title}</span>
