@@ -21,4 +21,17 @@ test.describe("Mobile layout", () => {
     await page.getByLabel("Open chat").click();
     await expect(page.getByPlaceholder("Type a message...")).toBeVisible();
   });
+
+  test("mobile shade sliders meet the 44px minimum touch target", async ({ page }) => {
+    await page.getByTestId("mobile-shade-knob").click();
+    const glassSlider = page.getByLabel("Glass blur");
+    await expect(glassSlider).toBeVisible();
+
+    const glassBox = await glassSlider.boundingBox();
+    const volumeBox = await page.getByLabel("Volume").boundingBox();
+    expect(glassBox, "glass blur slider should have bounds").not.toBeNull();
+    expect(volumeBox, "volume slider should have bounds").not.toBeNull();
+    expect(Math.round(glassBox!.height)).toBeGreaterThanOrEqual(44);
+    expect(Math.round(volumeBox!.height)).toBeGreaterThanOrEqual(44);
+  });
 });

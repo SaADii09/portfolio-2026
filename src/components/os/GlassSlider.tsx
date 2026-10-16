@@ -45,7 +45,7 @@ export function GlassSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="flex-1 h-1 accent-os-accent cursor-pointer"
+        className="flex-1 h-11 md:h-1 accent-os-accent cursor-pointer"
         aria-label={ariaLabel}
       />
       {format && (

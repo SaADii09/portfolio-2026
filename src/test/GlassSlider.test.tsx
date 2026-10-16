@@ -69,6 +69,8 @@ describe("GlassSlider", () => {
         compact
       />,
     );
-    expect(container.querySelector("label")?.className).not.toContain("w-12");
+    const label = container.querySelector("label");
+    expect(label, "compact rows should still render the label element").not.toBeNull();
+    expect(label!.className).not.toContain("w-12");
   });
 });
