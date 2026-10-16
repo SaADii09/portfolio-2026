@@ -37,6 +37,8 @@ const ALLOWED_COLOR_FILES = new Set([
   "themes.ts",
   "design-tokens.ts",
   "tailwind.config.ts",
+  // OG image is not a themed surface (no CSS cascade) — documented exception
+  "opengraph-image.tsx",
 ]);
 
 // ── Helpers ──────────────────────────────────────────

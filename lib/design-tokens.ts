@@ -106,6 +106,8 @@ export const DYNAMIC_COLOR_CONTEXTS = new Set([
   "themes.ts",
   "design-tokens.ts",
   "tailwind.config.ts",
+  // OG image is not a themed surface (no CSS cascade) — documented exception
+  "opengraph-image.tsx",
 ]);
 
 export function isHardcodedColor(value: string): boolean {
