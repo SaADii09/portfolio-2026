@@ -27,6 +27,7 @@ import { TerminalApp } from "@/components/apps/TerminalApp";
 import { ContactApp } from "@/components/apps/ContactApp";
 import { ResumeApp } from "@/components/apps/ResumeApp";
 import { ContextMenu } from "@/components/os/ContextMenu";
+import { CommandPalette } from "@/components/os/CommandPalette";
 import { APP_ICONS } from "@/components/os/appIcons";
 import { APP_DEFS, type AppDef, type AppId } from "@/lib/apps";
 import { openApp } from "@/lib/os-actions";
@@ -76,6 +77,7 @@ export function Desktop() {
   const widgets = useStore((s) => s.widgets);
   const addWidget = useStore((s) => s.addWidget);
   const clampAllWindows = useStore((s) => s.clampAllWindows);
+  const isPaletteOpen = useStore((s) => s.isPaletteOpen);
   const initDone = useRef(false);
   const isMobile = useIsMobile();
   useViewportClamp();
@@ -242,6 +244,8 @@ export function Desktop() {
 
         <ChatPanel />
         <Taskbar />
+
+        <AnimatePresence>{isPaletteOpen && <CommandPalette />}</AnimatePresence>
       </div>
     );
   }
@@ -325,6 +329,8 @@ export function Desktop() {
       </AnimatePresence>
 
       <Dock />
+
+      <AnimatePresence>{isPaletteOpen && <CommandPalette />}</AnimatePresence>
     </div>
   );
 }

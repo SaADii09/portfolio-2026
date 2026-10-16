@@ -4,31 +4,11 @@ import { useState, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useLongPress } from "@/hooks/useLongPress";
-import {
-  Monitor,
-  Settings,
-  User,
-  FolderKanban,
-  FileText,
-  Terminal,
-  Mail,
-  Home,
-  Maximize2,
-  Minimize2,
-  X,
-  Target,
-} from "lucide-react";
+import { Monitor, Home, Maximize2, Minimize2, X, Target } from "lucide-react";
+import type { AppId } from "@/lib/apps";
+import { APP_ICONS } from "@/components/os/appIcons";
 import { StartMenu } from "./StartMenu";
 import { ContextMenu } from "./ContextMenu";
-
-const APP_ICONS: Record<string, typeof Monitor> = {
-  about: User,
-  projects: FolderKanban,
-  "control-panel": Settings,
-  resume: FileText,
-  terminal: Terminal,
-  contact: Mail,
-};
 
 export function Taskbar() {
   const windows = useStore((s) => s.windows);
@@ -153,7 +133,7 @@ function MobileTaskbarButton({
   onLongPress: (e: React.PointerEvent) => void;
 }) {
   const longPress = useLongPress({ onLongPress });
-  const Icon = w.component ? (APP_ICONS[w.component] ?? Monitor) : Monitor;
+  const Icon = w.component ? (APP_ICONS[w.component as AppId] ?? Monitor) : Monitor;
 
   return (
     <button

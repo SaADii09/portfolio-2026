@@ -9,6 +9,7 @@ import type { ThemeName } from "@/types/theme";
 import { GlassSlider } from "./GlassSlider";
 import {
   Grid3X3,
+  Search,
   Volume2,
   Play,
   Pause,
@@ -86,6 +87,7 @@ function DesktopTopBar() {
   const [controlOpen, setControlOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [hoverOpen, setHoverOpen] = useState(false);
+  const togglePalette = useStore((s) => s.togglePalette);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -264,46 +266,57 @@ function DesktopTopBar() {
         </AnimatePresence>
       </div>
 
-      {/* Control Center */}
-      <div className="relative">
+      {/* Command palette + Control Center */}
+      <div className="flex items-center gap-1">
         <button
-          id="desktop-control-trigger"
-          onClick={() => {
-            setControlOpen((v) => !v);
-            setCalendarOpen(false);
-          }}
+          onClick={() => togglePalette()}
           className="flex items-center justify-center w-7 h-7 rounded-lg transition-all hover:scale-110 active:scale-95"
-          style={{
-            background: controlOpen
-              ? "color-mix(in srgb, var(--accent-1) 15%, transparent)"
-              : "transparent",
-            color: controlOpen ? "var(--accent-1)" : "var(--text-secondary)",
-          }}
-          aria-label="Control Center"
+          style={{ color: "var(--text-secondary)" }}
+          aria-label="Command palette"
         >
-          <Grid3X3 size={15} />
+          <Search size={15} />
         </button>
 
-        <AnimatePresence>
-          {controlOpen && (
-            <motion.div
-              id="desktop-control-panel"
-              initial={{ opacity: 0, y: -4, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.96 }}
-              transition={{ type: "spring", damping: 28, stiffness: 350 }}
-              className="absolute right-0 top-full mt-2 w-[260px] glass-heavy overflow-hidden"
-              style={{
-                borderRadius: "var(--radius)",
-                border: "1px solid color-mix(in srgb, var(--accent-1) 15%, transparent)",
-                boxShadow: "var(--shadow-glass-heavy)",
-                zIndex: 10000,
-              }}
-            >
-              <DesktopControlContent onClose={() => setControlOpen(false)} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="relative">
+          <button
+            id="desktop-control-trigger"
+            onClick={() => {
+              setControlOpen((v) => !v);
+              setCalendarOpen(false);
+            }}
+            className="flex items-center justify-center w-7 h-7 rounded-lg transition-all hover:scale-110 active:scale-95"
+            style={{
+              background: controlOpen
+                ? "color-mix(in srgb, var(--accent-1) 15%, transparent)"
+                : "transparent",
+              color: controlOpen ? "var(--accent-1)" : "var(--text-secondary)",
+            }}
+            aria-label="Control Center"
+          >
+            <Grid3X3 size={15} />
+          </button>
+
+          <AnimatePresence>
+            {controlOpen && (
+              <motion.div
+                id="desktop-control-panel"
+                initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.96 }}
+                transition={{ type: "spring", damping: 28, stiffness: 350 }}
+                className="absolute right-0 top-full mt-2 w-[260px] glass-heavy overflow-hidden"
+                style={{
+                  borderRadius: "var(--radius)",
+                  border: "1px solid color-mix(in srgb, var(--accent-1) 15%, transparent)",
+                  boxShadow: "var(--shadow-glass-heavy)",
+                  zIndex: 10000,
+                }}
+              >
+                <DesktopControlContent onClose={() => setControlOpen(false)} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
@@ -722,6 +735,7 @@ function MobileTopBar() {
 
       {/* Drag knob (tappable + draggable) */}
       <div
+        data-testid="mobile-shade-knob"
         className="relative z-20 flex justify-center py-0.5 cursor-grab active:cursor-grabbing"
         onPointerDown={handleKnobPointerDown}
         onPointerMove={handlePointerMove}
@@ -794,6 +808,7 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
   const setVolume = useStore((s) => s.setVolume);
   const glassBlur = useStore((s) => s.glassBlur);
   const setGlassBlur = useStore((s) => s.setGlassBlur);
+  const openPalette = useStore((s) => s.openPalette);
 
   const handleOpenSettings = () => {
     openApp("control-panel");
@@ -809,6 +824,21 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex flex-col p-3 gap-3">
+      <button
+        onClick={() => {
+          openPalette();
+          onClose();
+        }}
+        className="flex items-center gap-2.5 w-full h-11 px-3 rounded-xl text-xs font-body transition-all hover:opacity-80 active:scale-[0.99]"
+        style={{
+          background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)",
+          color: "var(--text-primary)",
+        }}
+      >
+        <Search size={14} className="text-os-accent" />
+        Search &amp; commands
+      </button>
+
       <div className="grid grid-cols-4 gap-2">
         {toggles.map((t) => (
           <button
