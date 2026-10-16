@@ -5,6 +5,7 @@ import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
+import { useDragPosition } from "@/hooks/useDragPosition";
 import { clampWindowSize, clampWindowPosition, clampDragPosition } from "@/lib/boundaries";
 import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT } from "@/lib/constants";
 import { X, Minus, Maximize2, Minimize2, ExternalLink, Target } from "lucide-react";
@@ -30,7 +31,6 @@ export function Window({ id, children }: WindowProps) {
   const isMobile = useIsMobile();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
-  const dragRef = useRef({ sx: 0, sy: 0, wx: 0, wy: 0 });
   const rafRef = useRef(0);
   const windowElRef = useRef<HTMLDivElement>(null);
 
@@ -78,52 +78,16 @@ export function Window({ id, children }: WindowProps) {
     onContextMenu: lpContext,
   } = useLongPress({ onLongPress: openContextMenu });
 
-  const handleHeaderDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (!win || win.isMaximized) return;
-      if ((e.target as HTMLElement).closest("button")) return;
-      e.preventDefault();
-      dragRef.current = { sx: e.clientX, sy: e.clientY, wx: win.x, wy: win.y };
-      focusWindow(id);
-
-      const el = windowElRef.current;
-      if (el) el.classList.add("os-dragging");
-
-      let pendingX = win.x;
-      let pendingY = win.y;
-      let rafScheduled = false;
-
-      const onMove = (e: PointerEvent) => {
-        const rawX = dragRef.current.wx + e.clientX - dragRef.current.sx;
-        const rawY = dragRef.current.wy + e.clientY - dragRef.current.sy;
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        const clamped = clampDragPosition(rawX, rawY, win.width, vw, vh);
-        pendingX = clamped.x;
-        pendingY = clamped.y;
-        if (el) {
-          el.style.transform = `translate(${pendingX}px, ${pendingY}px)`;
-        }
-        if (!rafScheduled) {
-          rafScheduled = true;
-          rafRef.current = requestAnimationFrame(() => {
-            updateWindowPosition(id, pendingX, pendingY);
-            rafScheduled = false;
-          });
-        }
-      };
-      const onUp = () => {
-        if (el) el.classList.remove("os-dragging");
-        cancelAnimationFrame(rafRef.current);
-        updateWindowPosition(id, pendingX, pendingY);
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-      };
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-    },
-    [win, id, focusWindow, updateWindowPosition],
-  );
+  const { handlePointerDown } = useDragPosition({
+    elementRef: windowElRef,
+    posX: win?.x ?? 0,
+    posY: win?.y ?? 0,
+    disabled: !win || win.isMaximized,
+    onDragStart: () => focusWindow(id),
+    clamp: (x, y) =>
+      clampDragPosition(x, y, win?.width ?? 0, window.innerWidth, window.innerHeight),
+    onCommit: (x, y) => updateWindowPosition(id, x, y),
+  });
 
   const handleResizeDown = useCallback(
     (e: React.PointerEvent, edge: Edge) => {
@@ -215,9 +179,9 @@ export function Window({ id, children }: WindowProps) {
   const mergedHeaderDown = useCallback(
     (e: React.PointerEvent) => {
       lpDown(e);
-      handleHeaderDown(e);
+      handlePointerDown(e);
     },
-    [lpDown, handleHeaderDown],
+    [lpDown, handlePointerDown],
   );
 
   const mergedHeaderMove = useCallback(
@@ -393,7 +357,7 @@ export function Window({ id, children }: WindowProps) {
       <div
         className="os-drag-handle flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing select-none"
         style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }}
-        onPointerDown={handleHeaderDown}
+        onPointerDown={handlePointerDown}
         onContextMenu={(e) => {
           e.preventDefault();
           setContextMenu({ x: e.clientX, y: e.clientY });
