@@ -1,5 +1,5 @@
 import type { ThemeName } from "@/types/theme";
-import type { AppId } from "@/lib/apps";
+import { APP_DEFS, resolveAppId, type AppId } from "@/lib/apps";
 import { PERSONAL_INFO, PROJECTS, EXPERIENCE, EDUCATION } from "@/lib/portfolio-data";
 
 /**
@@ -48,7 +48,20 @@ const HELP = `Available commands:
   banner     - Show welcome banner
   sudo       - 🚫 Nice try
   ls         - List directory contents
+  open <app> - Open an app
+  music      - Show or control the music player
+  apps       - List all apps
 `;
+
+const MUSIC_ACTIONS = ["play", "pause", "toggle", "next", "prev"] as const;
+type MusicAction = (typeof MUSIC_ACTIONS)[number];
+
+const UNKNOWN_APP_HINT = "about, projects, terminal, contact, resume, control-panel";
+
+/** `♪ <title> — <artist> [playing]` (or `[paused]`) — shared by the status and control paths. */
+function formatTrack(state: { title: string; artist: string; isPlaying: boolean }): string {
+  return `♪ ${state.title} — ${state.artist} [${state.isPlaying ? "playing" : "paused"}]`;
+}
 
 const ABOUT_TEXT = PERSONAL_INFO.summary.paragraphs.slice(0, 2).join("\n");
 
@@ -118,6 +131,31 @@ export function executeCommand(input: string, ctx: TerminalContext): CommandResu
       return { lines: ["⛔ Nice try. You don't have sudo access in a fake terminal."] };
     case "ls":
       return { lines: ["about  projects  resume  terminal  contact  control-panel"] };
+    case "open": {
+      const arg = args[0];
+      if (!arg) {
+        return { lines: ["Usage: open <app>"] };
+      }
+      const id = resolveAppId(arg);
+      if (!id) {
+        return { lines: [`Unknown app: ${arg}. Try: ${UNKNOWN_APP_HINT}`] };
+      }
+      ctx.openApp(id);
+      return { lines: [`Opening ${APP_DEFS.find((a) => a.id === id)!.title}`] };
+    }
+    case "music": {
+      if (args.length === 0) {
+        return { lines: [formatTrack(ctx.getMusicState())] };
+      }
+      const sub = args[0].toLowerCase();
+      if (!(MUSIC_ACTIONS as readonly string[]).includes(sub)) {
+        return { lines: ["Usage: music [play|pause|toggle|next|prev]"] };
+      }
+      ctx.musicControl(sub as MusicAction);
+      return { lines: [formatTrack(ctx.getMusicState())] };
+    }
+    case "apps":
+      return { lines: APP_DEFS.map((a) => `${a.id} — ${a.title}`) };
     default:
       return trimmed ? { lines: [`Command not found: ${command}. Type 'help'.`] } : { lines: [] };
   }

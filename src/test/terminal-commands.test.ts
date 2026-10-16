@@ -52,6 +52,9 @@ const HELP_TEXT = `Available commands:
   banner     - Show welcome banner
   sudo       - 🚫 Nice try
   ls         - List directory contents
+  open <app> - Open an app
+  music      - Show or control the music player
+  apps       - List all apps
 `;
 
 const ABOUT_TEXT = PERSONAL_INFO.summary.paragraphs.slice(0, 2).join("\n");
@@ -178,6 +181,113 @@ describe("executeCommand — theme command", () => {
   });
 });
 
+describe("executeCommand — OS bridge commands", () => {
+  describe("open", () => {
+    it("opens an app by id and reports its title", () => {
+      const ctx = createCtx();
+      expect(executeCommand("open projects", ctx).lines).toEqual(["Opening Projects"]);
+      expect(ctx.openApp).toHaveBeenCalledWith("projects");
+    });
+
+    it("resolves aliases: settings → control-panel, cv → resume", () => {
+      const settingsCtx = createCtx();
+      expect(executeCommand("open settings", settingsCtx).lines).toEqual(["Opening Control Panel"]);
+      expect(settingsCtx.openApp).toHaveBeenCalledWith("control-panel");
+
+      const cvCtx = createCtx();
+      expect(executeCommand("open cv", cvCtx).lines).toEqual(["Opening Resume"]);
+      expect(cvCtx.openApp).toHaveBeenCalledWith("resume");
+    });
+
+    it("is case-insensitive on the app argument", () => {
+      const ctx = createCtx();
+      expect(executeCommand("open SETTINGS", ctx).lines).toEqual(["Opening Control Panel"]);
+      expect(ctx.openApp).toHaveBeenCalledWith("control-panel");
+    });
+
+    it("prints the unknown-app hint and touches nothing", () => {
+      const ctx = createCtx();
+      expect(executeCommand("open nope", ctx).lines).toEqual([
+        "Unknown app: nope. Try: about, projects, terminal, contact, resume, control-panel",
+      ]);
+      expect(ctx.openApp).not.toHaveBeenCalled();
+    });
+
+    it("bare `open` prints usage", () => {
+      const ctx = createCtx();
+      expect(executeCommand("open", ctx).lines).toEqual(["Usage: open <app>"]);
+      expect(ctx.openApp).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("music", () => {
+    it("prints the current track with its playback state", () => {
+      expect(executeCommand("music", createCtx()).lines).toEqual([
+        "♪ Neon Lights — Synthwave Dreams [paused]",
+      ]);
+    });
+
+    it("prints [playing] while a track is playing", () => {
+      const ctx = createCtx({
+        getMusicState: vi.fn(() => ({
+          title: "Pixel Rain",
+          artist: "8-Bit Universe",
+          isPlaying: true,
+        })),
+      });
+      expect(executeCommand("music", ctx).lines).toEqual(["♪ Pixel Rain — 8-Bit Universe [playing]"]);
+    });
+
+    it.each(["play", "pause", "toggle", "next", "prev"] as const)(
+      "music %s performs the action, then reports fresh state",
+      (sub) => {
+        let state = { title: "Neon Lights", artist: "Synthwave Dreams", isPlaying: false };
+        const ctx = createCtx({
+          musicControl: vi.fn(() => {
+            state = { title: "Pixel Rain", artist: "8-Bit Universe", isPlaying: true };
+          }),
+          getMusicState: vi.fn(() => state),
+        });
+        expect(executeCommand(`music ${sub}`, ctx).lines).toEqual([
+          "♪ Pixel Rain — 8-Bit Universe [playing]",
+        ]);
+        expect(ctx.musicControl).toHaveBeenCalledWith(sub);
+      },
+    );
+
+    it("prints usage for an unknown subcommand without touching the player", () => {
+      const ctx = createCtx();
+      expect(executeCommand("music wat", ctx).lines).toEqual([
+        "Usage: music [play|pause|toggle|next|prev]",
+      ]);
+      expect(ctx.musicControl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("apps", () => {
+    it("lists every app as `id — title`, one line each", () => {
+      const lines = executeCommand("apps", createCtx()).lines;
+      expect(lines).toEqual([
+        "about — About Me",
+        "projects — Projects",
+        "control-panel — Control Panel",
+        "resume — Resume",
+        "terminal — Terminal",
+        "contact — Contact",
+      ]);
+    });
+  });
+
+  describe("help", () => {
+    it("documents the bridge commands", () => {
+      const help = executeCommand("help", createCtx()).lines[0];
+      expect(help).toContain("open <app>");
+      expect(help).toContain("music");
+      expect(help).toContain("apps");
+    });
+  });
+});
+
 /** Wiring pin: TerminalApp → buildTerminalContext → real store + os-actions. */
 describe("TerminalApp wiring (jsdom)", () => {
   beforeEach(() => {
@@ -208,5 +318,26 @@ describe("TerminalApp wiring (jsdom)", () => {
 
     submitCommand("clear");
     expect(screen.queryByText(/Welcome to DevOS Terminal/)).not.toBeInTheDocument();
+  });
+
+  it("open focuses instead of duplicating, and music next reports fresh state", () => {
+    render(createElement(TerminalApp));
+    const projectsWindows = () =>
+      useStore.getState().windows.filter((w) => w.component === "projects");
+
+    submitCommand("open projects");
+    expect(screen.getByText("Opening Projects")).toBeInTheDocument();
+    expect(projectsWindows()).toHaveLength(1);
+
+    submitCommand("open projects");
+    expect(projectsWindows()).toHaveLength(1);
+    expect(screen.getAllByText("Opening Projects")).toHaveLength(2);
+
+    useStore.setState({ currentTrack: useStore.getState().queue[0] });
+    submitCommand("music next");
+    expect(useStore.getState().currentTrack.title).toBe("Pixel Rain");
+    expect(
+      screen.getByText("♪ Pixel Rain — 8-Bit Universe [playing]"),
+    ).toBeInTheDocument();
   });
 });
