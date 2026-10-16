@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, MotionConfig } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
@@ -185,38 +185,117 @@ export function Desktop() {
 
   if (isMobile) {
     return (
-      <div className="relative w-full h-screen overflow-hidden bg-os-bg">
-        <TopBar />
+      <MotionConfig reducedMotion="user">
+        <div className="relative w-full h-screen overflow-hidden bg-os-bg">
+          <TopBar />
 
-        {/* Desktop surface: widgets + icons — scrollable */}
-        <div className="absolute inset-0 pb-[var(--taskbar-height,52px)] pt-8 overflow-auto">
-          <div className="flex gap-3 p-3 overflow-x-auto flex-shrink-0">
-            {widgets.map((w) => (
-              <WidgetWrapper key={w.id} id={w.id}>
-                {renderWidgetContent(w.type, w.id)}
-              </WidgetWrapper>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-center">
-            <div className="grid grid-cols-3 gap-4 p-4">
-              {APP_DEFS.map((app) => (
-                <DesktopIconMobile
-                  key={app.id}
-                  app={app}
-                  onDoubleClick={() => handleIconDoubleClick(app)}
-                  onContextMenu={(e) => openIconContextMenu(app.id, e)}
-                />
+          {/* Desktop surface: widgets + icons — scrollable */}
+          <div className="absolute inset-0 pb-[var(--taskbar-height,52px)] pt-8 overflow-auto">
+            <div className="flex gap-3 p-3 overflow-x-auto flex-shrink-0">
+              {widgets.map((w) => (
+                <WidgetWrapper key={w.id} id={w.id}>
+                  {renderWidgetContent(w.type, w.id)}
+                </WidgetWrapper>
               ))}
             </div>
-          </div>
-        </div>
 
-        {/* Mobile content zone: physically bounded between status bar and taskbar */}
+            <div className="flex items-center justify-center">
+              <div className="grid grid-cols-3 gap-4 p-4">
+                {APP_DEFS.map((app) => (
+                  <DesktopIconMobile
+                    key={app.id}
+                    app={app}
+                    onDoubleClick={() => handleIconDoubleClick(app)}
+                    onContextMenu={(e) => openIconContextMenu(app.id, e)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile content zone: physically bounded between status bar and taskbar */}
+          <div
+            className="absolute overflow-hidden pointer-events-none"
+            style={{ top: 32, bottom: 52, left: 0, right: 0 }}
+          >
+            <AnimatePresence>
+              {windows
+                .filter((w) => !w.isMinimized)
+                .map((w) => (
+                  <Window key={w.id} id={w.id}>
+                    {w.type === "iframe" && w.url ? (
+                      <WebView url={w.url} />
+                    ) : (
+                      renderAppContent(w.component)
+                    )}
+                  </Window>
+                ))}
+            </AnimatePresence>
+          </div>
+
+          <AnimatePresence>
+            {iconContextMenu && (
+              <ContextMenu
+                items={getIconMenuItems(iconContextMenu.id)}
+                position={{ x: iconContextMenu.x, y: iconContextMenu.y }}
+                onClose={() => setIconContextMenu(null)}
+              />
+            )}
+          </AnimatePresence>
+
+          <ChatPanel />
+          <Taskbar />
+
+          <AnimatePresence>{isPaletteOpen && <CommandPalette />}</AnimatePresence>
+        </div>
+      </MotionConfig>
+    );
+  }
+
+  return (
+    <MotionConfig reducedMotion="user">
+      <div className="relative w-full h-screen overflow-hidden bg-os-bg">
+        <Wallpaper />
+        <TopBar />
+        <ChatPanel />
+
+        {/* Content safe zone: physically bounded between TopBar and Dock */}
         <div
-          className="absolute overflow-hidden pointer-events-none"
-          style={{ top: 32, bottom: 52, left: 0, right: 0 }}
+          className="absolute overflow-hidden"
+          style={{ top: 36, bottom: 76, left: 0, right: 0 }}
+          onContextMenu={handleContextMenu}
         >
+          <div
+            className={`absolute top-4 left-4 flex flex-col gap-4 z-10 ${isRefreshing ? "os-refresh-blink" : ""}`}
+          >
+            {APP_DEFS.map((app) => {
+              const Icon = APP_ICONS[app.id];
+              const label = app.desktopLabel ?? app.title;
+              return (
+                <button
+                  key={app.id}
+                  onDoubleClick={() => handleIconDoubleClick(app)}
+                  onContextMenu={(e) => openIconContextMenu(app.id, e)}
+                  className="flex flex-col items-center gap-1 w-16 p-1.5 rounded-os transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-1 focus:ring-os-accent"
+                  title={`Open ${label}`}
+                >
+                  <div className="w-10 h-10 flex items-center justify-center rounded-os glass glass-border transition-all hover:glow-sm">
+                    <Icon size={22} className="text-os-accent" />
+                  </div>
+                  <span className="text-[10px] font-body text-center leading-tight text-os-text">
+                    {label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {widgets.map((w) => (
+            <WidgetWrapper key={w.id} id={w.id}>
+              {renderWidgetContent(w.type, w.id)}
+            </WidgetWrapper>
+          ))}
+
           <AnimatePresence>
             {windows
               .filter((w) => !w.isMinimized)
@@ -233,6 +312,16 @@ export function Desktop() {
         </div>
 
         <AnimatePresence>
+          {contextMenu && (
+            <ContextMenu
+              items={contextMenuItems}
+              position={contextMenu}
+              onClose={() => setContextMenu(null)}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
           {iconContextMenu && (
             <ContextMenu
               items={getIconMenuItems(iconContextMenu.id)}
@@ -242,96 +331,11 @@ export function Desktop() {
           )}
         </AnimatePresence>
 
-        <ChatPanel />
-        <Taskbar />
+        <Dock />
 
         <AnimatePresence>{isPaletteOpen && <CommandPalette />}</AnimatePresence>
       </div>
-    );
-  }
-
-  return (
-    <div className="relative w-full h-screen overflow-hidden bg-os-bg">
-      <Wallpaper />
-      <TopBar />
-      <ChatPanel />
-
-      {/* Content safe zone: physically bounded between TopBar and Dock */}
-      <div
-        className="absolute overflow-hidden"
-        style={{ top: 36, bottom: 76, left: 0, right: 0 }}
-        onContextMenu={handleContextMenu}
-      >
-        <div
-          className={`absolute top-4 left-4 flex flex-col gap-4 z-10 ${isRefreshing ? "os-refresh-blink" : ""}`}
-        >
-          {APP_DEFS.map((app) => {
-            const Icon = APP_ICONS[app.id];
-            const label = app.desktopLabel ?? app.title;
-            return (
-              <button
-                key={app.id}
-                onDoubleClick={() => handleIconDoubleClick(app)}
-                onContextMenu={(e) => openIconContextMenu(app.id, e)}
-                className="flex flex-col items-center gap-1 w-16 p-1.5 rounded-os transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-1 focus:ring-os-accent"
-                title={`Open ${label}`}
-              >
-                <div className="w-10 h-10 flex items-center justify-center rounded-os glass glass-border transition-all hover:glow-sm">
-                  <Icon size={22} className="text-os-accent" />
-                </div>
-                <span className="text-[10px] font-body text-center leading-tight text-os-text">
-                  {label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {widgets.map((w) => (
-          <WidgetWrapper key={w.id} id={w.id}>
-            {renderWidgetContent(w.type, w.id)}
-          </WidgetWrapper>
-        ))}
-
-        <AnimatePresence>
-          {windows
-            .filter((w) => !w.isMinimized)
-            .map((w) => (
-              <Window key={w.id} id={w.id}>
-                {w.type === "iframe" && w.url ? (
-                  <WebView url={w.url} />
-                ) : (
-                  renderAppContent(w.component)
-                )}
-              </Window>
-            ))}
-        </AnimatePresence>
-      </div>
-
-      <AnimatePresence>
-        {contextMenu && (
-          <ContextMenu
-            items={contextMenuItems}
-            position={contextMenu}
-            onClose={() => setContextMenu(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {iconContextMenu && (
-          <ContextMenu
-            items={getIconMenuItems(iconContextMenu.id)}
-            position={{ x: iconContextMenu.x, y: iconContextMenu.y }}
-            onClose={() => setIconContextMenu(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      <Dock />
-
-      <AnimatePresence>{isPaletteOpen && <CommandPalette />}</AnimatePresence>
-    </div>
+    </MotionConfig>
   );
 }
 
