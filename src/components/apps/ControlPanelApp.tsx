@@ -2,6 +2,7 @@
 
 import { useStore } from "@/store";
 import type { ThemeName } from "@/types/theme";
+import { GlassSlider } from "@/components/os/GlassSlider";
 import { Play, Pause, SkipBack, SkipForward, Volume2, RotateCcw } from "lucide-react";
 
 const THEMES: { name: ThemeName; label: string; colors: string[] }[] = [
@@ -86,69 +87,36 @@ export function ControlPanelApp() {
           </button>
         </div>
         <div className="flex flex-col gap-2.5">
-          <div className="flex items-center gap-2">
-            <label
-              className="text-[10px] w-12 flex-shrink-0"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Blur
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={40}
-              step={1}
-              value={glassBlur}
-              onChange={(e) => setGlassBlur(Number(e.target.value))}
-              className="flex-1 h-1 accent-os-accent cursor-pointer"
-              aria-label="Glass blur intensity"
-            />
-            <span className="text-[9px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>
-              {glassBlur}px
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <label
-              className="text-[10px] w-12 flex-shrink-0"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Saturate
-            </label>
-            <input
-              type="range"
-              min={100}
-              max={250}
-              step={5}
-              value={glassSaturate}
-              onChange={(e) => setGlassSaturate(Number(e.target.value))}
-              className="flex-1 h-1 accent-os-accent cursor-pointer"
-              aria-label="Glass saturation"
-            />
-            <span className="text-[9px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>
-              {glassSaturate}%
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <label
-              className="text-[10px] w-12 flex-shrink-0"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Tint
-            </label>
-            <input
-              type="range"
-              min={5}
-              max={100}
-              step={5}
-              value={glassOpacity}
-              onChange={(e) => setGlassOpacity(Number(e.target.value))}
-              className="flex-1 h-1 accent-os-accent cursor-pointer"
-              aria-label="Glass tint opacity"
-            />
-            <span className="text-[9px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>
-              {glassOpacity}%
-            </span>
-          </div>
+          <GlassSlider
+            label="Blur"
+            value={glassBlur}
+            min={0}
+            max={40}
+            step={1}
+            onChange={setGlassBlur}
+            format={(v) => `${v}px`}
+            ariaLabel="Glass blur intensity"
+          />
+          <GlassSlider
+            label="Saturate"
+            value={glassSaturate}
+            min={100}
+            max={250}
+            step={5}
+            onChange={setGlassSaturate}
+            format={(v) => `${v}%`}
+            ariaLabel="Glass saturation"
+          />
+          <GlassSlider
+            label="Tint"
+            value={glassOpacity}
+            min={5}
+            max={100}
+            step={5}
+            onChange={setGlassOpacity}
+            format={(v) => `${v}%`}
+            ariaLabel="Glass tint opacity"
+          />
         </div>
       </section>
 
@@ -230,15 +198,16 @@ export function ControlPanelApp() {
 
           <div className="flex items-center gap-1.5">
             <Volume2 size={10} style={{ color: "var(--text-secondary)" }} />
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={Math.round(volume * 100)}
-              onChange={(e) => setVolume(Number(e.target.value) / 100)}
-              className="flex-1 h-1 accent-os-accent cursor-pointer"
-              aria-label="Volume"
-            />
+            <div className="flex-1 min-w-0">
+              <GlassSlider
+                label=""
+                value={Math.round(volume * 100)}
+                min={0}
+                max={100}
+                onChange={(v) => setVolume(v / 100)}
+                ariaLabel="Volume"
+              />
+            </div>
           </div>
         </div>
       </section>
