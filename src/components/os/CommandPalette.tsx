@@ -129,7 +129,12 @@ function filterItems(items: PaletteItem[], query: string): PaletteItem[] {
   return scored.map((entry) => entry.item);
 }
 
+const LISTBOX_ID = "command-palette-listbox";
+
 const optionId = (index: number) => `command-palette-option-${index}`;
+
+/** Everything tabbable inside the dialog, in DOM order (input first, then result rows). */
+const FOCUSABLE_SELECTOR = 'input, button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const paletteVariants = {
   hidden: { scale: 0.96, y: -8, opacity: 0 },
@@ -153,6 +158,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const items = useMemo(
     () => buildPaletteItems({ windows, widgets, isPlaying, currentTrack }),
@@ -167,6 +173,27 @@ export function CommandPalette() {
     const previous = document.activeElement as HTMLElement | null;
     inputRef.current?.focus();
     return () => previous?.focus?.();
+  }, []);
+
+  // Modal semantics: while the palette owns the screen the document cannot
+  // scroll, and the inline styles we touched are restored on close/unmount.
+  useEffect(() => {
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverflow = documentElement.style.overflow;
+    const previousPaddingRight = body.style.paddingRight;
+    // Compensate for a disappearing classic scrollbar, but only when the
+    // document actually had one (a zero clientWidth means jsdom / no layout).
+    const scrollbar =
+      documentElement.clientWidth > 0 ? window.innerWidth - documentElement.clientWidth : 0;
+    body.style.overflow = "hidden";
+    documentElement.style.overflow = "hidden";
+    if (scrollbar > 0) body.style.paddingRight = `${scrollbar}px`;
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      documentElement.style.overflow = previousHtmlOverflow;
+      body.style.paddingRight = previousPaddingRight;
+    };
   }, []);
 
   // Esc ownership convention: claim the event so the global shortcut layer
@@ -193,6 +220,30 @@ export function CommandPalette() {
     closePalette();
   };
 
+  /**
+   * Keep Tab inside the dialog (the palette claims `aria-modal`, so focus must
+   * not walk into the page behind it). Cycles input → result rows → input; with
+   * nothing else focusable, focus stays on the input.
+   */
+  const trapTab = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    e.preventDefault();
+    const focusables = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
+    );
+    if (focusables.length <= 1) {
+      focusables[0]?.focus();
+      return;
+    }
+    const current = focusables.indexOf(document.activeElement as HTMLElement);
+    const next = e.shiftKey
+      ? current <= 0
+        ? focusables.length - 1
+        : current - 1
+      : (current + 1) % focusables.length;
+    focusables[next]?.focus();
+  };
+
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -210,25 +261,29 @@ export function CommandPalette() {
   };
 
   return (
-    <div
+    <motion.div
+      data-testid="command-palette-overlay"
+      variants={paletteVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
       className="fixed inset-0 z-[10000] flex items-start justify-center"
       style={{
         paddingTop: isMobile ? "15vh" : "20vh",
         paddingLeft: isMobile ? 12 : 0,
         paddingRight: isMobile ? 12 : 0,
+        transformOrigin: "50% 20vh",
       }}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) closePalette();
       }}
     >
-      <motion.div
+      <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        variants={paletteVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
+        onKeyDown={trapTab}
         className="glass-heavy flex flex-col overflow-hidden"
         style={{
           width: isMobile ? "100%" : 560,
@@ -249,7 +304,8 @@ export function CommandPalette() {
             ref={inputRef}
             role="combobox"
             aria-expanded={results.length > 0}
-            aria-controls="command-palette-listbox"
+            aria-controls={results.length > 0 ? LISTBOX_ID : undefined}
+            aria-autocomplete="list"
             aria-activedescendant={selectedIndex >= 0 ? optionId(selectedIndex) : undefined}
             aria-label="Search commands"
             autoComplete="off"
@@ -268,7 +324,7 @@ export function CommandPalette() {
 
         {results.length > 0 ? (
           <div
-            id="command-palette-listbox"
+            id={LISTBOX_ID}
             role="listbox"
             aria-label="Commands"
             className="overflow-y-auto py-1.5"
@@ -310,7 +366,7 @@ export function CommandPalette() {
             No matching commands
           </div>
         )}
-      </motion.div>
-    </div>
+      </div>
+    </motion.div>
   );
 }

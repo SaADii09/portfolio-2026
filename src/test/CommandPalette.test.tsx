@@ -18,8 +18,20 @@ vi.mock("@/hooks/useMediaQuery", () => ({
   useIsMobile: () => false,
 }));
 
+// Spy on the imperative os-actions without losing their real behavior: the
+// palette's action coverage is "did we call the right action with the right arg".
+vi.mock("@/lib/os-actions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/os-actions")>();
+  return {
+    ...actual,
+    musicControl: vi.fn(actual.musicControl),
+    toggleWidget: vi.fn(actual.toggleWidget),
+  };
+});
+
 import { useStore } from "@/store";
 import { CommandPalette } from "@/components/os/CommandPalette";
+import { musicControl, toggleWidget } from "@/lib/os-actions";
 
 /** Mirrors Desktop's mount: the palette only exists while `isPaletteOpen`. */
 function PaletteHost() {
@@ -37,6 +49,8 @@ function openPaletteInDom() {
 describe("CommandPalette", () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.mocked(musicControl).mockClear();
+    vi.mocked(toggleWidget).mockClear();
     useStore.setState({
       windows: [],
       activeWindowId: null,
@@ -123,6 +137,86 @@ describe("CommandPalette", () => {
     expect(useStore.getState().isPaletteOpen).toBe(true);
     expect(useStore.getState().windows).toHaveLength(0);
     expect(useStore.getState().theme).toBe("retro");
+  });
+
+  it("runs the musicControl action and closes the palette", () => {
+    openPaletteInDom();
+
+    fireEvent.click(screen.getByRole("option", { name: /Next track/ }));
+
+    expect(musicControl).toHaveBeenCalledTimes(1);
+    expect(musicControl).toHaveBeenCalledWith("next");
+    expect(useStore.getState().isPaletteOpen).toBe(false);
+  });
+
+  it("runs the toggleWidget action and closes the palette", () => {
+    openPaletteInDom();
+
+    fireEvent.click(screen.getByRole("option", { name: /Show Weather widget/ }));
+
+    expect(toggleWidget).toHaveBeenCalledTimes(1);
+    expect(toggleWidget).toHaveBeenCalledWith("weather");
+    expect(useStore.getState().widgets.map((w) => w.type)).toContain("weather");
+    expect(useStore.getState().isPaletteOpen).toBe(false);
+  });
+
+  it("advertises the listbox only while results are rendered", () => {
+    const input = openPaletteInDom();
+
+    expect(input).toHaveAttribute("aria-autocomplete", "list");
+    expect(input).toHaveAttribute("aria-expanded", "true");
+    expect(input).toHaveAttribute("aria-controls", "command-palette-listbox");
+
+    fireEvent.change(input, { target: { value: "zzz" } });
+
+    // No rows rendered → no dangling aria-controls, and the combobox is collapsed.
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(input).toHaveAttribute("aria-expanded", "false");
+    expect(input).not.toHaveAttribute("aria-controls");
+  });
+
+  it("keeps Tab inside the dialog, cycling input → results → input", () => {
+    const input = openPaletteInDom();
+    const options = screen.getAllByRole("option");
+    // The trap reads `document.activeElement`, so always dispatch from the focused node.
+    const tab = (shiftKey = false) =>
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Tab", shiftKey });
+
+    tab();
+    expect(options[0]).toHaveFocus();
+
+    tab();
+    expect(options[1]).toHaveFocus();
+
+    // Walk off the end of the list: focus wraps back to the input, never out of the dialog.
+    options[options.length - 1].focus();
+    tab();
+    expect(input).toHaveFocus();
+
+    tab(true);
+    expect(options[options.length - 1]).toHaveFocus();
+  });
+
+  it("keeps focus on the input when nothing else is focusable", () => {
+    const input = openPaletteInDom();
+
+    fireEvent.change(input, { target: { value: "zzz" } });
+    fireEvent.keyDown(input, { key: "Tab" });
+
+    expect(input).toHaveFocus();
+  });
+
+  it("locks document scroll while open and restores it on close", () => {
+    render(<PaletteHost />);
+    expect(document.body.style.overflow).toBe("");
+
+    act(() => useStore.getState().openPalette());
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(document.documentElement.style.overflow).toBe("hidden");
+
+    act(() => useStore.getState().closePalette());
+    expect(document.body.style.overflow).toBe("");
+    expect(document.documentElement.style.overflow).toBe("");
   });
 
   it("closes on Escape, claims the event, and leaves open windows alone", () => {
