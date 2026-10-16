@@ -7,9 +7,9 @@ Interactive Web OS portfolio — a fully functional desktop environment in the b
 ## Features
 
 - **3 switchable themes** — Retro 2D, Neon City, Classic Editorial with live CSS variable swapping
-- **Window management** — drag, resize (all edges/corners), minimize, maximize, restore, close, opacity control
+- **Window management** — drag, resize (all edges/corners), minimize, maximize, restore, close
 - **6 functional apps** — About, Projects (iframe previews), Terminal, Contact, Resume, Control Panel
-- **5 live widgets** — Clock, CPU monitor, Weather (Open-Meteo API), Music player, Sticky notes
+- **4 live widgets** — CPU monitor, Weather (Open-Meteo API), Music player (Web Audio synth), Sticky notes
 - **AI chat assistant** — Anthropic streaming API with RAG from local knowledge base
 - **Live wallpapers** — Canvas-rendered per theme (retro embers, neon grid, editorial curves)
 - **Full mobile support** — floating windows with drag/resize, bottom tab bar, chat bottom sheet, 44px touch targets

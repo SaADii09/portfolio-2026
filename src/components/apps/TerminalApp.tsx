@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "@/store";
 import type { ThemeName } from "@/types/theme";
+import { PERSONAL_INFO, PROJECTS, EXPERIENCE, EDUCATION } from "@/lib/portfolio-data";
 
 const BANNER = `
    ___          _     ____   ___  ____  
@@ -32,6 +33,27 @@ const HELP = `Available commands:
   sudo       - 🚫 Nice try
   ls         - List directory contents
 `;
+
+const ABOUT_TEXT = PERSONAL_INFO.summary.paragraphs.slice(0, 2).join("\n");
+
+const PROJECTS_TEXT = PROJECTS.map((p, i) => `${i + 1}. ${p.title} — ${p.description}`).join("\n");
+
+const RESUME_TEXT = [
+  PERSONAL_INFO.name,
+  PERSONAL_INFO.title,
+  "",
+  "Experience:",
+  ...EXPERIENCE.map((e) => `- ${e.role} @ ${e.company} (${e.period})`),
+  "",
+  "Education:",
+  ...EDUCATION.map((e) => `- ${e.degree} ${e.field}, ${e.institution} (${e.graduationDate})`),
+].join("\n");
+
+const CONTACT_TEXT = [
+  `Email: ${PERSONAL_INFO.contact.email}`,
+  `LinkedIn: ${PERSONAL_INFO.contact.links.linkedin}`,
+  `GitHub: ${PERSONAL_INFO.contact.links.github}`,
+].join("\n");
 
 type Line = { content: string; isOutput: boolean };
 
@@ -70,27 +92,19 @@ export function TerminalApp() {
           addOutput(HELP);
           break;
         case "whoami":
-          addOutput("Saad Ahmad — Full-Stack Software Engineer (AI/Web)");
+          addOutput(`${PERSONAL_INFO.name} — ${PERSONAL_INFO.title}`);
           break;
         case "about":
-          addOutput(
-            "Full-stack engineer with 2.5+ years building production web apps and AI-powered systems.\nSpecializes in Next.js, TypeScript, Node.js, LangChain, and RAG pipelines.",
-          );
+          addOutput(ABOUT_TEXT);
           break;
         case "projects":
-          addOutput(
-            "1. DevOS Portfolio — Interactive Web OS\n2. AI Job Portal — RAG-powered platform\n3. SaaS CRM — Real-time video/chat\n4. API Automation Toolkit — n8n workflows",
-          );
+          addOutput(PROJECTS_TEXT);
           break;
         case "resume":
-          addOutput(
-            "Saad Ahmad\nSoftware Engineer (Full-Stack + AI)\n\nExperience:\n- AI Full Stack Dev @ NS Developer (Apr 2026-Present)\n- Full Stack Dev @ AccellionX (Nov 2025-May 2026)\n- Full Stack Dev @ SpiralSols (May 2025-Nov 2025)\n- Assoc. SE @ TechSol Hub (Nov 2024-May 2025)\n\nEducation:\n- BS Computer Science, COMSATS University (2024)",
-          );
+          addOutput(RESUME_TEXT);
           break;
         case "contact":
-          addOutput(
-            "Email: saadahmad6830879@gmail.com\nLinkedIn: linkedin.com/in/saadahmad879\nGitHub: github.com/SaADii09",
-          );
+          addOutput(CONTACT_TEXT);
           break;
         case "theme":
           if (args.length === 0) {
