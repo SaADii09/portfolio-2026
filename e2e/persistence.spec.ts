@@ -19,9 +19,12 @@ test.describe("LocalStorage persistence", () => {
   test("restores theme from localStorage on reload", async ({ page }) => {
     await gotoApp(page);
 
-    await page.evaluate(() => {
+    // Seed the persisted store before the next document loads. addInitScript runs
+    // ahead of the app's inline theme script, so the theme is applied on first paint.
+    // (Touching localStorage after hydration would race with the app's own persist writes.)
+    await page.addInitScript(() => {
       const store = JSON.parse(localStorage.getItem("devos-store") || "{}");
-      store.state = { ...store.state, theme: "editorial" };
+      store.state = { ...(store.state ?? {}), theme: "editorial" };
       localStorage.setItem("devos-store", JSON.stringify(store));
     });
 
