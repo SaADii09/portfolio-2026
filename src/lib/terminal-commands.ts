@@ -84,79 +84,80 @@ const CONTACT_TEXT = [
   `GitHub: ${PERSONAL_INFO.contact.links.github}`,
 ].join("\n");
 
+type CommandHandler = (args: string[], ctx: TerminalContext) => CommandResult;
+
+/** Wrap a fixed output so it can share the dispatch table with the dynamic handlers. */
+function fixedOutput(lines: string[]): CommandHandler {
+  return () => ({ lines });
+}
+
+function neofetchText(theme: ThemeName): string {
+  const resolution =
+    typeof window !== "undefined" ? `${window.innerWidth}x${window.innerHeight}` : "unknown";
+  return `OS: DevOS v1.0\nKernel: Next.js 16\nShell: /bin/fake\nResolution: ${resolution}\nTheme: ${theme}\nUptime: way too long`;
+}
+
+function handleTheme(args: string[], ctx: TerminalContext): CommandResult {
+  const [name] = args;
+  if (!name) return { lines: [`Current theme: ${ctx.theme}`] };
+  if (ctx.setThemeByName(name)) return { lines: [`Theme changed to ${name}`] };
+  return { lines: [`Unknown theme: ${name}. Try: retro, neon, editorial`] };
+}
+
+function handleOpen(args: string[], ctx: TerminalContext): CommandResult {
+  const [arg] = args;
+  if (!arg) return { lines: ["Usage: open <app>"] };
+  const id = resolveAppId(arg);
+  if (!id) return { lines: [`Unknown app: ${arg}. Try: ${UNKNOWN_APP_HINT}`] };
+  ctx.openApp(id);
+  return { lines: [`Opening ${APP_DEFS.find((a) => a.id === id)!.title}`] };
+}
+
+function isMusicAction(value: string): value is MusicAction {
+  return (MUSIC_ACTIONS as readonly string[]).includes(value);
+}
+
+function handleMusic(args: string[], ctx: TerminalContext): CommandResult {
+  const [raw] = args;
+  if (!raw) return { lines: [formatTrack(ctx.getMusicState())] };
+  const action = raw.toLowerCase();
+  if (!isMusicAction(action)) {
+    return { lines: ["Usage: music [play|pause|toggle|next|prev]"] };
+  }
+  ctx.musicControl(action);
+  return { lines: [formatTrack(ctx.getMusicState())] };
+}
+
+/** Command name/alias → handler. Pure lookups keep the dispatcher branch-free. */
+const COMMANDS = new Map<string, CommandHandler>([
+  ["help", fixedOutput([HELP])],
+  ["whoami", fixedOutput([`${PERSONAL_INFO.name} — ${PERSONAL_INFO.title}`])],
+  ["about", fixedOutput([ABOUT_TEXT])],
+  ["projects", fixedOutput([PROJECTS_TEXT])],
+  ["resume", fixedOutput([RESUME_TEXT])],
+  ["contact", fixedOutput([CONTACT_TEXT])],
+  ["theme", handleTheme],
+  ["date", () => ({ lines: [new Date().toString()] })],
+  ["echo", (args) => ({ lines: [args.join(" ")] })],
+  ["clear", () => ({ lines: [], clear: true })],
+  ["neofetch", (_args, ctx) => ({ lines: [neofetchText(ctx.theme)] })],
+  ["banner", fixedOutput([BANNER])],
+  ["sudo", fixedOutput(["⛔ Nice try. You don't have sudo access in a fake terminal."])],
+  ["ls", fixedOutput(["about  projects  resume  terminal  contact  control-panel"])],
+  ["open", handleOpen],
+  ["music", handleMusic],
+  ["apps", fixedOutput(APP_DEFS.map((a) => `${a.id} — ${a.title}`))],
+]);
+
 export function executeCommand(input: string, ctx: TerminalContext): CommandResult {
   const trimmed = input.trim();
   const parts = trimmed.split(/\s+/);
-  const command = parts[0].toLowerCase();
+  const command = (parts[0] ?? "").toLowerCase();
   const args = parts.slice(1);
 
-  switch (command) {
-    case "help":
-      return { lines: [HELP] };
-    case "whoami":
-      return { lines: [`${PERSONAL_INFO.name} — ${PERSONAL_INFO.title}`] };
-    case "about":
-      return { lines: [ABOUT_TEXT] };
-    case "projects":
-      return { lines: [PROJECTS_TEXT] };
-    case "resume":
-      return { lines: [RESUME_TEXT] };
-    case "contact":
-      return { lines: [CONTACT_TEXT] };
-    case "theme":
-      if (args.length === 0) {
-        return { lines: [`Current theme: ${ctx.theme}`] };
-      }
-      if (ctx.setThemeByName(args[0])) {
-        return { lines: [`Theme changed to ${args[0]}`] };
-      }
-      return { lines: [`Unknown theme: ${args[0]}. Try: retro, neon, editorial`] };
-    case "date":
-      return { lines: [new Date().toString()] };
-    case "echo":
-      return { lines: [args.join(" ")] };
-    case "clear":
-      return { lines: [], clear: true };
-    case "neofetch":
-      return {
-        lines: [
-          `OS: DevOS v1.0\nKernel: Next.js 16\nShell: /bin/fake\nResolution: ${
-            typeof window !== "undefined" ? `${window.innerWidth}x${window.innerHeight}` : "unknown"
-          }\nTheme: ${ctx.theme}\nUptime: way too long`,
-        ],
-      };
-    case "banner":
-      return { lines: [BANNER] };
-    case "sudo":
-      return { lines: ["⛔ Nice try. You don't have sudo access in a fake terminal."] };
-    case "ls":
-      return { lines: ["about  projects  resume  terminal  contact  control-panel"] };
-    case "open": {
-      const arg = args[0];
-      if (!arg) {
-        return { lines: ["Usage: open <app>"] };
-      }
-      const id = resolveAppId(arg);
-      if (!id) {
-        return { lines: [`Unknown app: ${arg}. Try: ${UNKNOWN_APP_HINT}`] };
-      }
-      ctx.openApp(id);
-      return { lines: [`Opening ${APP_DEFS.find((a) => a.id === id)!.title}`] };
-    }
-    case "music": {
-      if (args.length === 0) {
-        return { lines: [formatTrack(ctx.getMusicState())] };
-      }
-      const sub = args[0].toLowerCase();
-      if (!(MUSIC_ACTIONS as readonly string[]).includes(sub)) {
-        return { lines: ["Usage: music [play|pause|toggle|next|prev]"] };
-      }
-      ctx.musicControl(sub as MusicAction);
-      return { lines: [formatTrack(ctx.getMusicState())] };
-    }
-    case "apps":
-      return { lines: APP_DEFS.map((a) => `${a.id} — ${a.title}`) };
-    default:
-      return trimmed ? { lines: [`Command not found: ${command}. Type 'help'.`] } : { lines: [] };
-  }
+  const handler = COMMANDS.get(command);
+  if (handler) return handler(args, ctx);
+
+  if (!trimmed) return { lines: [] };
+  return { lines: [`Command not found: ${command}. Type 'help'.`] };
 }

@@ -1,5 +1,29 @@
 const WORD_CHAR = /[a-z0-9]/;
 
+/** First occurrence of `char` in `text` at or after `from`, or `-1`. */
+function findChar(text: string, char: string, from: number): number {
+  for (let i = from; i < text.length; i++) {
+    if (text[i] === char) return i;
+  }
+  return -1;
+}
+
+/** A +3 bonus for the first character or one following a non-word character. */
+function isWordStart(text: string, index: number): boolean {
+  return index === 0 || !WORD_CHAR.test(text[index - 1]);
+}
+
+/** A +2 bonus when the match continues an unbroken run from the previous one. */
+function isConsecutiveRun(index: number, prevMatch: number): boolean {
+  return prevMatch !== -1 && index === prevMatch + 1;
+}
+
+function charScore(index: number, prevMatch: number, text: string): number {
+  const wordStart = isWordStart(text, index) ? 3 : 0;
+  const run = isConsecutiveRun(index, prevMatch) ? 2 : 0;
+  return 1 + wordStart + run;
+}
+
 /**
  * Fuzzy scorer for command-palette filtering.
  *
@@ -21,22 +45,10 @@ export function fuzzyScore(query: string, text: string): number | null {
   let from = 0;
 
   for (let qi = 0; qi < q.length; qi++) {
-    const char = q[qi];
-    let index = -1;
-
-    for (let ti = from; ti < t.length; ti++) {
-      if (t[ti] === char) {
-        index = ti;
-        break;
-      }
-    }
-
+    const index = findChar(t, q[qi], from);
     if (index === -1) return null;
 
-    score += 1;
-    if (index === 0 || !WORD_CHAR.test(t[index - 1])) score += 3; // word-start bonus
-    if (prevMatch !== -1 && index === prevMatch + 1) score += 2; // consecutive-run bonus
-
+    score += charScore(index, prevMatch, t);
     prevMatch = index;
     from = index + 1;
   }

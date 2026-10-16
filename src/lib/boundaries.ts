@@ -3,6 +3,9 @@ import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, MOBILE_BREAKPOINT } from "@/lib/co
 const DEFAULT_WIDGET_W = 200;
 const DEFAULT_WIDGET_H = 100;
 
+/** Gap left between widgets when a drop pushes one clear of another. */
+const COLLISION_GAP = 4;
+
 export function getViewportBounds(vw: number) {
   const isMobile = vw < MOBILE_BREAKPOINT;
   const topBar = isMobile ? 32 : 36;
@@ -54,6 +57,74 @@ export function clampWidgetBounds(
   };
 }
 
+interface CollisionRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface PushVector {
+  distance: number;
+  x: number;
+  y: number;
+}
+
+function clampToSafeZone(rect: CollisionRect, vw: number, vh: number): CollisionRect {
+  const { topBar, bottomBar } = getViewportBounds(vw);
+  return {
+    x: Math.max(0, Math.min(rect.x, vw - rect.w)),
+    y: Math.max(topBar, Math.min(rect.y, vh - rect.h - bottomBar)),
+    w: rect.w,
+    h: rect.h,
+  };
+}
+
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd && aEnd > bStart;
+}
+
+function overlaps(a: CollisionRect, b: CollisionRect): boolean {
+  return (
+    rangesOverlap(a.x, a.x + a.w, b.x, b.x + b.w) && rangesOverlap(a.y, a.y + a.h, b.y, b.y + b.h)
+  );
+}
+
+/**
+ * The four push-out vectors, ordered right → left → down → up so the smallest
+ * push wins and ties break exactly as the previous inline resolver did.
+ */
+function pushVectors(pos: CollisionRect, other: CollisionRect): PushVector[] {
+  const gap = COLLISION_GAP;
+  return [
+    { distance: other.x + other.w - pos.x, x: other.x + other.w + gap, y: pos.y },
+    { distance: pos.x + pos.w - other.x, x: other.x - pos.w - gap, y: pos.y },
+    { distance: other.y + other.h - pos.y, x: pos.x, y: other.y + other.h + gap },
+    { distance: pos.y + pos.h - other.y, x: pos.x, y: other.y - pos.h - gap },
+  ];
+}
+
+function pushOut(pos: CollisionRect, other: CollisionRect): CollisionRect {
+  const vectors = pushVectors(pos, other);
+  const minPush = Math.min(...vectors.map((v) => v.distance));
+  const chosen = vectors.find((v) => v.distance === minPush);
+  return chosen ? { x: chosen.x, y: chosen.y, w: pos.w, h: pos.h } : pos;
+}
+
+function resolveCollision(
+  rect: CollisionRect,
+  other: { x: number; y: number; width?: number; isCollapsed: boolean },
+): CollisionRect {
+  const target: CollisionRect = {
+    x: other.x,
+    y: other.y,
+    w: other.width || DEFAULT_WIDGET_W,
+    h: DEFAULT_WIDGET_H,
+  };
+  if (!overlaps(rect, target)) return rect;
+  return pushOut(rect, target);
+}
+
 export function resolveWidgetCollisions(
   x: number,
   y: number,
@@ -63,37 +134,12 @@ export function resolveWidgetCollisions(
   vw: number,
   vh: number,
 ) {
-  const { topBar, bottomBar } = getViewportBounds(vw);
-
-  let finalX = Math.max(0, Math.min(x, vw - w));
-  let finalY = Math.max(topBar, Math.min(y, vh - h - bottomBar));
-
+  let rect = clampToSafeZone({ x, y, w, h }, vw, vh);
   for (const other of others) {
-    const ox = other.x;
-    const oy = other.y;
-    const ow = other.width || DEFAULT_WIDGET_W;
-    const oh = DEFAULT_WIDGET_H;
-
-    const overlaps = finalX < ox + ow && finalX + w > ox && finalY < oy + oh && finalY + h > oy;
-
-    if (overlaps) {
-      const pushRight = ox + ow - finalX;
-      const pushLeft = finalX + w - ox;
-      const pushDown = oy + oh - finalY;
-      const pushUp = finalY + h - oy;
-      const minPush = Math.min(pushRight, pushLeft, pushDown, pushUp);
-
-      if (minPush === pushRight) finalX = ox + ow + 4;
-      else if (minPush === pushLeft) finalX = ox - w - 4;
-      else if (minPush === pushDown) finalY = oy + oh + 4;
-      else finalY = oy - h - 4;
-    }
+    rect = resolveCollision(rect, other);
   }
-
-  finalX = Math.max(0, Math.min(finalX, vw - w));
-  finalY = Math.max(topBar, Math.min(finalY, vh - h - bottomBar));
-
-  return { x: finalX, y: finalY };
+  const final = clampToSafeZone(rect, vw, vh);
+  return { x: final.x, y: final.y };
 }
 
 export function clampDragPosition(

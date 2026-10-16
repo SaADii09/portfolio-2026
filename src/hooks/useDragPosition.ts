@@ -26,6 +26,155 @@ interface UseDragPositionReturn {
   handlePointerDown: (e: React.PointerEvent) => void;
 }
 
+interface DragOrigin {
+  sx: number;
+  sy: number;
+  wx: number;
+  wy: number;
+}
+
+interface ValueRef<T> {
+  current: T;
+}
+
+interface DragSession {
+  el: HTMLElement | null;
+  originRef: ValueRef<DragOrigin>;
+  rafIdRef: ValueRef<number>;
+  cleanupRef: ValueRef<(() => void) | null>;
+  clamp: (x: number, y: number) => { x: number; y: number };
+  onCommit: (x: number, y: number) => void;
+  onRelease: (x: number, y: number) => void;
+  pending: { x: number; y: number };
+  rafScheduled: boolean;
+  removeListeners: () => void;
+}
+
+interface DragStart {
+  e: React.PointerEvent;
+  el: HTMLElement | null;
+  originRef: ValueRef<DragOrigin>;
+  rafIdRef: ValueRef<number>;
+  cleanupRef: ValueRef<(() => void) | null>;
+  clamp: (x: number, y: number) => { x: number; y: number };
+  onCommit: (x: number, y: number) => void;
+  onRelease: ((x: number, y: number) => void) | undefined;
+  onDragStart: (() => void) | undefined;
+  posX: number;
+  posY: number;
+}
+
+function noop(): void {}
+
+function paint(session: DragSession): void {
+  const el = session.el;
+  if (!el) return;
+  el.style.transform = `translate(${session.pending.x}px, ${session.pending.y}px)`;
+}
+
+/** Batch store commits to one per frame, always with the latest pending position. */
+function scheduleCommit(session: DragSession): void {
+  if (session.rafScheduled) return;
+  session.rafScheduled = true;
+  session.rafIdRef.current = requestAnimationFrame(() => {
+    session.onCommit(session.pending.x, session.pending.y);
+    session.rafScheduled = false;
+  });
+}
+
+function trackPointer(session: DragSession, e: PointerEvent): void {
+  const { sx, sy, wx, wy } = session.originRef.current;
+  const clamped = session.clamp(wx + e.clientX - sx, wy + e.clientY - sy);
+  session.pending.x = clamped.x;
+  session.pending.y = clamped.y;
+  paint(session);
+  scheduleCommit(session);
+}
+
+function cleanupSession(session: DragSession): void {
+  const el = session.el;
+  if (el) el.classList.remove("os-dragging");
+  cancelAnimationFrame(session.rafIdRef.current);
+  session.rafScheduled = false;
+  session.removeListeners();
+}
+
+/** The drag ends on pointerup and pointercancel alike — same final commit, no leaked listeners. */
+function endDrag(session: DragSession): void {
+  cleanupSession(session);
+  session.cleanupRef.current = null;
+  session.onRelease(session.pending.x, session.pending.y);
+}
+
+function attachPointerListeners(session: DragSession): void {
+  const onMove = (e: PointerEvent) => trackPointer(session, e);
+  const onUp = () => endDrag(session);
+  const onCancel = () => endDrag(session);
+
+  session.removeListeners = () => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", onCancel);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+  document.addEventListener("pointercancel", onCancel);
+}
+
+function isButtonTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("button") !== null;
+}
+
+function shouldIgnorePointer(disabled: boolean | undefined, target: EventTarget | null): boolean {
+  if (disabled) return true;
+  return isButtonTarget(target);
+}
+
+function invokeDragStart(onDragStart: (() => void) | undefined): void {
+  if (onDragStart) onDragStart();
+}
+
+function markDragging(el: HTMLElement | null): void {
+  if (el) el.classList.add("os-dragging");
+}
+
+/** The release callback always fires the final commit; default it to `onCommit`. */
+function resolveOnRelease(
+  onRelease: ((x: number, y: number) => void) | undefined,
+  onCommit: (x: number, y: number) => void,
+): (x: number, y: number) => void {
+  return onRelease ?? onCommit;
+}
+
+function beginDrag(start: DragStart): void {
+  start.cleanupRef.current?.();
+  start.originRef.current = {
+    sx: start.e.clientX,
+    sy: start.e.clientY,
+    wx: start.posX,
+    wy: start.posY,
+  };
+  invokeDragStart(start.onDragStart);
+  markDragging(start.el);
+
+  const session: DragSession = {
+    el: start.el,
+    originRef: start.originRef,
+    rafIdRef: start.rafIdRef,
+    cleanupRef: start.cleanupRef,
+    clamp: start.clamp,
+    onCommit: start.onCommit,
+    onRelease: resolveOnRelease(start.onRelease, start.onCommit),
+    pending: { x: start.posX, y: start.posY },
+    rafScheduled: false,
+    removeListeners: noop,
+  };
+
+  attachPointerListeners(session);
+  start.cleanupRef.current = () => cleanupSession(session);
+}
+
 /**
  * Shared transform-based drag core for windows and widgets.
  * Writes `transform: translate()` on the target element during the drag,
@@ -60,66 +209,21 @@ export function useDragPosition({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (disabled) return;
-      if ((e.target as HTMLElement).closest("button")) return;
+      if (shouldIgnorePointer(disabled, e.target)) return;
       e.preventDefault();
-      cleanupRef.current?.();
-      dragRef.current = { sx: e.clientX, sy: e.clientY, wx: posX, wy: posY };
-      onDragStart?.();
-
-      const el = elementRef.current;
-      if (el) el.classList.add("os-dragging");
-
-      let pendingX = posX;
-      let pendingY = posY;
-      let rafScheduled = false;
-
-      const onMove = (e: PointerEvent) => {
-        const rawX = dragRef.current.wx + e.clientX - dragRef.current.sx;
-        const rawY = dragRef.current.wy + e.clientY - dragRef.current.sy;
-        const clamped = clamp(rawX, rawY);
-        pendingX = clamped.x;
-        pendingY = clamped.y;
-        if (el) {
-          el.style.transform = `translate(${pendingX}px, ${pendingY}px)`;
-        }
-        if (!rafScheduled) {
-          rafScheduled = true;
-          rafRef.current = requestAnimationFrame(() => {
-            onCommit(pendingX, pendingY);
-            rafScheduled = false;
-          });
-        }
-      };
-
-      const cleanup = () => {
-        if (el) el.classList.remove("os-dragging");
-        cancelAnimationFrame(rafRef.current);
-        rafScheduled = false;
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-        document.removeEventListener("pointercancel", onCancel);
-      };
-
-      const onUp = () => {
-        cleanup();
-        cleanupRef.current = null;
-        (onRelease ?? onCommit)(pendingX, pendingY);
-      };
-
-      // A cancelled pointer (browser gesture takeover) ends the drag like a
-      // release — same final commit, no leaked listeners.
-      const onCancel = () => {
-        cleanup();
-        cleanupRef.current = null;
-        (onRelease ?? onCommit)(pendingX, pendingY);
-      };
-
-      cleanupRef.current = cleanup;
-
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-      document.addEventListener("pointercancel", onCancel);
+      beginDrag({
+        e,
+        el: elementRef.current,
+        originRef: dragRef,
+        rafIdRef: rafRef,
+        cleanupRef,
+        clamp,
+        onCommit,
+        onRelease,
+        onDragStart,
+        posX,
+        posY,
+      });
     },
     [disabled, posX, posY, clamp, onCommit, onRelease, onDragStart, elementRef],
   );

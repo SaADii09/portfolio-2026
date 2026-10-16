@@ -24,6 +24,8 @@ export function openApp(id: AppId): void {
   store.openWindow({ title: def.title, type: "app", component: def.component });
 }
 
+type StoreState = ReturnType<typeof useStore.getState>;
+
 /** Remove an existing widget of the type, or add one at the right edge of the content zone. */
 export function toggleWidget(type: WidgetType): "added" | "removed" {
   const store = useStore.getState();
@@ -33,32 +35,33 @@ export function toggleWidget(type: WidgetType): "added" | "removed" {
     return "removed";
   }
 
+  addWidgetAtContentEdge(store, type);
+  return "added";
+}
+
+function addWidgetAtContentEdge(store: StoreState, type: WidgetType): void {
   const def = WIDGET_DEFS.find((w) => w.type === type);
   const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
   const { topBar } = getViewportBounds(vw);
   store.addWidget(type, def?.title ?? type, vw - 220, topBar + 10 + store.widgets.length * 110);
-  return "added";
 }
 
-export function musicControl(action: "play" | "pause" | "toggle" | "next" | "prev"): void {
-  const store = useStore.getState();
-  switch (action) {
-    case "play":
-      if (!store.isPlaying) store.togglePlay();
-      break;
-    case "pause":
-      if (store.isPlaying) store.togglePlay();
-      break;
-    case "toggle":
-      store.togglePlay();
-      break;
-    case "next":
-      store.nextTrack();
-      break;
-    case "prev":
-      store.prevTrack();
-      break;
-  }
+type MusicAction = "play" | "pause" | "toggle" | "next" | "prev";
+
+const MUSIC_HANDLERS: Record<MusicAction, (store: StoreState) => void> = {
+  play: (store) => {
+    if (!store.isPlaying) store.togglePlay();
+  },
+  pause: (store) => {
+    if (store.isPlaying) store.togglePlay();
+  },
+  toggle: (store) => store.togglePlay(),
+  next: (store) => store.nextTrack(),
+  prev: (store) => store.prevTrack(),
+};
+
+export function musicControl(action: MusicAction): void {
+  MUSIC_HANDLERS[action](useStore.getState());
 }
 
 /** Switch theme by name; returns false (and changes nothing) on an unknown theme. */
