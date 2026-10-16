@@ -3,6 +3,7 @@ import { createWindowSlice, WindowSlice } from "@/store/windowSlice";
 import { createThemeSlice, ThemeSlice } from "@/store/themeSlice";
 import { createWidgetSlice, WidgetSlice } from "@/store/widgetSlice";
 import { createMusicSlice, MusicSlice } from "@/store/musicSlice";
+import { createUiSlice, UiSlice } from "@/store/uiSlice";
 
 // jsdom has no Web Audio API — stub the synth engine so music slice logic is testable
 vi.mock("@/lib/audio-engine", () => ({
@@ -16,7 +17,7 @@ vi.mock("@/lib/audio-engine", () => ({
   }),
 }));
 
-type Slice = WindowSlice & ThemeSlice & WidgetSlice & MusicSlice;
+type Slice = WindowSlice & ThemeSlice & WidgetSlice & MusicSlice & UiSlice;
 
 function createTestStore(): Slice {
   const store: Slice = {} as Slice;
@@ -34,6 +35,7 @@ function createTestStore(): Slice {
     createThemeSlice(set, get, api),
     createWidgetSlice(set, get, api),
     createMusicSlice(set, get, api),
+    createUiSlice(set, get, api),
   );
   return store;
 }
@@ -285,5 +287,31 @@ describe("musicSlice", () => {
     expect(store.volume).toBe(0);
     store.setVolume(0.5);
     expect(store.volume).toBe(0.5);
+  });
+});
+
+describe("uiSlice", () => {
+  let store: Slice;
+
+  beforeEach(() => {
+    store = createTestStore();
+  });
+
+  it("starts with the palette closed", () => {
+    expect(store.isPaletteOpen).toBe(false);
+  });
+
+  it("opens and closes the palette", () => {
+    store.openPalette();
+    expect(store.isPaletteOpen).toBe(true);
+    store.closePalette();
+    expect(store.isPaletteOpen).toBe(false);
+  });
+
+  it("toggles the palette", () => {
+    store.togglePalette();
+    expect(store.isPaletteOpen).toBe(true);
+    store.togglePalette();
+    expect(store.isPaletteOpen).toBe(false);
   });
 });

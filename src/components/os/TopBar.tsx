@@ -162,6 +162,9 @@ function DesktopTopBar() {
     };
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Claim Esc so the global shortcut layer (deferred, checks
+        // defaultPrevented) stands down and no window also closes.
+        e.preventDefault();
         setControlOpen(false);
         setCalendarOpen(false);
       }

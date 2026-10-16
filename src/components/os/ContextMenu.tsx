@@ -40,7 +40,12 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        // Claim Esc so the global shortcut layer (deferred, checks
+        // defaultPrevented) stands down and no window also closes.
+        e.preventDefault();
+        onClose();
+      }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);

@@ -6,6 +6,7 @@ import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useLongPress } from "@/hooks/useLongPress";
 import { useViewportClamp } from "@/hooks/useViewportClamp";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { getViewportBounds } from "@/lib/boundaries";
 import { Window } from "@/components/os/Window";
 import { Dock } from "@/components/os/Dock";
@@ -78,6 +79,7 @@ export function Desktop() {
   const initDone = useRef(false);
   const isMobile = useIsMobile();
   useViewportClamp();
+  useKeyboardShortcuts();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [iconContextMenu, setIconContextMenu] = useState<{
     id: AppId;
