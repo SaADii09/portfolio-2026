@@ -115,15 +115,3 @@ export function isHardcodedColor(value: string): boolean {
     /^hsl(a)?\(/.test(value)
   );
 }
-
-export function getTokenForColor(color: string): string | null {
-  for (const [token, value] of Object.entries(TAILWIND_TOKEN_MAP)) {
-    if (value.includes(color) || color.includes(value)) return token;
-  }
-  for (const theme of Object.values(THEMES)) {
-    for (const [key, val] of Object.entries(theme)) {
-      if (val === color) return `var(--${key.replace(/_/g, "-")})`;
-    }
-  }
-  return null;
-}

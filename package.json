@@ -14,6 +14,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "typecheck": "tsc --noEmit",
     "fallow": "npx fallow",
     "fallow:dead-code": "npx fallow dead-code",
     "fallow:dupes": "npx fallow dupes",
@@ -21,13 +22,11 @@
     "fallow:audit": "npx fallow audit",
     "fallow:fix": "npx fallow fix --dry-run",
     "validate:fallow": "tsx scripts/validate-fallow.ts",
-    "validate:all": "npm run lint && npm run format:check && npm run test && npm run fallow:audit"
+    "validate:all": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run fallow:audit"
   },
   "dependencies": {
-    "@types/howler": "^2.2.13",
     "@vercel/analytics": "^2.0.1",
     "framer-motion": "^12.42.2",
-    "howler": "^2.2.4",
     "lucide-react": "^1.24.0",
     "next": "16.2.10",
     "react": "19.2.4",
@@ -35,10 +34,10 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0",
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
-    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

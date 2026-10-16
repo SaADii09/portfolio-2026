@@ -84,7 +84,3 @@ export function retrieveRelevantContext(query: string, topK = 4): string {
 
   return scored.map((c) => c.chunk.text).join("\n\n---\n\n");
 }
-
-export function resetKnowledgeCache(): void {
-  cachedChunks = null;
-}
