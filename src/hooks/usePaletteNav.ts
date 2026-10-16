@@ -3,8 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useStore } from "@/store";
-import { filterItems } from "@/components/os/paletteItems";
-import type { PaletteItem, PaletteSources } from "@/components/os/paletteItems";
+import { filterItems } from "@/lib/paletteItems";
+import type { PaletteItem, PaletteSources } from "@/lib/paletteItems";
 
 export interface PaletteNav {
   query: string;

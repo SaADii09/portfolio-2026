@@ -74,7 +74,9 @@ describe("CommandPalette", () => {
   it("filters results while typing", () => {
     const input = openPaletteInDom();
 
-    fireEvent.change(input, { target: { value: "neon" } });
+    // "neon city" matches the theme row alone; bare "neon" also scores the music
+    // toggle's "Neon Lights" keyword, so the row order decided the old assertion.
+    fireEvent.change(input, { target: { value: "neon city" } });
 
     expect(screen.getByText("Switch theme: Neon City")).toBeDefined();
     expect(screen.queryByText("Open Terminal")).toBeNull();
@@ -92,7 +94,7 @@ describe("CommandPalette", () => {
   it("runs the highlighted action on Enter and closes the palette", () => {
     const input = openPaletteInDom();
 
-    fireEvent.change(input, { target: { value: "neon" } });
+    fireEvent.change(input, { target: { value: "neon city" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(useStore.getState().theme).toBe("neon");

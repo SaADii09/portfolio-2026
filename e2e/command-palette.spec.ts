@@ -1,5 +1,22 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { gotoApp } from "./utils";
+
+/**
+ * Wait for the palette's enter spring to settle at full opacity. Geometry read
+ * mid-enter is scaled by the 0.96 → 1 transform (a 44px row measures ~43px), so
+ * both the row-height assertion and the exit sampler start from the settled
+ * state.
+ */
+async function waitPaletteSettled(page: Page) {
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('[data-testid="command-palette-overlay"]');
+      return !!el && Number(getComputedStyle(el).opacity) >= 0.99;
+    },
+    undefined,
+    { timeout: 10_000 },
+  );
+}
 
 /** Page-side sampler installed before Escape (see the exit-animation test). */
 interface ExitSampler {
@@ -27,8 +44,15 @@ test.describe("Command palette", () => {
     const input = page.getByRole("combobox");
     await expect(input).toBeFocused();
 
-    await input.fill("neon");
-    await expect(dialog.getByText("Switch theme: Neon City")).toBeVisible();
+    // A query that matches the theme row *uniquely*: "neon" alone also scores
+    // against the music toggle's "Neon Lights" keyword (both 13), which made
+    // this case pass on a source-order tie-break rather than on filtering.
+    await input.fill("neon city");
+
+    const options = dialog.getByRole("option");
+    await expect(options).toHaveCount(1);
+    await expect(options).toHaveAccessibleName(/Switch theme: Neon City/);
+    await expect(options).toHaveAttribute("aria-selected", "true");
 
     await page.keyboard.press("Enter");
 
@@ -113,14 +137,7 @@ test.describe("Command palette", () => {
     // Let the *enter* animation settle to full opacity before we arm the
     // sampler. Otherwise a still-rising enter animation could be mistaken for
     // the exit fade and make the assertion vacuous.
-    await page.waitForFunction(
-      () => {
-        const el = document.querySelector('[data-testid="command-palette-overlay"]');
-        return !!el && Number(getComputedStyle(el).opacity) >= 0.99;
-      },
-      undefined,
-      { timeout: 10_000 },
-    );
+    await waitPaletteSettled(page);
 
     // Sample the overlay once per animation frame *in the page*, so the
     // measurement never depends on the driver's round-trip timing.
@@ -172,16 +189,20 @@ test.describe("Command palette", () => {
       }
 
       // Mechanism 2: a timer sampler — keeps ticking even while rAF is starved.
+      // It also owns the termination flag: the exit blocks the main thread, so
+      // rAF may not run again *after* the detach either — waiting on the rAF
+      // branch alone could burn the whole timeout on a perfectly good exit.
       const timer = window.setInterval(() => {
         const el = overlay();
         if (!el) {
-          if (sampler.done) window.clearInterval(timer);
+          sampler.done = true;
+          window.clearInterval(timer);
           return;
         }
         record(Number(getComputedStyle(el).opacity));
       }, 5);
 
-      // Mechanism 3: per-frame sampler — also detects the detach that ends the exit.
+      // Mechanism 3: per-frame sampler — the finer-grained opacity trace.
       const tick = () => {
         const el = overlay();
         if (!el) {
@@ -264,8 +285,16 @@ test.describe("Command palette", () => {
 
       await row.click();
 
-      await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+      const dialog = page.getByRole("dialog", { name: "Command palette" });
+      await expect(dialog).toBeVisible();
       await expect(page.getByRole("combobox")).toBeFocused();
+
+      // The palette is reachable on mobile, so its rows owe the 44px minimum
+      // (Tailwind `min-h-11`); only the md-and-up rule drops them to 40px.
+      await waitPaletteSettled(page);
+      const optionBox = await dialog.getByRole("option").first().boundingBox();
+      expect(optionBox, "result row should have bounds").not.toBeNull();
+      expect(Math.round(optionBox!.height)).toBeGreaterThanOrEqual(44);
     });
   });
 });

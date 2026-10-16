@@ -10,8 +10,24 @@ async function dragHeader(page: Page, x: number, y: number, dx: number, dy: numb
   await page.mouse.up();
 }
 
+/**
+ * Identical wait (and diagnosis) to `gotoApp` in e2e/utils.ts, for the reloads
+ * these tests drive themselves: the Next.js dev server recompiles on source
+ * saves, which can stretch delivery + hydration well past the boot screen's own
+ * ~2.7s of timers, so the ceiling must match the shared helper's 30s.
+ */
 async function waitBoot(page: Page) {
-  await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 15000 });
+  const overlay = page.locator(".boot-overlay");
+  try {
+    await overlay.waitFor({ state: "detached", timeout: 30_000 });
+  } catch {
+    const overlayPresent = await overlay.count().catch(() => -1);
+    throw new Error(
+      `waitBoot: .boot-overlay was still attached 30s after reloading (overlayPresent=${overlayPresent}). ` +
+        `If this recurs, suspect stalled client hydration (slow/severed dev-server compile) ` +
+        `or a BootScreen/phase bug — not the wait itself.`,
+    );
+  }
 }
 
 /**

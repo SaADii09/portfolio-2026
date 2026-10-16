@@ -83,9 +83,16 @@ function musicItems(isPlaying: boolean, track: Track): PaletteItem[] {
   ];
 }
 
-function focusWindow(id: string, isMinimized: boolean): void {
+/**
+ * Focus one window by id, re-read from the store at invoke time: the item list is
+ * a snapshot, so a window closed between build and click would otherwise hand
+ * `focusWindow` a dead id and leave `activeWindowId` pointing at nothing.
+ */
+function focusExistingWindow(id: string): void {
   const store = useStore.getState();
-  if (isMinimized) store.restoreWindow(id);
+  const win = store.windows.find((w) => w.id === id);
+  if (!win) return;
+  if (win.isMinimized) store.restoreWindow(id);
   store.focusWindow(id);
 }
 
@@ -95,7 +102,7 @@ function windowItems(windows: WindowInstance[]): PaletteItem[] {
     label: `Focus: ${w.title}`,
     category: "Window",
     keywords: ["window", "focus", "switch"],
-    run: () => focusWindow(w.id, w.isMinimized),
+    run: () => focusExistingWindow(w.id),
   }));
 }
 

@@ -32,5 +32,8 @@ export function useMediaQuery(query: string): boolean {
 }
 
 export function useIsMobile(): boolean {
-  return useMediaQuery("(max-width: 768px)");
+  // 768px itself is desktop — matches Tailwind's `md:` (min-width: 768px) and
+  // `MOBILE_BREAKPOINT` in lib/boundaries.ts (`vw < 768` is mobile). The
+  // fractional bound keeps the whole 768px pixel out of the mobile range.
+  return useMediaQuery("(max-width: 767.98px)");
 }

@@ -27,5 +27,5 @@ export function useContextMenuLongPress() {
 
   const longPress = useLongPress({ onLongPress: openContextMenu });
 
-  return { contextMenu, openContextMenu, openContextMenuAt, closeContextMenu, longPress };
+  return { contextMenu, openContextMenuAt, closeContextMenu, longPress };
 }

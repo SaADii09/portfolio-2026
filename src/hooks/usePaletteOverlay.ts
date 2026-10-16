@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import type { RefObject } from "react";
-import { optionId } from "@/components/os/paletteDom";
+import { optionId } from "@/lib/paletteDom";
 
 /** Autofocus the input on mount; restore focus to whatever was focused before on close. */
 function usePaletteAutofocus(inputRef: RefObject<HTMLInputElement | null>): void {

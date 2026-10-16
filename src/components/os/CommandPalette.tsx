@@ -14,9 +14,9 @@ import { useIsMobile } from "@/hooks/useMediaQuery";
 import { handleInputKeyDown, usePaletteNav, usePaletteSources } from "@/hooks/usePaletteNav";
 import type { PaletteNav } from "@/hooks/usePaletteNav";
 import { usePaletteOverlay } from "@/hooks/usePaletteOverlay";
-import { activeOptionId, closeOnBackdrop, LISTBOX_ID, optionId, trapTab } from "./paletteDom";
-import { buildPaletteItems } from "./paletteItems";
-import type { PaletteItem } from "./paletteItems";
+import { activeOptionId, closeOnBackdrop, LISTBOX_ID, optionId, trapTab } from "@/lib/paletteDom";
+import { buildPaletteItems } from "@/lib/paletteItems";
+import type { PaletteItem } from "@/lib/paletteItems";
 
 const paletteVariants = {
   hidden: { scale: 0.96, y: -8, opacity: 0 },
@@ -97,9 +97,8 @@ function PaletteRow({ item, index, nav }: { item: PaletteItem; index: number; na
       aria-selected={isSelected}
       onClick={() => nav.runItem(item)}
       onMouseEnter={() => nav.select(index)}
-      className="w-full flex items-center justify-between gap-3 px-4 text-left text-xs font-body transition-colors"
+      className="w-full flex items-center justify-between gap-3 px-4 text-left text-xs font-body transition-colors min-h-11 md:min-h-10"
       style={{
-        minHeight: 40,
         color: "var(--text-primary)",
         background: isSelected
           ? "color-mix(in srgb, var(--accent-1) 14%, transparent)"
