@@ -74,8 +74,7 @@ export function resolveWidgetCollisions(
     const ow = other.width || DEFAULT_WIDGET_W;
     const oh = DEFAULT_WIDGET_H;
 
-    const overlaps =
-      finalX < ox + ow && finalX + w > ox && finalY < oy + oh && finalY + h > oy;
+    const overlaps = finalX < ox + ow && finalX + w > ox && finalY < oy + oh && finalY + h > oy;
 
     if (overlaps) {
       const pushRight = ox + ow - finalX;

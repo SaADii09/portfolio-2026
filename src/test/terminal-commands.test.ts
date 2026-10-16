@@ -235,7 +235,9 @@ describe("executeCommand — OS bridge commands", () => {
           isPlaying: true,
         })),
       });
-      expect(executeCommand("music", ctx).lines).toEqual(["♪ Pixel Rain — 8-Bit Universe [playing]"]);
+      expect(executeCommand("music", ctx).lines).toEqual([
+        "♪ Pixel Rain — 8-Bit Universe [playing]",
+      ]);
     });
 
     it.each(["play", "pause", "toggle", "next", "prev"] as const)(
@@ -336,8 +338,6 @@ describe("TerminalApp wiring (jsdom)", () => {
     useStore.setState({ currentTrack: useStore.getState().queue[0] });
     submitCommand("music next");
     expect(useStore.getState().currentTrack.title).toBe("Pixel Rain");
-    expect(
-      screen.getByText("♪ Pixel Rain — 8-Bit Universe [playing]"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("♪ Pixel Rain — 8-Bit Universe [playing]")).toBeInTheDocument();
   });
 });
