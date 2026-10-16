@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { gotoApp } from "./utils";
 
 const TOLERANCE = 8;
@@ -12,6 +12,16 @@ async function dragHeader(page: Page, x: number, y: number, dx: number, dy: numb
 
 async function waitBoot(page: Page) {
   await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 15000 });
+}
+
+/**
+ * Wait until the drag frame has fully settled: the rAF-batched store commit
+ * and the React re-render it triggers must both have flushed before the
+ * painted geometry is meaningful.
+ */
+async function settledBox(page: Page, locator: Locator) {
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
+  return (await locator.boundingBox())!;
 }
 
 function weatherWidget(page: Page) {
@@ -61,6 +71,55 @@ test.describe("Drag behavior", () => {
     await waitBoot(page);
     const persisted = (await weatherWidget(page).boundingBox())!;
     expect(Math.abs(persisted.x - after.x)).toBeLessThanOrEqual(1);
+  });
+
+  test("widget tracks the pointer while dragged over another widget and is collision-resolved on drop", async ({
+    page,
+  }) => {
+    const widget = weatherWidget(page);
+    const other = page.locator(".glass-light", { hasText: "CPU" }).first();
+    await expect(widget).toBeVisible();
+    await expect(other).toBeVisible();
+
+    const start = (await widget.boundingBox())!;
+    const otherBox = (await other.boundingBox())!;
+    const grabX = start.x + 40;
+    const grabY = start.y + 11;
+
+    await page.mouse.move(grabX, grabY);
+    await page.mouse.down();
+    // One pointer event per move, then a fully settled sample: the painted
+    // position afterwards is what the user actually sees while the button is held.
+    await page.mouse.move(grabX, grabY + 40);
+    const mid1 = await settledBox(page, widget);
+    await page.mouse.move(grabX, grabY + 90);
+    const mid2 = await settledBox(page, widget);
+    await page.mouse.up();
+    const after = await settledBox(page, widget);
+
+    // (a) Mid-drag the painted position follows the pointer 1:1, even while the
+    // widget overlaps the one below it. Regression: mid-drag commits went through
+    // the collision-resolving store write, so the painted y froze for the whole
+    // overlap band (was ~6px / ~0px instead of ~40px / ~50px of pointer travel).
+    expect(
+      mid1.y - start.y,
+      "widget should track the pointer during the first move",
+    ).toBeGreaterThan(25);
+    expect(
+      mid2.y - mid1.y,
+      "widget should keep tracking the pointer while overlapping another widget",
+    ).toBeGreaterThan(30);
+
+    // (b) Releasing still resolves collisions: the raw drop position (mid2, inside
+    // the widget below) is replaced by the resolved one — no overlap after the drop.
+    expect(
+      after.y,
+      "drop should resolve the collision instead of committing the raw position",
+    ).toBeLessThan(mid2.y - 20);
+    expect(
+      after.y + after.height,
+      "released widget must not overlap the widget below",
+    ).toBeLessThanOrEqual(otherBox.y + 1);
   });
 
   test("pinned widget does not move on drag", async ({ page }) => {

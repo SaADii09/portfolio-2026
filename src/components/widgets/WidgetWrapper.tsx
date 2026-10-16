@@ -78,7 +78,11 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
     disabled: !widget || widget.isPinned || isMobile,
     clamp: (x, y) =>
       clampWidgetBounds(x, y, widget?.width || 200, 100, viewportWidth(), viewportHeight()),
-    onCommit: (x, y) => {
+    // Mid-drag: commit the raw position so the store (and therefore the
+    // re-rendered transform) tracks the pointer 1:1 while overlapping.
+    onCommit: (x, y) => updateWidgetPosition(id, x, y),
+    // On drop: push the widget out of its neighbours, exactly like before.
+    onRelease: (x, y) => {
       const others = widgets.filter((w) => w.id !== id && !w.isCollapsed);
       const p = resolveWidgetCollisions(
         x,
