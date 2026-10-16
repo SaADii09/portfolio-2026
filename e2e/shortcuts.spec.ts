@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { gotoApp } from "./utils";
+import { MIN_WINDOW_WIDTH } from "@/lib/constants";
+import { getViewportBounds } from "@/lib/boundaries";
 
 const TOLERANCE = 8;
-const MIN_WINDOW_WIDTH = 280;
 
 test.describe("Global keyboard shortcuts", () => {
   test.beforeEach(async ({ page }) => {
@@ -57,16 +58,34 @@ test.describe("Global keyboard shortcuts", () => {
     const win = page.locator(".os-window-enter");
     await expect(win).toBeVisible();
 
-    const vp = page.viewportSize()!;
     const urlBefore = page.url();
-    const expectedWidth = Math.max(MIN_WINDOW_WIDTH, Math.round(vp.width / 2));
+
+    // Mirror the hook (useKeyboardShortcuts) instead of re-deriving its maths:
+    // geometry comes from the live viewport plus the shared safe-zone bounds.
+    // Windows are laid out inside the content safe zone, which is itself offset
+    // `topBar` below the viewport top (Desktop.tsx), so the painted top edge of a
+    // window parked at the hook's snap `y = topBar` lands at `zoneTop + topBar`.
+    const { vw, vh, zoneTop } = await page.evaluate(() => {
+      const el = document.querySelector(".os-window-enter");
+      return {
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+        zoneTop: el?.parentElement?.getBoundingClientRect().top ?? 0,
+      };
+    });
+    const { topBar, bottomBar } = getViewportBounds(vw);
+    const expectedWidth = Math.max(MIN_WINDOW_WIDTH, Math.round(vw / 2));
+    const expectedHeight = vh - topBar - bottomBar;
+    const expectedY = zoneTop + topBar;
 
     await page.keyboard.press("Alt+ArrowRight");
 
     await expect(async () => {
       const box = (await win.boundingBox())!;
-      expect(Math.abs(box.x - (vp.width - expectedWidth))).toBeLessThanOrEqual(TOLERANCE);
+      expect(Math.abs(box.x - (vw - expectedWidth))).toBeLessThanOrEqual(TOLERANCE);
       expect(Math.abs(box.width - expectedWidth)).toBeLessThanOrEqual(TOLERANCE);
+      expect(Math.abs(box.y - expectedY)).toBeLessThanOrEqual(TOLERANCE);
+      expect(Math.abs(box.height - expectedHeight)).toBeLessThanOrEqual(TOLERANCE);
     }).toPass();
 
     expect(page.url()).toBe(urlBefore);

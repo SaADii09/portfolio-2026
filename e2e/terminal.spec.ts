@@ -18,19 +18,14 @@ test.describe("Terminal OS bridge", () => {
 
     await input.fill("open resume");
     await input.press("Enter");
-    await expect(
-      page
-        .locator(".os-window-enter")
-        .filter({ has: page.locator("span.font-display", { hasText: /^Resume$/ }) }),
-    ).toBeVisible();
+    // Window-locating pattern used by the existing specs: dock/taskbar icons
+    // expose the open window's title as their accessible name
+    // (see "dock shows an icon for each open window" in window-lifecycle.spec.ts).
+    await expect(page.getByLabel("Resume")).toBeVisible();
 
     await input.fill("music next");
     await input.press("Enter");
-    await expect(
-      page
-        .locator(".os-window-enter")
-        .filter({ hasText: "Welcome to DevOS Terminal" })
-        .getByText(/Pixel Rain/),
-    ).toBeVisible();
+    // The music line format only ever appears in the terminal's own output.
+    await expect(page.getByText(/♪ Pixel Rain/)).toBeVisible();
   });
 });
