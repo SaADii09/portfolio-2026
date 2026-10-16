@@ -30,8 +30,18 @@ const THEMES: { name: ThemeName; color: string; label: string }[] = [
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 function getDaysInMonth(year: number, month: number): number {
@@ -80,8 +90,17 @@ function DesktopTopBar() {
   useEffect(() => {
     const tick = () => {
       const now = new Date();
-      setTime(now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
-      setDate(now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" }));
+      setTime(
+        now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      );
+      setDate(
+        now.toLocaleDateString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+      );
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -123,10 +142,20 @@ function DesktopTopBar() {
       const trigger = document.getElementById("desktop-control-trigger");
       const calPanel = document.getElementById("desktop-calendar-panel");
       const calTrigger = document.getElementById("desktop-calendar-trigger");
-      if (panel && !panel.contains(e.target as Node) && trigger && !trigger.contains(e.target as Node)) {
+      if (
+        panel &&
+        !panel.contains(e.target as Node) &&
+        trigger &&
+        !trigger.contains(e.target as Node)
+      ) {
         setControlOpen(false);
       }
-      if (calPanel && !calPanel.contains(e.target as Node) && calTrigger && !calTrigger.contains(e.target as Node)) {
+      if (
+        calPanel &&
+        !calPanel.contains(e.target as Node) &&
+        calTrigger &&
+        !calTrigger.contains(e.target as Node)
+      ) {
         setCalendarOpen(false);
       }
     };
@@ -168,14 +197,20 @@ function DesktopTopBar() {
       <div className="relative">
         <button
           id="desktop-calendar-trigger"
-          onClick={() => { setCalendarOpen((v) => !v); setControlOpen(false); setHoverOpen(false); }}
+          onClick={() => {
+            setCalendarOpen((v) => !v);
+            setControlOpen(false);
+            setHoverOpen(false);
+          }}
           onMouseEnter={handleTimeMouseEnter}
           onMouseLeave={handleTimeMouseLeave}
           className="flex flex-col items-center px-3 py-1 rounded-lg transition-all hover:bg-[color-mix(in_srgb,var(--accent-1)_8%,transparent)]"
           aria-label="Calendar"
         >
           <span className="font-display text-xs leading-tight">{time}</span>
-          <span className="text-[9px] leading-tight" style={{ color: "var(--text-secondary)" }}>{date}</span>
+          <span className="text-[9px] leading-tight" style={{ color: "var(--text-secondary)" }}>
+            {date}
+          </span>
         </button>
 
         {/* Hover tooltip: shows full date when hovering (not when calendar is open) */}
@@ -228,10 +263,15 @@ function DesktopTopBar() {
       <div className="relative">
         <button
           id="desktop-control-trigger"
-          onClick={() => { setControlOpen((v) => !v); setCalendarOpen(false); }}
+          onClick={() => {
+            setControlOpen((v) => !v);
+            setCalendarOpen(false);
+          }}
           className="flex items-center justify-center w-7 h-7 rounded-lg transition-all hover:scale-110 active:scale-95"
           style={{
-            background: controlOpen ? "color-mix(in srgb, var(--accent-1) 15%, transparent)" : "transparent",
+            background: controlOpen
+              ? "color-mix(in srgb, var(--accent-1) 15%, transparent)"
+              : "transparent",
             color: controlOpen ? "var(--accent-1)" : "var(--text-secondary)",
           }}
           aria-label="Control Center"
@@ -283,8 +323,12 @@ function CalendarPanel() {
       <div className="flex items-center justify-between mb-2">
         <button
           onClick={() => {
-            if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
-            else { setViewMonth((m) => m - 1); }
+            if (viewMonth === 0) {
+              setViewMonth(11);
+              setViewYear((y) => y - 1);
+            } else {
+              setViewMonth((m) => m - 1);
+            }
           }}
           className="w-6 h-6 flex items-center justify-center rounded transition-all hover:bg-[color-mix(in_srgb,var(--accent-1)_12%,transparent)] hover:scale-110 active:scale-95"
           aria-label="Previous month"
@@ -296,8 +340,12 @@ function CalendarPanel() {
         </span>
         <button
           onClick={() => {
-            if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); }
-            else { setViewMonth((m) => m + 1); }
+            if (viewMonth === 11) {
+              setViewMonth(0);
+              setViewYear((y) => y + 1);
+            } else {
+              setViewMonth((m) => m + 1);
+            }
           }}
           className="w-6 h-6 flex items-center justify-center rounded transition-all hover:bg-[color-mix(in_srgb,var(--accent-1)_12%,transparent)] hover:scale-110 active:scale-95"
           aria-label="Next month"
@@ -309,7 +357,11 @@ function CalendarPanel() {
       {/* Weekday headers */}
       <div className="grid grid-cols-7 mb-1">
         {WEEKDAYS.map((d, i) => (
-          <div key={i} className="text-center text-[9px] font-body py-1" style={{ color: "var(--text-secondary)" }}>
+          <div
+            key={i}
+            className="text-center text-[9px] font-body py-1"
+            style={{ color: "var(--text-secondary)" }}
+          >
             {d}
           </div>
         ))}
@@ -320,23 +372,30 @@ function CalendarPanel() {
         {grid.map((day, i) => {
           if (day === null) return <div key={`e${i}`} />;
 
-          const isCurrentMonth = i >= getFirstDayOfWeek(viewYear, viewMonth) &&
+          const isCurrentMonth =
+            i >= getFirstDayOfWeek(viewYear, viewMonth) &&
             i < getFirstDayOfWeek(viewYear, viewMonth) + getDaysInMonth(viewYear, viewMonth);
-          const isToday = isCurrentMonth && day === today && viewMonth === todayMonth && viewYear === todayYear;
+          const isToday =
+            isCurrentMonth && day === today && viewMonth === todayMonth && viewYear === todayYear;
 
           return (
             <div
               key={`d${i}`}
               className="flex items-center justify-center text-[10px] font-body h-7 rounded-full transition-all duration-150 hover:scale-110 cursor-default"
               style={{
-                color: isCurrentMonth ? "var(--text-primary)" : "color-mix(in srgb, var(--text-secondary) 40%, transparent)",
+                color: isCurrentMonth
+                  ? "var(--text-primary)"
+                  : "color-mix(in srgb, var(--text-secondary) 40%, transparent)",
                 background: isToday ? "var(--accent-1)" : "transparent",
                 fontWeight: isToday ? 700 : 400,
-                boxShadow: isToday ? "0 0 8px color-mix(in srgb, var(--accent-1) 40%, transparent)" : undefined,
+                boxShadow: isToday
+                  ? "0 0 8px color-mix(in srgb, var(--accent-1) 40%, transparent)"
+                  : undefined,
               }}
               onMouseEnter={(e) => {
                 if (!isToday) {
-                  (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--accent-1) 12%, transparent)";
+                  (e.currentTarget as HTMLElement).style.background =
+                    "color-mix(in srgb, var(--accent-1) 12%, transparent)";
                 }
               }}
               onMouseLeave={(e) => {
@@ -401,16 +460,28 @@ function DesktopControlContent({ onClose }: { onClose: () => void }) {
       </div>
 
       <div>
-        <span className="text-[10px] font-body block mb-1.5" style={{ color: "var(--text-secondary)" }}>Theme</span>
+        <span
+          className="text-[10px] font-body block mb-1.5"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          Theme
+        </span>
         <div className="flex gap-2">
           {THEMES.map((t) => (
             <button
               key={t.name}
               onClick={() => setTheme(t.name)}
+              aria-label={t.label}
               className="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg transition-all"
               style={{
-                background: theme === t.name ? "color-mix(in srgb, var(--accent-1) 15%, transparent)" : "transparent",
-                border: theme === t.name ? "1px solid color-mix(in srgb, var(--accent-1) 30%, transparent)" : "1px solid transparent",
+                background:
+                  theme === t.name
+                    ? "color-mix(in srgb, var(--accent-1) 15%, transparent)"
+                    : "transparent",
+                border:
+                  theme === t.name
+                    ? "1px solid color-mix(in srgb, var(--accent-1) 30%, transparent)"
+                    : "1px solid transparent",
               }}
             >
               <span
@@ -427,71 +498,160 @@ function DesktopControlContent({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      <div className="h-px" style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }} />
+      <div
+        className="h-px"
+        style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }}
+      />
 
       <div>
-        <span className="text-[10px] font-body block mb-1.5" style={{ color: "var(--text-secondary)" }}>Glass</span>
+        <span
+          className="text-[10px] font-body block mb-1.5"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          Glass
+        </span>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1.5">
-            <label className="text-[9px] w-10 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>Blur</label>
-            <input type="range" min={0} max={40} value={glassBlur} onChange={(e) => setGlassBlur(Number(e.target.value))} className="flex-1 h-1 accent-os-accent cursor-pointer" aria-label="Glass blur" />
-            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>{glassBlur}</span>
+            <label
+              className="text-[9px] w-10 flex-shrink-0"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Blur
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={40}
+              value={glassBlur}
+              onChange={(e) => setGlassBlur(Number(e.target.value))}
+              className="flex-1 h-1 accent-os-accent cursor-pointer"
+              aria-label="Glass blur"
+            />
+            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>
+              {glassBlur}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <label className="text-[9px] w-10 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>Sat</label>
-            <input type="range" min={100} max={250} step={5} value={glassSaturate} onChange={(e) => setGlassSaturate(Number(e.target.value))} className="flex-1 h-1 accent-os-accent cursor-pointer" aria-label="Glass saturation" />
-            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>{glassSaturate}</span>
+            <label
+              className="text-[9px] w-10 flex-shrink-0"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Sat
+            </label>
+            <input
+              type="range"
+              min={100}
+              max={250}
+              step={5}
+              value={glassSaturate}
+              onChange={(e) => setGlassSaturate(Number(e.target.value))}
+              className="flex-1 h-1 accent-os-accent cursor-pointer"
+              aria-label="Glass saturation"
+            />
+            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>
+              {glassSaturate}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <label className="text-[9px] w-10 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>Tint</label>
-            <input type="range" min={5} max={100} step={5} value={glassOpacity} onChange={(e) => setGlassOpacity(Number(e.target.value))} className="flex-1 h-1 accent-os-accent cursor-pointer" aria-label="Glass tint" />
-            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>{glassOpacity}%</span>
+            <label
+              className="text-[9px] w-10 flex-shrink-0"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Tint
+            </label>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              step={5}
+              value={glassOpacity}
+              onChange={(e) => setGlassOpacity(Number(e.target.value))}
+              className="flex-1 h-1 accent-os-accent cursor-pointer"
+              aria-label="Glass tint"
+            />
+            <span className="text-[8px] w-5 text-right" style={{ color: "var(--text-secondary)" }}>
+              {glassOpacity}%
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="h-px" style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }} />
+      <div
+        className="h-px"
+        style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }}
+      />
 
       <div className="flex items-center gap-2">
         <Volume2 size={12} style={{ color: "var(--text-secondary)" }} />
         <input
-          type="range" min={0} max={100}
+          type="range"
+          min={0}
+          max={100}
           value={Math.round(volume * 100)}
           onChange={(e) => setVolume(Number(e.target.value) / 100)}
           className="flex-1 h-1 accent-os-accent cursor-pointer"
           aria-label="Volume"
         />
-        <span className="text-[9px] font-body w-6 text-right" style={{ color: "var(--text-secondary)" }}>
+        <span
+          className="text-[9px] font-body w-6 text-right"
+          style={{ color: "var(--text-secondary)" }}
+        >
           {Math.round(volume * 100)}
         </span>
       </div>
 
-      <div className="h-px" style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }} />
+      <div
+        className="h-px"
+        style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }}
+      />
 
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0">
           <div className="text-[10px] font-display truncate">{currentTrack.title}</div>
-          <div className="text-[9px] truncate" style={{ color: "var(--text-secondary)" }}>{currentTrack.artist}</div>
+          <div className="text-[9px] truncate" style={{ color: "var(--text-secondary)" }}>
+            {currentTrack.artist}
+          </div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={prevTrack} className="w-6 h-6 flex items-center justify-center rounded-lg hover:opacity-70 transition-opacity" style={{ background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)" }} aria-label="Previous">
+          <button
+            onClick={prevTrack}
+            className="w-6 h-6 flex items-center justify-center rounded-lg hover:opacity-70 transition-opacity"
+            style={{ background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)" }}
+            aria-label="Previous"
+          >
             <SkipBack size={10} />
           </button>
-          <button onClick={togglePlay} className="w-7 h-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80" style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }} aria-label={isPlaying ? "Pause" : "Play"}>
+          <button
+            onClick={togglePlay}
+            className="w-7 h-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80"
+            style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }}
+            aria-label={isPlaying ? "Pause" : "Play"}
+          >
             {isPlaying ? <Pause size={12} /> : <Play size={12} />}
           </button>
-          <button onClick={nextTrack} className="w-6 h-6 flex items-center justify-center rounded-lg hover:opacity-70 transition-opacity" style={{ background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)" }} aria-label="Next">
+          <button
+            onClick={nextTrack}
+            className="w-6 h-6 flex items-center justify-center rounded-lg hover:opacity-70 transition-opacity"
+            style={{ background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)" }}
+            aria-label="Next"
+          >
             <SkipForward size={10} />
           </button>
         </div>
       </div>
 
-      <div className="h-px" style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }} />
+      <div
+        className="h-px"
+        style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }}
+      />
 
       <button
         onClick={handleOpenSettings}
         className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-[10px] font-body transition-all hover:opacity-80"
-        style={{ background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)", color: "var(--text-primary)" }}
+        style={{
+          background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)",
+          color: "var(--text-primary)",
+        }}
       >
         <Settings size={12} /> Settings
       </button>
@@ -507,7 +667,13 @@ function MobileTopBar() {
   const [panelY, setPanelY] = useState(-400);
   const [animating, setAnimating] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef({ startY: 0, startPanelY: 0, isDragging: false, lastTime: 0, velocity: 0 });
+  const dragRef = useRef({
+    startY: 0,
+    startPanelY: 0,
+    isDragging: false,
+    lastTime: 0,
+    velocity: 0,
+  });
 
   useEffect(() => {
     const tick = () => {
@@ -526,21 +692,24 @@ function MobileTopBar() {
     setPanelOpen(target > -200);
   }, []);
 
-  const handleKnobPointerDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    const rect = panelRef.current?.getBoundingClientRect();
-    const panelHeight = rect ? rect.height : 400;
-    dragRef.current = {
-      startY: e.clientY,
-      startPanelY: panelOpen ? 0 : -panelHeight,
-      isDragging: true,
-      lastTime: Date.now(),
-      velocity: 0,
-    };
-    setAnimating(false);
-    setPanelY(panelOpen ? 0 : -panelHeight);
-  }, [panelOpen]);
+  const handleKnobPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      const rect = panelRef.current?.getBoundingClientRect();
+      const panelHeight = rect ? rect.height : 400;
+      dragRef.current = {
+        startY: e.clientY,
+        startPanelY: panelOpen ? 0 : -panelHeight,
+        isDragging: true,
+        lastTime: Date.now(),
+        velocity: 0,
+      };
+      setAnimating(false);
+      setPanelY(panelOpen ? 0 : -panelHeight);
+    },
+    [panelOpen],
+  );
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current.isDragging) return;
@@ -584,7 +753,10 @@ function MobileTopBar() {
   return (
     <div className="fixed top-0 left-0 right-0 z-[9999]">
       {/* Status bar */}
-      <div className="flex items-center justify-center h-6 glass-heavy" style={{ borderBottom: "1px solid color-mix(in srgb, var(--accent-1) 10%, transparent)" }}>
+      <div
+        className="flex items-center justify-center h-6 glass-heavy"
+        style={{ borderBottom: "1px solid color-mix(in srgb, var(--accent-1) 10%, transparent)" }}
+      >
         <span className="font-display text-[10px]">{time}</span>
       </div>
 
@@ -603,7 +775,9 @@ function MobileTopBar() {
             background: panelOpen
               ? "var(--accent-1)"
               : "color-mix(in srgb, var(--text-secondary) 50%, transparent)",
-            boxShadow: panelOpen ? "0 0 8px color-mix(in srgb, var(--accent-1) 40%, transparent)" : "none",
+            boxShadow: panelOpen
+              ? "0 0 8px color-mix(in srgb, var(--accent-1) 40%, transparent)"
+              : "none",
           }}
         />
       </div>
@@ -638,7 +812,11 @@ function MobileTopBar() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[9999]"
-            style={{ background: "rgba(0,0,0,0.3)", top: 32, pointerEvents: panelY > -200 ? "auto" : "none" }}
+            style={{
+              background: "rgba(0,0,0,0.3)",
+              top: 32,
+              pointerEvents: panelY > -200 ? "auto" : "none",
+            }}
             onClick={() => snapTo(-400)}
           />
         )}
@@ -685,7 +863,9 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
             key={t.label}
             className="flex flex-col items-center gap-1 py-2 rounded-xl transition-all"
             style={{
-              background: t.active ? "color-mix(in srgb, var(--accent-1) 20%, transparent)" : "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)",
+              background: t.active
+                ? "color-mix(in srgb, var(--accent-1) 20%, transparent)"
+                : "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)",
               color: t.active ? "var(--accent-1)" : "var(--text-secondary)",
             }}
           >
@@ -695,7 +875,10 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
-      <div className="h-px" style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }} />
+      <div
+        className="h-px"
+        style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }}
+      />
 
       <div className="flex items-center gap-2">
         <Sun size={14} style={{ color: "var(--text-secondary)" }} />
@@ -705,26 +888,49 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-body w-5 flex-shrink-0" style={{ color: "var(--text-secondary)" }}>Glass</span>
-        <input type="range" min={0} max={40} value={glassBlur} onChange={(e) => setGlassBlur(Number(e.target.value))} className="flex-1 h-1 accent-os-accent cursor-pointer" aria-label="Glass blur" />
-        <span className="text-[10px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>{glassBlur}px</span>
+        <span
+          className="text-[10px] font-body w-5 flex-shrink-0"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          Glass
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={40}
+          value={glassBlur}
+          onChange={(e) => setGlassBlur(Number(e.target.value))}
+          className="flex-1 h-1 accent-os-accent cursor-pointer"
+          aria-label="Glass blur"
+        />
+        <span className="text-[10px] w-6 text-right" style={{ color: "var(--text-secondary)" }}>
+          {glassBlur}px
+        </span>
       </div>
 
       <div className="flex items-center gap-2">
         <Volume2 size={14} style={{ color: "var(--text-secondary)" }} />
         <input
-          type="range" min={0} max={100}
+          type="range"
+          min={0}
+          max={100}
           value={Math.round(volume * 100)}
           onChange={(e) => setVolume(Number(e.target.value) / 100)}
           className="flex-1 h-1 accent-os-accent cursor-pointer"
           aria-label="Volume"
         />
-        <span className="text-[10px] font-body w-6 text-right" style={{ color: "var(--text-secondary)" }}>
+        <span
+          className="text-[10px] font-body w-6 text-right"
+          style={{ color: "var(--text-secondary)" }}
+        >
           {Math.round(volume * 100)}
         </span>
       </div>
 
-      <div className="h-px" style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }} />
+      <div
+        className="h-px"
+        style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }}
+      />
 
       <div className="flex items-center gap-3 justify-center">
         {THEMES.map((t) => (
@@ -742,12 +948,18 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
-      <div className="h-px" style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }} />
+      <div
+        className="h-px"
+        style={{ background: "color-mix(in srgb, var(--accent-1) 10%, transparent)" }}
+      />
 
       <button
         onClick={handleOpenSettings}
         className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-[11px] font-body transition-all hover:opacity-80"
-        style={{ background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)", color: "var(--text-primary)" }}
+        style={{
+          background: "color-mix(in srgb, var(--bg-tertiary) 60%, transparent)",
+          color: "var(--text-primary)",
+        }}
       >
         <Settings size={13} /> Settings
       </button>

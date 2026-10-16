@@ -51,16 +51,18 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
     ];
   }, [widget, id, toggleWidgetPin, toggleWidgetCollapse, removeWidget]);
 
-  const openContextMenu = useCallback(
-    (e: React.PointerEvent | React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setContextMenu({ x: e.clientX, y: e.clientY });
-    },
-    [],
-  );
+  const openContextMenu = useCallback((e: React.PointerEvent | React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
-  const { onPointerDown: lpDown, onPointerMove: lpMove, onPointerUp: lpUp, onContextMenu: lpContext } = useLongPress({ onLongPress: openContextMenu });
+  const {
+    onPointerDown: lpDown,
+    onPointerMove: lpMove,
+    onPointerUp: lpUp,
+    onContextMenu: lpContext,
+  } = useLongPress({ onLongPress: openContextMenu });
 
   const resolveCollisions = useCallback(
     (x: number, y: number, widgetW: number, widgetH: number) => {
@@ -79,10 +81,7 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
         const oh = 100;
 
         const overlaps =
-          finalX < ox + ow &&
-          finalX + widgetW > ox &&
-          finalY < oy + oh &&
-          finalY + widgetH > oy;
+          finalX < ox + ow && finalX + widgetW > ox && finalY < oy + oh && finalY + widgetH > oy;
 
         if (overlaps) {
           const pushRight = ox + ow - finalX;
@@ -166,12 +165,9 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
     [lpMove],
   );
 
-  const mergedHeaderUp = useCallback(
-    (e: React.PointerEvent) => {
-      lpUp(e);
-    },
-    [lpUp],
-  );
+  const mergedHeaderUp = useCallback(() => {
+    lpUp();
+  }, [lpUp]);
 
   if (!widget) return null;
 
@@ -283,7 +279,10 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
             title={widget.isPinned ? "Unpin" : "Pin to top"}
           >
             {widget.isPinned ? (
-              <Pin size={10} style={{ color: "var(--accent-1)", filter: "drop-shadow(0 0 4px var(--accent-1))" }} />
+              <Pin
+                size={10}
+                style={{ color: "var(--accent-1)", filter: "drop-shadow(0 0 4px var(--accent-1))" }}
+              />
             ) : (
               <PinOff size={10} style={{ color: "var(--text-secondary)" }} />
             )}

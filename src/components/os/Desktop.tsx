@@ -264,7 +264,7 @@ export function Desktop() {
 
         {/* Mobile content zone: physically bounded between status bar and taskbar */}
         <div
-          className="absolute overflow-hidden"
+          className="absolute overflow-hidden pointer-events-none"
           style={{ top: 32, bottom: 52, left: 0, right: 0 }}
         >
           <AnimatePresence>
@@ -390,7 +390,10 @@ function DesktopIconMobile({
 
   return (
     <button
-      onClick={onDoubleClick}
+      onClick={() => {
+        if (longPress.shouldSuppressClick()) return;
+        onDoubleClick();
+      }}
       onPointerDown={longPress.onPointerDown}
       onPointerMove={longPress.onPointerMove}
       onPointerUp={longPress.onPointerUp}

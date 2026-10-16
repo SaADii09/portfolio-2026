@@ -65,16 +65,18 @@ export function Window({ id, children }: WindowProps) {
     ];
   }, [win, id, focusWindow, minimizeWindow, maximizeWindow, restoreWindow, closeWindow]);
 
-  const openContextMenu = useCallback(
-    (e: React.PointerEvent | React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setContextMenu({ x: e.clientX, y: e.clientY });
-    },
-    [],
-  );
+  const openContextMenu = useCallback((e: React.PointerEvent | React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
-  const { onPointerDown: lpDown, onPointerMove: lpMove, onPointerUp: lpUp, onContextMenu: lpContext } = useLongPress({ onLongPress: openContextMenu });
+  const {
+    onPointerDown: lpDown,
+    onPointerMove: lpMove,
+    onPointerUp: lpUp,
+    onContextMenu: lpContext,
+  } = useLongPress({ onLongPress: openContextMenu });
 
   const handleHeaderDown = useCallback(
     (e: React.PointerEvent) => {
@@ -225,12 +227,9 @@ export function Window({ id, children }: WindowProps) {
     [lpMove],
   );
 
-  const mergedHeaderUp = useCallback(
-    (e: React.PointerEvent) => {
-      lpUp(e);
-    },
-    [lpUp],
-  );
+  const mergedHeaderUp = useCallback(() => {
+    lpUp();
+  }, [lpUp]);
 
   if (!win) return null;
 
@@ -285,11 +284,7 @@ export function Window({ id, children }: WindowProps) {
   const windowStyle = (x: number, y: number, w: number, h: number, maximized: boolean) => ({
     transform: maximized ? "translate(0, 0)" : `translate(${x}px, ${y}px)`,
     width: maximized ? "100%" : w,
-    height: maximized
-      ? isMobile
-        ? "calc(100vh - 32px - 52px)"
-        : "calc(100vh - 36px - 76px)"
-      : h,
+    height: maximized ? (isMobile ? "calc(100vh - 32px - 52px)" : "calc(100vh - 36px - 76px)") : h,
     zIndex: win.zIndex,
     borderRadius: maximized ? 0 : "var(--radius)",
     boxShadow: isActive ? "var(--shadow-window-active)" : "var(--shadow-window)",
@@ -319,7 +314,7 @@ export function Window({ id, children }: WindowProps) {
       <div
         ref={windowElRef}
         onPointerDown={() => !isActive && focusWindow(id)}
-        className={`absolute glass overflow-hidden flex flex-col os-window-enter ${isActive ? "glass-border-active" : "glass-border"}`}
+        className={`absolute glass overflow-hidden flex flex-col os-window-enter pointer-events-auto ${isActive ? "glass-border-active" : "glass-border"}`}
         style={windowStyle(mobileX, mobileY, mobileW, mobileH, win.isMaximized)}
       >
         <div

@@ -153,11 +153,14 @@ function MobileTaskbarButton({
   onLongPress: (e: React.PointerEvent) => void;
 }) {
   const longPress = useLongPress({ onLongPress });
-  const Icon = w.component ? APP_ICONS[w.component] ?? Monitor : Monitor;
+  const Icon = w.component ? (APP_ICONS[w.component] ?? Monitor) : Monitor;
 
   return (
     <button
-      onClick={onClick}
+      onClick={() => {
+        if (longPress.shouldSuppressClick()) return;
+        onClick();
+      }}
       onPointerDown={longPress.onPointerDown}
       onPointerMove={longPress.onPointerMove}
       onPointerUp={longPress.onPointerUp}

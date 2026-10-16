@@ -45,8 +45,7 @@ export function useLongPress({ onLongPress }: LongPressOptions) {
     [clear],
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- event accepted for call-site compatibility
-  const onPointerUp = useCallback((e?: React.PointerEvent) => {
+  const onPointerUp = useCallback(() => {
     clear();
   }, [clear]);
 
@@ -60,5 +59,23 @@ export function useLongPress({ onLongPress }: LongPressOptions) {
     [onLongPress],
   );
 
-  return { onPointerDown, onPointerMove, onPointerUp, onContextMenu };
+  /**
+   * Call from onClick: returns true once when a long-press just fired,
+   * so the follow-up synthetic click can be swallowed.
+   */
+  const shouldSuppressClick = useCallback(() => {
+    if (triggered.current) {
+      triggered.current = false;
+      return true;
+    }
+    return false;
+  }, []);
+
+  return {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onContextMenu,
+    shouldSuppressClick,
+  };
 }
