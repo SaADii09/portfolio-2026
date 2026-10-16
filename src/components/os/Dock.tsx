@@ -3,29 +3,10 @@
 import { useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/store";
-import {
-  Monitor,
-  Settings,
-  User,
-  FolderKanban,
-  FileText,
-  Terminal,
-  Mail,
-  Maximize2,
-  Minimize2,
-  X,
-  Target,
-} from "lucide-react";
+import { Maximize2, Minimize2, Monitor, X, Target } from "lucide-react";
+import type { AppId } from "@/lib/apps";
+import { APP_ICONS } from "@/components/os/appIcons";
 import { ContextMenu } from "./ContextMenu";
-
-const APP_ICONS: Record<string, typeof Monitor> = {
-  about: User,
-  projects: FolderKanban,
-  "control-panel": Settings,
-  resume: FileText,
-  terminal: Terminal,
-  contact: Mail,
-};
 
 export function Dock() {
   const windows = useStore((s) => s.windows);
@@ -153,7 +134,7 @@ function DockIcon({
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const Icon = w.component ? (APP_ICONS[w.component] ?? Monitor) : Monitor;
+  const Icon = w.component ? (APP_ICONS[w.component as AppId] ?? Monitor) : Monitor;
 
   return (
     <div className="relative flex flex-col items-center">

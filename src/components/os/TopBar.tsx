@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { openApp } from "@/lib/os-actions";
 import type { ThemeName } from "@/types/theme";
 import {
   Grid3X3,
@@ -425,8 +426,6 @@ function DesktopControlContent({ onClose }: { onClose: () => void }) {
   const togglePlay = useStore((s) => s.togglePlay);
   const nextTrack = useStore((s) => s.nextTrack);
   const prevTrack = useStore((s) => s.prevTrack);
-  const openWindow = useStore((s) => s.openWindow);
-  const windows = useStore((s) => s.windows);
   const glassBlur = useStore((s) => s.glassBlur);
   const glassSaturate = useStore((s) => s.glassSaturate);
   const glassOpacity = useStore((s) => s.glassOpacity);
@@ -435,13 +434,7 @@ function DesktopControlContent({ onClose }: { onClose: () => void }) {
   const setGlassOpacity = useStore((s) => s.setGlassOpacity);
 
   const handleOpenSettings = () => {
-    const existing = windows.find((w) => w.component === "control-panel");
-    if (existing) {
-      if (existing.isMinimized) useStore.getState().restoreWindow(existing.id);
-      useStore.getState().focusWindow(existing.id);
-    } else {
-      openWindow({ title: "Control Panel", type: "app", component: "control-panel" });
-    }
+    openApp("control-panel");
     onClose();
   };
 
@@ -832,19 +825,11 @@ function MobileControlContent({ onClose }: { onClose: () => void }) {
   const setTheme = useStore((s) => s.setTheme);
   const volume = useStore((s) => s.volume);
   const setVolume = useStore((s) => s.setVolume);
-  const openWindow = useStore((s) => s.openWindow);
-  const windows = useStore((s) => s.windows);
   const glassBlur = useStore((s) => s.glassBlur);
   const setGlassBlur = useStore((s) => s.setGlassBlur);
 
   const handleOpenSettings = () => {
-    const existing = windows.find((w) => w.component === "control-panel");
-    if (existing) {
-      if (existing.isMinimized) useStore.getState().restoreWindow(existing.id);
-      useStore.getState().focusWindow(existing.id);
-    } else {
-      openWindow({ title: "Control Panel", type: "app", component: "control-panel" });
-    }
+    openApp("control-panel");
     onClose();
   };
 
