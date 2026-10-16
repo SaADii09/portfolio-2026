@@ -1,4 +1,5 @@
-export type ShortcutId = "escape" | "palette" | "snap-left" | "snap-right" | "maximize" | "restore";
+export type ShortcutId =
+  "escape" | "palette" | "close-window" | "snap-left" | "snap-right" | "maximize" | "restore";
 
 const EDITABLE_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
@@ -43,9 +44,38 @@ function modifierCount(e: ShortcutEvent): number {
   return Number(e.ctrlKey) + Number(e.metaKey) + Number(e.shiftKey) + Number(e.altKey);
 }
 
-/** `Mod+K` (Ctrl or Meta, no Alt/Shift) toggles the palette and fires even while typing. */
-function isPaletteCombo(e: ShortcutEvent): boolean {
-  return modifierCount(e) === 1 && (e.ctrlKey || e.metaKey);
+/**
+ * Ctrl or Meta held, with neither Alt nor Shift.
+ *
+ * Ctrl+Meta together still counts as one `Mod` (it used to be rejected by an
+ * `exactly one modifier` check); every other case is unchanged.
+ */
+function isModCombo(e: ShortcutEvent): boolean {
+  if (e.altKey || e.shiftKey) return false;
+  return e.ctrlKey || e.metaKey;
+}
+
+/**
+ * `Mod+K` toggles the palette; `Mod+W` closes the focused window.
+ *
+ * Chromium and Firefox reserve Ctrl+W/Cmd+W for closing the tab, so the browser
+ * may never deliver the event to the page. The binding is still implemented
+ * properly for surfaces that do receive it (installed PWAs, app windows).
+ */
+const MOD_KEY_SHORTCUTS = new Map<string, ShortcutId>([
+  ["k", "palette"],
+  ["w", "close-window"],
+]);
+
+/** The palette fires even while typing; every other `Mod+X` yields to text entry. */
+function yieldsToTyping(id: ShortcutId, target: EventTarget | null): boolean {
+  return id !== "palette" && isEditableElement(target);
+}
+
+function matchModKey(key: string, e: ShortcutEvent): ShortcutId | null {
+  const id = MOD_KEY_SHORTCUTS.get(key);
+  if (!id || !isModCombo(e)) return null;
+  return yieldsToTyping(id, e.target) ? null : id;
 }
 
 /** Alt held alone, with no other modifier. */
@@ -61,8 +91,7 @@ function matchAltArrow(key: string, e: ShortcutEvent): ShortcutId | null {
 }
 
 function matchNonEscape(key: string, e: ShortcutEvent): ShortcutId | null {
-  if (key === "k" && isPaletteCombo(e)) return "palette";
-  return matchAltArrow(key, e);
+  return matchModKey(key, e) ?? matchAltArrow(key, e);
 }
 
 /**
@@ -70,7 +99,8 @@ function matchNonEscape(key: string, e: ShortcutEvent): ShortcutId | null {
  *
  * - `Escape` is always claimed (owning surfaces preventDefault first; the
  *   global layer checks `defaultPrevented` on the next tick).
- * - `Mod+K` toggles the command palette.
+ * - `Mod+K` toggles the command palette (fires even while typing).
+ * - `Mod+W` closes the focused window (yields to text entry).
  * - `Alt+Arrow` snaps/maximizes/restores the active window.
  */
 export function matchShortcut(e: ShortcutEvent): ShortcutId | null {

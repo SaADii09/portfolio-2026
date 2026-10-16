@@ -45,7 +45,23 @@ describe("matchShortcut", () => {
     ],
     ["Ctrl+Shift+K is not a shortcut", keydown("k", { ctrlKey: true, shiftKey: true }), null],
     ["Ctrl+Alt+K is not a shortcut", keydown("k", { ctrlKey: true, altKey: true }), null],
+    [
+      "Ctrl+Meta+K still opens the palette (both modifiers held)",
+      keydown("k", { ctrlKey: true, metaKey: true }),
+      "palette",
+    ],
     ["plain K is not a shortcut", keydown("k"), null],
+    ["Ctrl+W closes the focused window", keydown("w", { ctrlKey: true }), "close-window"],
+    ["Meta+W closes the focused window", keydown("W", { metaKey: true }), "close-window"],
+    [
+      "Ctrl+Meta+W closes the focused window (both modifiers held)",
+      keydown("w", { ctrlKey: true, metaKey: true }),
+      "close-window",
+    ],
+    ["Ctrl+Shift+W is not a shortcut", keydown("w", { ctrlKey: true, shiftKey: true }), null],
+    ["Ctrl+Alt+W is not a shortcut", keydown("w", { ctrlKey: true, altKey: true }), null],
+    ["Alt+W is not a shortcut", keydown("w", { altKey: true }), null],
+    ["plain W is not a shortcut", keydown("w"), null],
     ["Alt+ArrowLeft snaps left", keydown("ArrowLeft", { altKey: true }), "snap-left"],
     ["Alt+ArrowRight snaps right", keydown("ArrowRight", { altKey: true }), "snap-right"],
     ["Alt+ArrowUp maximizes", keydown("ArrowUp", { altKey: true }), "maximize"],
@@ -96,6 +112,22 @@ describe("matchShortcut", () => {
 
   it("suppresses Alt+arrows inside a contenteditable", () => {
     expect(matchShortcut(keydown("ArrowDown", { altKey: true }, contentEditableDiv()))).toBeNull();
+  });
+
+  it("suppresses Ctrl+W while typing in an input", () => {
+    expect(
+      matchShortcut(keydown("w", { ctrlKey: true }, document.createElement("input"))),
+    ).toBeNull();
+  });
+
+  it("suppresses Ctrl+W while typing in a textarea", () => {
+    expect(
+      matchShortcut(keydown("w", { ctrlKey: true }, document.createElement("textarea"))),
+    ).toBeNull();
+  });
+
+  it("suppresses Cmd+W inside a contenteditable", () => {
+    expect(matchShortcut(keydown("w", { metaKey: true }, contentEditableDiv()))).toBeNull();
   });
 });
 

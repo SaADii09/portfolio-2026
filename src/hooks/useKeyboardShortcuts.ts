@@ -57,6 +57,8 @@ function snapWindow(store: StoreState, active: WindowState, side: "left" | "righ
 type WindowShortcutHandler = (store: StoreState, active: WindowState) => void;
 
 const WINDOW_SHORTCUT_HANDLERS: Partial<Record<ShortcutId, WindowShortcutHandler>> = {
+  // Mirrors dismissOnEscape: close the active window, no-op when none is focused.
+  "close-window": (store, active) => store.closeWindow(active.id),
   maximize: (store, active) => store.maximizeWindow(active.id),
   restore: (store, active) => {
     if (active.isMaximized) store.restoreWindow(active.id);

@@ -1,9 +1,32 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { gotoApp } from "./utils";
 import { MIN_WINDOW_WIDTH } from "@/lib/constants";
 import { getViewportBounds } from "@/lib/boundaries";
 
 const TOLERANCE = 8;
+
+/**
+ * `page.keyboard.press("Control+w")` cannot be used: Chromium/Firefox act on
+ * Ctrl+W themselves (Playwright's driver would close the page). Dispatch a
+ * cancelable synthetic keydown on the in-page element that currently has focus
+ * (falling back to <body>) instead. It bubbles to the `window` listener in
+ * useKeyboardShortcuts, just like a real keystroke, and we return whether the OS
+ * layer claimed it via preventDefault().
+ */
+async function dispatchCtrlW(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const target =
+      document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+    const event = new KeyboardEvent("keydown", {
+      key: "w",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+}
 
 test.describe("Global keyboard shortcuts", () => {
   test.beforeEach(async ({ page }) => {
@@ -109,5 +132,43 @@ test.describe("Global keyboard shortcuts", () => {
     expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
     expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(1);
     expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(1);
+  });
+
+  test("Ctrl+W closes the focused window", async ({ page }) => {
+    await page.getByTitle("Open About Me").dblclick();
+    const win = page.locator(".os-window-enter");
+    await expect(win).toBeVisible();
+
+    expect(await dispatchCtrlW(page)).toBe(true);
+
+    await expect(win).not.toBeVisible();
+    // The synthetic keystroke was handled in-page: the app is still alive.
+    await expect(page.getByTitle("Open About Me")).toBeVisible();
+  });
+
+  test("Ctrl+W with no focused window closes nothing", async ({ page }) => {
+    await expect(page.locator(".os-window-enter")).toHaveCount(0);
+
+    expect(await dispatchCtrlW(page)).toBe(true);
+
+    await expect(page.locator(".os-window-enter")).toHaveCount(0);
+    await expect(page.getByTitle("Open About Me")).toBeVisible();
+  });
+
+  test("Ctrl+W while the terminal input is focused leaves the window open", async ({ page }) => {
+    await page.getByTitle("Open Terminal").dblclick();
+    const win = page.locator(".os-window-enter");
+    await expect(win).toBeVisible();
+
+    const input = page.getByPlaceholder("Type a command...");
+    await input.click();
+    await expect(input).toBeFocused();
+
+    // Dispatched on the focused input, so target is editable and the shortcut
+    // bails out (no preventDefault) — the terminal keeps its own behaviour.
+    expect(await dispatchCtrlW(page)).toBe(false);
+
+    await expect(win).toBeVisible();
+    await expect(input).toBeFocused();
   });
 });
