@@ -25,6 +25,19 @@ export interface MusicSlice {
   setVolume: (v: number) => void;
 }
 
+/**
+ * Audio output is best-effort: a missing, blocked, or unroutable AudioContext
+ * (autoplay policy, headless browsers) must never prevent the OS store from
+ * updating. Swallow playback errors so track/volume state always changes.
+ */
+function tryAudio(fn: () => void): void {
+  try {
+    fn();
+  } catch {
+    // Playback is optional; ignore so callers still update their state.
+  }
+}
+
 export const createMusicSlice: StateCreator<MusicSlice> = (set, get) => ({
   isPlaying: false,
   currentTrack: DEFAULT_TRACKS[0],
@@ -32,39 +45,35 @@ export const createMusicSlice: StateCreator<MusicSlice> = (set, get) => ({
   queue: DEFAULT_TRACKS,
 
   togglePlay: () => {
-    const engine = getSynthEngine();
     const { isPlaying, currentTrack } = get();
     if (isPlaying) {
-      engine.pause();
+      tryAudio(() => getSynthEngine().pause());
       set({ isPlaying: false });
     } else {
-      engine.play(currentTrack.id);
+      tryAudio(() => getSynthEngine().play(currentTrack.id));
       set({ isPlaying: true });
     }
   },
 
   nextTrack: () => {
-    const engine = getSynthEngine();
     const { queue, currentTrack } = get();
     const idx = queue.findIndex((t) => t.id === currentTrack.id);
     const next = queue[(idx + 1) % queue.length];
-    engine.play(next.id);
+    tryAudio(() => getSynthEngine().play(next.id));
     set({ currentTrack: next, isPlaying: true });
   },
 
   prevTrack: () => {
-    const engine = getSynthEngine();
     const { queue, currentTrack } = get();
     const idx = queue.findIndex((t) => t.id === currentTrack.id);
     const prev = queue[(idx - 1 + queue.length) % queue.length];
-    engine.play(prev.id);
+    tryAudio(() => getSynthEngine().play(prev.id));
     set({ currentTrack: prev, isPlaying: true });
   },
 
   setVolume: (v) => {
-    const engine = getSynthEngine();
     const clamped = Math.max(0, Math.min(1, v));
-    engine.setVolume(clamped);
+    tryAudio(() => getSynthEngine().setVolume(clamped));
     set({ volume: clamped });
   },
 });

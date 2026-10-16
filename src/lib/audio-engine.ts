@@ -42,6 +42,20 @@ const TRACK_PRESETS: Record<string, TrackPreset> = {
   },
 };
 
+type AudioContextCtor = typeof AudioContext;
+
+/**
+ * Resolve the Web Audio constructor, tolerating engines that expose it under
+ * an experimental name (old Safari) or not at all (headless WebKit, where
+ * referencing `AudioContext` throws a ReferenceError). Returns `null` when
+ * Web Audio is unavailable so callers can degrade to a silent no-op.
+ */
+function getAudioContextCtor(): AudioContextCtor | null {
+  if (typeof window === "undefined") return null;
+  const win = window as typeof globalThis & { webkitAudioContext?: AudioContextCtor };
+  return win.AudioContext ?? win.webkitAudioContext ?? null;
+}
+
 export class SynthEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -57,7 +71,9 @@ export class SynthEngine {
 
   private init() {
     if (this.ctx) return;
-    this.ctx = new AudioContext();
+    const Ctor = getAudioContextCtor();
+    if (!Ctor) return; // Web Audio unavailable — stay silent instead of throwing
+    this.ctx = new Ctor();
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = this._volume;
     this.filter = this.ctx.createBiquadFilter();
@@ -110,7 +126,9 @@ export class SynthEngine {
 
   play(trackId: string) {
     this.init();
-    if (this.ctx?.state === "suspended") this.ctx.resume();
+    if (this.ctx?.state === "suspended") {
+      void this.ctx.resume().catch(() => {});
+    }
     this._currentTrackId = trackId;
     const preset = TRACK_PRESETS[trackId] ?? TRACK_PRESETS.t1;
     if (this.filter) {
