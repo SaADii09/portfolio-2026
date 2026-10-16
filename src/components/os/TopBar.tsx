@@ -99,17 +99,17 @@ function DesktopTopBar() {
 
   const handleTimeMouseEnter = useCallback(() => {
     if (calendarOpen) return;
-    leaveTimeoutRef.current && clearTimeout(leaveTimeoutRef.current);
+    if (leaveTimeoutRef.current) clearTimeout(leaveTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => setHoverOpen(true), 400);
   }, [calendarOpen]);
 
   const handleTimeMouseLeave = useCallback(() => {
-    hoverTimeoutRef.current && clearTimeout(hoverTimeoutRef.current);
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     leaveTimeoutRef.current = setTimeout(() => setHoverOpen(false), 300);
   }, []);
 
   const handleTooltipMouseEnter = useCallback(() => {
-    leaveTimeoutRef.current && clearTimeout(leaveTimeoutRef.current);
+    if (leaveTimeoutRef.current) clearTimeout(leaveTimeoutRef.current);
   }, []);
 
   const handleTooltipMouseLeave = useCallback(() => {
@@ -146,8 +146,8 @@ function DesktopTopBar() {
 
   useEffect(() => {
     return () => {
-      hoverTimeoutRef.current && clearTimeout(hoverTimeoutRef.current);
-      leaveTimeoutRef.current && clearTimeout(leaveTimeoutRef.current);
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      if (leaveTimeoutRef.current) clearTimeout(leaveTimeoutRef.current);
     };
   }, []);
 
