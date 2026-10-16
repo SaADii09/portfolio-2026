@@ -2,64 +2,26 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "@/store";
-import type { ThemeName } from "@/types/theme";
-import { PERSONAL_INFO, PROJECTS, EXPERIENCE, EDUCATION } from "@/lib/portfolio-data";
-
-const BANNER = `
-   ___          _     ____   ___  ____  
-  / _ \\___  ___| |_  / ___| / _ \\/ ___|
- / /_\\/ _ \\/ __| __| \\___ \\| | | \\___ \\ 
-/ /_\\\\  __/\\__ \\ |_  ___) | |_| |___) |
-\\____/\\___||___/\\__| |____/ \\___/|____/ 
-                                        
-Welcome to DevOS Terminal v1.0
-Type 'help' for available commands.
-`;
-
-const HELP = `Available commands:
-  help       - Show this help message
-  whoami     - Display user info
-  about      - About the developer
-  projects   - List projects
-  resume     - Resume summary
-  contact    - Contact information
-  theme      - Show current theme
-  theme <t>  - Switch theme (retro, neon, editorial)
-  date       - Show current date and time
-  echo <t>   - Echo text
-  clear      - Clear terminal
-  neofetch   - System info
-  banner     - Show welcome banner
-  sudo       - 🚫 Nice try
-  ls         - List directory contents
-`;
-
-const ABOUT_TEXT = PERSONAL_INFO.summary.paragraphs.slice(0, 2).join("\n");
-
-const PROJECTS_TEXT = PROJECTS.map((p, i) => `${i + 1}. ${p.title} — ${p.description}`).join("\n");
-
-const RESUME_TEXT = [
-  PERSONAL_INFO.name,
-  PERSONAL_INFO.title,
-  "",
-  "Experience:",
-  ...EXPERIENCE.map((e) => `- ${e.role} @ ${e.company} (${e.period})`),
-  "",
-  "Education:",
-  ...EDUCATION.map((e) => `- ${e.degree} ${e.field}, ${e.institution} (${e.graduationDate})`),
-].join("\n");
-
-const CONTACT_TEXT = [
-  `Email: ${PERSONAL_INFO.contact.email}`,
-  `LinkedIn: ${PERSONAL_INFO.contact.links.linkedin}`,
-  `GitHub: ${PERSONAL_INFO.contact.links.github}`,
-].join("\n");
+import { openApp, musicControl, setThemeByName } from "@/lib/os-actions";
+import { executeCommand, BANNER, type TerminalContext } from "@/lib/terminal-commands";
 
 type Line = { content: string; isOutput: boolean };
 
+/** Fresh snapshot of the store + os-actions, injected into the pure executor. */
+function buildTerminalContext(): TerminalContext {
+  return {
+    theme: useStore.getState().theme,
+    openApp,
+    setThemeByName,
+    musicControl,
+    getMusicState: () => {
+      const s = useStore.getState();
+      return { title: s.currentTrack.title, artist: s.currentTrack.artist, isPlaying: s.isPlaying };
+    },
+  };
+}
+
 export function TerminalApp() {
-  const theme = useStore((s) => s.theme);
-  const setTheme = useStore((s) => s.setTheme);
   const [lines, setLines] = useState<Line[]>([{ content: BANNER, isOutput: true }]);
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>([]);
@@ -73,81 +35,18 @@ export function TerminalApp() {
     }
   }, [lines]);
 
-  const execute = useCallback(
-    (cmd: string) => {
-      const trimmed = cmd.trim();
-      const parts = trimmed.split(/\s+/);
-      const command = parts[0].toLowerCase();
-      const args = parts.slice(1);
+  const execute = useCallback((cmd: string) => {
+    const trimmed = cmd.trim();
+    setHistory((h) => [...h, trimmed]);
+    setHistIdx(-1);
 
-      setHistory((h) => [...h, trimmed]);
-      setHistIdx(-1);
-
-      const addOutput = (text: string) => {
-        setLines((l) => [...l, { content: text, isOutput: true }]);
-      };
-
-      switch (command) {
-        case "help":
-          addOutput(HELP);
-          break;
-        case "whoami":
-          addOutput(`${PERSONAL_INFO.name} — ${PERSONAL_INFO.title}`);
-          break;
-        case "about":
-          addOutput(ABOUT_TEXT);
-          break;
-        case "projects":
-          addOutput(PROJECTS_TEXT);
-          break;
-        case "resume":
-          addOutput(RESUME_TEXT);
-          break;
-        case "contact":
-          addOutput(CONTACT_TEXT);
-          break;
-        case "theme":
-          if (args.length === 0) {
-            addOutput(`Current theme: ${theme}`);
-          } else {
-            const t = args[0] as ThemeName;
-            if (["retro", "neon", "editorial"].includes(t)) {
-              setTheme(t);
-              addOutput(`Theme changed to ${t}`);
-            } else {
-              addOutput(`Unknown theme: ${t}. Try: retro, neon, editorial`);
-            }
-          }
-          break;
-        case "date":
-          addOutput(new Date().toString());
-          break;
-        case "echo":
-          addOutput(args.join(" "));
-          break;
-        case "clear":
-          setLines([]);
-          break;
-        case "neofetch":
-          addOutput(
-            `OS: DevOS v1.0\nKernel: Next.js 16\nShell: /bin/fake\nResolution: ${typeof window !== "undefined" ? `${window.innerWidth}x${window.innerHeight}` : "unknown"}\nTheme: ${theme}\nUptime: way too long`,
-          );
-          break;
-        case "banner":
-          addOutput(BANNER);
-          break;
-        case "sudo":
-          addOutput("⛔ Nice try. You don't have sudo access in a fake terminal.");
-          break;
-        case "ls":
-          addOutput("about  projects  resume  terminal  contact  control-panel");
-          break;
-        default:
-          if (trimmed) addOutput(`Command not found: ${command}. Type 'help'.`);
-      }
-    },
-    [theme, setTheme],
-  );
+    const result = executeCommand(trimmed, buildTerminalContext());
+    if (result.clear) {
+      setLines([]);
+    } else {
+      setLines((l) => [...l, ...result.lines.map((content) => ({ content, isOutput: true }))]);
+    }
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
