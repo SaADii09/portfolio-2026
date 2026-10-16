@@ -9,17 +9,27 @@ test.describe("Social & sharing metadata", () => {
   });
 
   test("serves robots.txt that points at the sitemap", async ({ page }) => {
+    await gotoApp(page);
+    const origin = new URL(page.url()).origin;
+
     const response = await page.request.get("/robots.txt");
 
     expect(response.status()).toBe(200);
-    expect(await response.text()).toContain("Sitemap");
+    const body = await response.text();
+    expect(body).toContain("Sitemap");
+    expect(body).toContain(`Sitemap: ${origin}/sitemap.xml`);
   });
 
   test("serves sitemap.xml with a loc entry", async ({ page }) => {
+    await gotoApp(page);
+    const origin = new URL(page.url()).origin;
+
     const response = await page.request.get("/sitemap.xml");
 
     expect(response.status()).toBe(200);
-    expect(await response.text()).toContain("<loc>");
+    const body = await response.text();
+    expect(body).toContain("<loc>");
+    expect(body).toContain(`<loc>${origin}`);
   });
 
   test("emits a generated OpenGraph image", async ({ page }) => {
