@@ -159,7 +159,12 @@ test.describe("Mobile drag behavior", () => {
     const winBefore = (await win.boundingBox())!;
     const header = (await win.locator(".os-drag-handle").boundingBox())!;
 
-    await dragHeader(page, header.x + 40, header.y + header.height / 2, -100, 80);
+    // Grab the header's horizontal centre so the leftward -100px drag stays
+    // inside the 390px viewport. Playwright's Firefox backend dispatches any
+    // interpolated step that lands outside the viewport as (0, -85) instead of
+    // the real point (verified on a blank page: no app code involved), which
+    // would feed the drag a bogus clientY and clamp y to the safe-zone top.
+    await dragHeader(page, header.x + header.width / 2, header.y + header.height / 2, -100, 80);
 
     const winAfter = (await win.boundingBox())!;
     // Vertical movement is exact (no render-time clamp in play).
