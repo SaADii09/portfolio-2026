@@ -4,6 +4,7 @@ import { createThemeSlice, ThemeSlice } from "@/store/themeSlice";
 import { createWidgetSlice, WidgetSlice } from "@/store/widgetSlice";
 import { createMusicSlice, MusicSlice } from "@/store/musicSlice";
 import { createUiSlice, UiSlice } from "@/store/uiSlice";
+import { useStore, persistPartialize } from "@/store";
 
 // jsdom has no Web Audio API — stub the synth engine so music slice logic is testable
 vi.mock("@/lib/audio-engine", () => ({
@@ -287,6 +288,42 @@ describe("musicSlice", () => {
     expect(store.volume).toBe(0);
     store.setVolume(0.5);
     expect(store.volume).toBe(0.5);
+  });
+});
+
+describe("persist partialize", () => {
+  it("writes music state under the music slice's own top-level keys", () => {
+    const state = useStore.getState();
+    const persisted = persistPartialize(state);
+
+    expect(Object.keys(persisted).sort()).toEqual([
+      "currentTrack",
+      "customTokens",
+      "glassBlur",
+      "glassOpacity",
+      "glassSaturate",
+      "theme",
+      "volume",
+      "widgets",
+      "windows",
+    ]);
+    expect(persisted.volume).toBe(state.volume);
+    expect(persisted.currentTrack).toBe(state.currentTrack);
+    // Regression: a synthetic `music` key rehydrated as a stray field, so volume
+    // and current track silently reset on every reload.
+    expect(persisted).not.toHaveProperty("music");
+  });
+
+  it("round-trips volume and current track through localStorage", () => {
+    localStorage.clear();
+    const track = { id: "t3", title: "Midnight Code", artist: "DevOS Beats" };
+
+    useStore.setState({ volume: 0.33, currentTrack: track });
+
+    const raw = JSON.parse(localStorage.getItem("devos-store") ?? "{}");
+    expect(raw.state.volume).toBe(0.33);
+    expect(raw.state.currentTrack).toEqual(track);
+    expect(raw.state.music).toBeUndefined();
   });
 });
 

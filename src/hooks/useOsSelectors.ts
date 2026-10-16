@@ -26,18 +26,33 @@ export function useGlassControls() {
   };
 }
 
+/** Blur-only slice for the mobile shade, which tunes nothing else. */
+export function useGlassBlurControl() {
+  const glassBlur = useStore((s) => s.glassBlur);
+  const setGlassBlur = useStore((s) => s.setGlassBlur);
+
+  return { glassBlur, setGlassBlur };
+}
+
 /**
- * Music player state and transport controls shared by the Music widget, the
- * Control Panel and the control-center dropdowns.
+ * Music transport + now-playing, without the volume slider: consumers that only
+ * render/control playback (Music widget, control centers) must not re-render on
+ * every volume-slider tick.
  */
-export function useMusicControls() {
+export function useMusicPlayback() {
   const isPlaying = useStore((s) => s.isPlaying);
   const currentTrack = useStore((s) => s.currentTrack);
-  const volume = useStore((s) => s.volume);
   const togglePlay = useStore((s) => s.togglePlay);
   const nextTrack = useStore((s) => s.nextTrack);
   const prevTrack = useStore((s) => s.prevTrack);
+
+  return { isPlaying, currentTrack, togglePlay, nextTrack, prevTrack };
+}
+
+/** Volume-only slice: volume changes must not re-render transport consumers. */
+export function useMusicVolume() {
+  const volume = useStore((s) => s.volume);
   const setVolume = useStore((s) => s.setVolume);
 
-  return { isPlaying, currentTrack, volume, togglePlay, nextTrack, prevTrack, setVolume };
+  return { volume, setVolume };
 }

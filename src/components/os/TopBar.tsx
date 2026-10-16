@@ -4,7 +4,12 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import { useGlassControls, useMusicControls } from "@/hooks/useOsSelectors";
+import {
+  useGlassControls,
+  useGlassBlurControl,
+  useMusicPlayback,
+  useMusicVolume,
+} from "@/hooks/useOsSelectors";
 import { openApp } from "@/lib/os-actions";
 import type { ThemeName } from "@/types/theme";
 import { GlassSlider } from "./GlassSlider";
@@ -437,8 +442,8 @@ function CalendarPanel() {
 function DesktopControlContent({ onClose }: { onClose: () => void }) {
   const theme = useStore((s) => s.theme);
   const setTheme = useStore((s) => s.setTheme);
-  const { volume, setVolume, isPlaying, currentTrack, togglePlay, nextTrack, prevTrack } =
-    useMusicControls();
+  const { volume, setVolume } = useMusicVolume();
+  const { isPlaying, currentTrack, togglePlay, nextTrack, prevTrack } = useMusicPlayback();
   const {
     glassBlur,
     glassSaturate,
@@ -802,8 +807,8 @@ function MobileTopBar() {
 function MobileControlContent({ onClose }: { onClose: () => void }) {
   const theme = useStore((s) => s.theme);
   const setTheme = useStore((s) => s.setTheme);
-  const { volume, setVolume } = useMusicControls();
-  const { glassBlur, setGlassBlur } = useGlassControls();
+  const { volume, setVolume } = useMusicVolume();
+  const { glassBlur, setGlassBlur } = useGlassBlurControl();
   const openPalette = useStore((s) => s.openPalette);
 
   const handleOpenSettings = () => {

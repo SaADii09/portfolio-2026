@@ -13,7 +13,13 @@ vi.mock("@/lib/audio-engine", () => ({
 }));
 
 import { useStore } from "@/store";
-import { openApp, toggleWidget, musicControl, setThemeByName } from "@/lib/os-actions";
+import {
+  openApp,
+  toggleWidget,
+  musicControl,
+  setThemeByName,
+  type MusicAction,
+} from "@/lib/os-actions";
 import { APP_DEFS, resolveAppId } from "@/lib/apps";
 
 describe("os-actions", () => {
@@ -110,6 +116,14 @@ describe("os-actions", () => {
       expect(useStore.getState().currentTrack.title).toBe("Pixel Rain");
       musicControl("prev");
       expect(useStore.getState().currentTrack.title).toBe("Neon Lights");
+    });
+
+    it("no-ops (instead of throwing) on an unknown action", () => {
+      const unknown: string = "sideways";
+      expect(() => musicControl(unknown as MusicAction)).not.toThrow();
+      const state = useStore.getState();
+      expect(state.isPlaying).toBe(false);
+      expect(state.currentTrack.title).toBe("Neon Lights");
     });
   });
 

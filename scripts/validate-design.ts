@@ -32,19 +32,14 @@ const violations: Violation[] = [];
 const SCAN_DIRS = ["src/app", "src/components", "src/hooks", "src/lib", "src/store"];
 const IGNORE_PATHS = ["node_modules", ".next", "public"];
 
-const ALLOWED_COLOR_FILES = new Set([
-  "globals.css",
-  "themes.ts",
-  "design-tokens.ts",
-  "tailwind.config.ts",
-  // OG image is not a themed surface (no CSS cascade) — documented exception
-  "opengraph-image.tsx",
-]);
-
 // ── Helpers ──────────────────────────────────────────
 
 function isIgnored(filePath: string): boolean {
   return IGNORE_PATHS.some((p) => filePath.includes(p));
+}
+
+function baseName(filePath: string): string {
+  return filePath.split("\\").pop() || filePath.split("/").pop() || "";
 }
 
 function walkDir(dir: string): string[] {
@@ -67,18 +62,20 @@ function walkDir(dir: string): string[] {
   return files;
 }
 
-function isAllowedColorFile(filePath: string): boolean {
-  return ALLOWED_COLOR_FILES.has(filePath.split("\\").pop() || filePath.split("/").pop() || "");
+/**
+ * Single source of truth for files exempt from the token rules: token modules
+ * (self-referential) plus documented dynamic surfaces such as the OG card, which
+ * is deliberately literal because it has no CSS cascade. The same list drives the
+ * colour and font checks so an entry can never drift out of sync.
+ */
+function isTokenExemptFile(filePath: string): boolean {
+  return DYNAMIC_COLOR_CONTEXTS.has(baseName(filePath));
 }
 
 // ── Checkers ─────────────────────────────────────────
 
 function checkHardcodedColors(content: string, filePath: string, lines: string[]): void {
-  if (
-    isAllowedColorFile(filePath) ||
-    DYNAMIC_COLOR_CONTEXTS.has(filePath.split("\\").pop() || filePath.split("/").pop() || "")
-  )
-    return;
+  if (isTokenExemptFile(filePath)) return;
 
   const colorRegex =
     /(?<!['"`]var\(--)(?<!['"`])(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b|rgba?\([^)]+\)|hsla?\([^)]+\))/gi;
@@ -239,7 +236,7 @@ function checkTailwindTokenUsage(content: string, filePath: string): void {
 }
 
 function checkFontUsage(content: string, filePath: string): void {
-  if (isAllowedColorFile(filePath)) return;
+  if (isTokenExemptFile(filePath)) return;
 
   const fontFamilyRegex = /fontFamily:\s*['"`][^'"`]+['"`]/g;
   for (const match of content.matchAll(fontFamilyRegex)) {

@@ -46,7 +46,7 @@ function addWidgetAtContentEdge(store: StoreState, type: WidgetType): void {
   store.addWidget(type, def?.title ?? type, vw - 220, topBar + 10 + store.widgets.length * 110);
 }
 
-type MusicAction = "play" | "pause" | "toggle" | "next" | "prev";
+export type MusicAction = "play" | "pause" | "toggle" | "next" | "prev";
 
 const MUSIC_HANDLERS: Record<MusicAction, (store: StoreState) => void> = {
   play: (store) => {
@@ -61,7 +61,10 @@ const MUSIC_HANDLERS: Record<MusicAction, (store: StoreState) => void> = {
 };
 
 export function musicControl(action: MusicAction): void {
-  MUSIC_HANDLERS[action](useStore.getState());
+  // Unknown actions (e.g. from a stale command table) are a silent no-op, never a
+  // crash — the store must stay usable no matter what callers pass in.
+  const handler: ((store: StoreState) => void) | undefined = MUSIC_HANDLERS[action];
+  handler?.(useStore.getState());
 }
 
 /** Switch theme by name; returns false (and changes nothing) on an unknown theme. */

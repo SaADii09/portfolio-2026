@@ -2,7 +2,7 @@
 
 import { useStore } from "@/store";
 import type { ThemeName } from "@/types/theme";
-import { useGlassControls, useMusicControls } from "@/hooks/useOsSelectors";
+import { useGlassControls, useMusicPlayback, useMusicVolume } from "@/hooks/useOsSelectors";
 import { GlassSlider } from "@/components/os/GlassSlider";
 import { Play, Pause, SkipBack, SkipForward, Volume2, RotateCcw } from "lucide-react";
 
@@ -60,8 +60,8 @@ export function ControlPanelApp() {
     resetGlass,
   } = useGlassControls();
 
-  const { isPlaying, currentTrack, volume, togglePlay, nextTrack, prevTrack, setVolume } =
-    useMusicControls();
+  const { volume, setVolume } = useMusicVolume();
+  const { isPlaying, currentTrack, togglePlay, nextTrack, prevTrack } = useMusicPlayback();
 
   return (
     <div className="flex flex-col gap-5 font-body text-sm">

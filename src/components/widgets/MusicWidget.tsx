@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useMusicControls } from "@/hooks/useOsSelectors";
+import { useMusicPlayback } from "@/hooks/useOsSelectors";
 import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
 
 const BAR_COUNT = 12;
@@ -14,7 +14,7 @@ function buildBarConfig() {
 }
 
 export function MusicWidget() {
-  const { isPlaying, currentTrack, togglePlay, nextTrack, prevTrack } = useMusicControls();
+  const { isPlaying, currentTrack, togglePlay, nextTrack, prevTrack } = useMusicPlayback();
   const bars = useMemo(() => buildBarConfig(), []);
 
   return (

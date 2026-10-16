@@ -73,15 +73,27 @@ export class SynthEngine {
     if (this.ctx) return;
     const Ctor = getAudioContextCtor();
     if (!Ctor) return; // Web Audio unavailable — stay silent instead of throwing
-    this.ctx = new Ctor();
-    this.masterGain = this.ctx.createGain();
+    const ctx = new Ctor();
+    this.ctx = ctx;
+    try {
+      this.buildGraph(ctx);
+    } catch {
+      // A half-built graph would early-return here forever (ctx non-null, filter
+      // null ⇒ permanently silent while `_isPlaying` claims otherwise). Drop it so
+      // a later init() can retry, and stay silent for now.
+      this.resetGraph();
+    }
+  }
+
+  private buildGraph(ctx: AudioContext) {
+    this.masterGain = ctx.createGain();
     this.masterGain.gain.value = this._volume;
-    this.filter = this.ctx.createBiquadFilter();
+    this.filter = ctx.createBiquadFilter();
     this.filter.type = "lowpass";
     this.filter.frequency.value = 1000;
     this.filter.Q.value = 5;
-    this.lfo = this.ctx.createOscillator();
-    this.lfoGain = this.ctx.createGain();
+    this.lfo = ctx.createOscillator();
+    this.lfoGain = ctx.createGain();
     this.lfoGain.gain.value = 200;
     this.lfo.type = "sine";
     this.lfo.frequency.value = 2;
@@ -89,7 +101,23 @@ export class SynthEngine {
     this.lfoGain.connect(this.filter.frequency);
     this.lfo.start();
     this.filter.connect(this.masterGain);
-    this.masterGain.connect(this.ctx.destination);
+    this.masterGain.connect(ctx.destination);
+  }
+
+  /** Tear down a partial/failed graph so the next `init()` starts clean. */
+  private resetGraph() {
+    const ctx = this.ctx;
+    this.ctx = null;
+    this.masterGain = null;
+    this.filter = null;
+    this.lfo = null;
+    this.lfoGain = null;
+    this.oscillators = [];
+    try {
+      void ctx?.close();
+    } catch {
+      // Closing a broken context is best-effort.
+    }
   }
 
   private stopOscillators() {
