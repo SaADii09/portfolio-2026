@@ -21,4 +21,28 @@ test.describe("Social & sharing metadata", () => {
     expect(response.status()).toBe(200);
     expect(await response.text()).toContain("<loc>");
   });
+
+  test("emits a generated OpenGraph image", async ({ page }) => {
+    await gotoApp(page);
+
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+      "content",
+      /opengraph-image/,
+    );
+    await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute(
+      "content",
+      /twitter-image/,
+    );
+  });
+
+  test("serves the OpenGraph image as a PNG", async ({ page }) => {
+    await gotoApp(page);
+
+    const href = await page.locator('meta[property="og:image"]').getAttribute("content");
+    expect(href).toBeTruthy();
+    const response = await page.request.get(href ?? "");
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain("image/png");
+  });
 });
