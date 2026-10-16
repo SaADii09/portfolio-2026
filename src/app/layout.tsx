@@ -1,7 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Press_Start_2P, VT323, Orbitron, Rajdhani, IBM_Plex_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { siteUrl } from "@/lib/site";
 import "./globals.css";
+
+const siteTitle = "DevOS Portfolio — Saad Ahmad";
+const siteDescription =
+  "Interactive Web OS portfolio showcasing full-stack and AI engineering work.";
 
 const pressStart2p = Press_Start_2P({
   variable: "--font-press-start-2p",
@@ -40,8 +45,21 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "DevOS Portfolio — Saad Ahmad",
-  description: "Interactive Web OS portfolio showcasing full-stack and AI engineering work.",
+  metadataBase: new URL(siteUrl),
+  title: siteTitle,
+  description: siteDescription,
+  openGraph: {
+    type: "website",
+    siteName: "DevOS · Saad Ahmad",
+    title: siteTitle,
+    description: siteDescription,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteTitle,
+    description: siteDescription,
+  },
 };
 
 export default function RootLayout({
