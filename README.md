@@ -7,13 +7,20 @@ Interactive Web OS portfolio — a fully functional desktop environment in the b
 ## Features
 
 - **3 switchable themes** — Retro 2D, Neon City, Classic Editorial with live CSS variable swapping
-- **Window management** — drag, resize (all edges/corners), minimize, maximize, restore, close
-- **6 functional apps** — About, Projects (iframe previews), Terminal, Contact, Resume, Control Panel
+- **Window management** — drag, 8-edge resize, minimize, maximize, restore, close, snap-to-half, cascading placement, z-index focus
+- **Command palette** — `Ctrl/Cmd+K` fuzzy-searches every app, widget, and command with arrow-key navigation
+- **Global shortcuts** — `Esc` ownership chain, `Alt+Arrow` snap-to-half, `Ctrl/Cmd+W` closes the focused window
+- **6 functional apps** — About, Projects (sandboxed iframe previews), Terminal, Contact, Resume, Control Panel
 - **4 live widgets** — CPU monitor, Weather (Open-Meteo API), Music player (Web Audio synth), Sticky notes
-- **AI chat assistant** — Anthropic streaming API with RAG from local knowledge base
-- **Live wallpapers** — Canvas-rendered per theme (retro embers, neon grid, editorial curves)
-- **Full mobile support** — floating windows with drag/resize, bottom tab bar, chat bottom sheet, 44px touch targets
-- **Persistence** — theme, windows, widgets, music state saved to localStorage
+- **Terminal ↔ OS bridge** — `theme`, `open <app>`, `music <action>`, and `apps` drive real OS state
+- **AI chat assistant** — Anthropic streaming API with BM25 RAG over a local knowledge base
+- **Live wallpapers** — canvas-rendered per theme (retro embers, neon grid, editorial curves) with mouse-reactive particles
+- **Dynamic glassmorphism** — variable-driven blur/saturation/spotlight with per-theme presets and live glass controls
+- **Desktop chrome** — glass dock (open windows only), top bar with clock/calendar and control centre, right-click and long-press context menus
+- **Full mobile support** — pull-down control shade, floating windows with corner grips, bottom tab bar, 44px touch targets
+- **Persistence** — theme, window, widget, music, and glass settings saved to localStorage
+- **SEO/social** — metadata, generated OpenGraph/Twitter images, sitemap, robots.txt, canonical URL
+- **Accessibility** — keyboard-navigable surfaces, focus-trapped modal, `prefers-reduced-motion` honoured throughout
 
 ## Tech Stack
 
@@ -43,24 +50,33 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### Environment Variables
 
-Create a `.env.local` for the AI chat:
+Create a `.env.local` (see `.env.example`):
 
 ```
+# Required for the AI chat panel — optional, chat degrades gracefully without it
 ANTHROPIC_API_KEY=sk-ant-...
+
+# Canonical site origin used for metadata, OpenGraph, sitemap, robots.txt
+NEXT_PUBLIC_SITE_URL=https://saadahmad.dev
 ```
 
-The app works without this — chat shows an error message if the key is missing.
+`NEXT_PUBLIC_SITE_URL` falls back to `http://localhost:3000`, so set it in your host's environment before deploying — canonical and social URLs must be absolute.
 
 ## Commands
 
-| Command                  | Description                                |
-| ------------------------ | ------------------------------------------ |
-| `npm run dev`            | Development server                         |
-| `npm run build`          | Production build                           |
-| `npm run lint`           | ESLint                                     |
-| `npm run test`           | Vitest unit/component tests (47 tests)     |
-| `npm run test:e2e`       | Playwright E2E tests (requires dev server) |
-| `npx prettier --check .` | Check formatting                           |
+| Command                              | Description                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------- |
+| `npm run dev`                        | Development server                                                     |
+| `npm run build` / `npm start`        | Production build and serve                                             |
+| `npm run validate:all`               | Full quality gate: lint → format check → typecheck → tests → audit     |
+| `npm run lint`                       | ESLint (flat config)                                                   |
+| `npm run format:check`               | Prettier check (`npm run format` to write)                             |
+| `npm run typecheck`                  | `tsc --noEmit`                                                         |
+| `npm run test`                       | Vitest unit/component tests (180 tests, 15 files)                      |
+| `npm run test:coverage`              | Vitest with coverage report                                            |
+| `npm run test:e2e`                   | Playwright E2E — 141 tests across chromium/firefox/webkit              |
+| `npx tsx scripts/validate-design.ts` | Design-token audit (flags hardcoded colors and inline styles)          |
+| `npx fallow audit`                   | Dead code / duplication / complexity audit (new code vs `origin/main`) |
 
 ## Project Structure
 
@@ -69,14 +85,14 @@ src/
 ├── app/                    # Next.js App Router + API routes
 │   └── api/                # /chat, /screenshot, /weather
 ├── components/
-│   ├── os/                 # Window, Desktop, Taskbar, ChatPanel, Wallpaper
-│   ├── apps/               # AboutApp, ProjectsApp, TerminalApp, etc.
-│   ├── widgets/            # Clock, CPU, Weather, Music, Notes
+│   ├── os/                 # Window, Desktop, Dock, TopBar, Taskbar, ChatPanel, CommandPalette
+│   ├── apps/               # AboutApp, ProjectsApp, TerminalApp, ContactApp, ResumeApp, ControlPanelApp
+│   ├── widgets/            # CPU, Weather, Music, Notes (+ WidgetWrapper)
 │   └── theme/              # ThemeProvider
-├── store/                  # Zustand slices (window, theme, widget, chat, music)
-├── hooks/                  # useMediaQuery
+├── store/                  # Zustand slices (window, theme, widget, chat, music, ui)
+├── hooks/                  # Drag, glass glare, keyboard shortcuts, palette, long-press, viewport clamp
 ├── types/                  # TypeScript interfaces
-└── lib/                    # Constants, RAG pipeline, utilities
+└── lib/                    # App registry, shortcuts, palette data/DOM, terminal commands, RAG, design tokens
 ```
 
 ## Design System
@@ -87,13 +103,13 @@ Three themes defined entirely via CSS custom properties — no hardcoded colors 
 - **Neon City** — dark background, cyan/magenta/green accents, neon glow effects
 - **Classic Editorial** — cream/sepia tones, serif typography, subtle shadows
 
-All theming tokens live in `src/app/globals.css` via `@theme inline`.
+Theming tokens live in `src/app/globals.css` via `@theme inline`; glass behaviour is driven by six CSS variables (`--glass-blur`, `--glass-saturate`, `--glass-opacity-*`, `--glass-edge-opacity`, `--glass-specular-opacity`) with per-theme presets. Design tokens are mirrored in `src/lib/design-tokens.ts` and checked by `scripts/validate-design.ts`.
 
 ## Testing
 
-- **47 unit/component tests** across 5 files (all Zustand slices, Window, Taskbar, ControlPanel)
-- **4 E2E specs** (theme switching, window lifecycle, mobile layout, localStorage persistence)
-- Run `npm run test` for unit tests, `npm run test:e2e` for Playwright (needs dev server running)
+- **180 unit/component tests** across 15 files — all six Zustand slices, fuzzy scoring, shortcuts, terminal commands, drag boundaries, palette, Window, Taskbar, ControlPanel, sliders, selectors
+- **141 E2E tests** across 10 specs on chromium, firefox, and webkit — window lifecycle, theme switching, mobile layout and the 768px boundary, persistence, drag, shortcuts, command palette, terminal, and metadata
+- `npm run validate:all` is the gate: lint + format + typecheck + unit tests + `fallow audit`
 
 ## Deployment
 
@@ -102,7 +118,7 @@ npm run build
 npm start
 ```
 
-Deploy to Vercel, Netlify, or any Node.js hosting. The app is fully static except for the 3 API routes (`/api/chat`, `/api/screenshot`, `/api/weather`).
+Deploy to Vercel, Netlify, or any Node.js host. Everything is prerendered except the three API routes (`/api/chat`, `/api/screenshot`, `/api/weather`). Set `ANTHROPIC_API_KEY` and `NEXT_PUBLIC_SITE_URL` in the host's environment.
 
 ## License
 
