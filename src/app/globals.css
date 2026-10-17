@@ -642,7 +642,7 @@ select,
 
 /* ── Mobile Safe Zones ──────────────────────────────── */
 
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
   :root {
     --topbar-height: 24px;
     --dock-height: 0px;
