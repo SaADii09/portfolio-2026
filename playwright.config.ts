@@ -7,7 +7,11 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Firefox is starved at the default (CPU-count) worker count in this environment:
+  // browser contexts fail to close (`_maybeDontRestoreTabs` juggler bug), SWGL fails
+  // to map a framebuffer, and its canvas rAF loop gets killed by Firefox's script
+  // timeout. Two workers keeps the full 3-browser matrix deterministic locally.
+  workers: process.env.CI ? 1 : 2,
   reporter: [["html"], ["list"]],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000",
