@@ -8,3 +8,10 @@ export const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:30
   /\/+$/,
   "",
 );
+
+/**
+ * Pinned date of the last meaningful sitemap change (YYYY-MM-DD). Using a
+ * constant instead of `new Date()` keeps `/sitemap.xml` stable across builds,
+ * so crawlers don't see a pointless `lastmod` bump on every deploy.
+ */
+export const SITE_LAST_UPDATED = "2026-10-18";

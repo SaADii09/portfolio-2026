@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { gotoApp } from "./utils";
+import { SITE_LAST_UPDATED } from "../src/lib/site";
 
 /**
  * Canonical origin the app publishes in robots.txt / sitemap.xml: `siteUrl` in
@@ -67,5 +68,40 @@ test.describe("Social & sharing metadata", () => {
 
     expect(response.status()).toBe(200);
     expect(response.headers()["content-type"]).toContain("image/png");
+  });
+});
+
+test.describe("SEO truth & accessibility metadata", () => {
+  test("does not disable pinch zoom in the viewport meta", async ({ page }) => {
+    await gotoApp(page);
+
+    const content = await page.locator('meta[name="viewport"]').getAttribute("content");
+
+    expect(content).toBeTruthy();
+    expect(content).not.toContain("user-scalable=no");
+    expect(content).not.toContain("maximum-scale");
+  });
+
+  test("robots.txt disallows crawling the API routes", async ({ page }) => {
+    await gotoApp(page);
+
+    const response = await page.request.get("/robots.txt");
+
+    expect(response.status()).toBe(200);
+    const body = await response.text();
+    expect(body).toMatch(/Disallow:\s*\/api\/?/);
+  });
+
+  test("sitemap.xml pins lastModified to SITE_LAST_UPDATED", async ({ page }) => {
+    await gotoApp(page);
+
+    const response = await page.request.get("/sitemap.xml");
+
+    expect(response.status()).toBe(200);
+    const body = await response.text();
+    const lastmod = body.match(/<lastmod>([^<]+)<\/lastmod>/)?.[1] ?? "";
+
+    expect(lastmod).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(lastmod).toBe(SITE_LAST_UPDATED);
   });
 });
