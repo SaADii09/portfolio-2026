@@ -650,6 +650,11 @@ function MobileTopBar() {
     lastTime: 0,
     velocity: 0,
   });
+  // Drag-vs-tap disambiguation: `dragMovedRef` records whether this gesture
+  // moved further than a tap jitter, `justDraggedRef` survives the pointerup →
+  // click sequence long enough for the trailing synthetic click to stand down.
+  const dragMovedRef = useRef(false);
+  const justDraggedRef = useRef(false);
 
   useEffect(() => {
     const tick = () => {
@@ -668,6 +673,11 @@ function MobileTopBar() {
     setPanelOpen(target > -200);
   }, []);
 
+  const snapToClosed = useCallback(
+    () => snapTo(-(panelRef.current?.getBoundingClientRect().height ?? 400)),
+    [snapTo],
+  );
+
   const handleKnobPointerDown = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
@@ -681,6 +691,7 @@ function MobileTopBar() {
         lastTime: Date.now(),
         velocity: 0,
       };
+      dragMovedRef.current = false;
       setAnimating(false);
       setPanelY(panelOpen ? 0 : -panelHeight);
     },
@@ -690,6 +701,7 @@ function MobileTopBar() {
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current.isDragging) return;
     const delta = e.clientY - dragRef.current.startY;
+    dragMovedRef.current = dragMovedRef.current || Math.abs(delta) > 8;
     const now = Date.now();
     const dt = now - dragRef.current.lastTime;
     if (dt > 0) {
@@ -705,6 +717,10 @@ function MobileTopBar() {
   const handlePointerUp = useCallback(() => {
     if (!dragRef.current.isDragging) return;
     dragRef.current.isDragging = false;
+    // Arms the click suppressor for this gesture and clears it a tick later so
+    // the trailing click (which fires after pointerup) sees the flag first.
+    justDraggedRef.current = dragMovedRef.current;
+    setTimeout(() => (justDraggedRef.current = false), 0);
     const rect = panelRef.current?.getBoundingClientRect();
     const panelHeight = rect ? rect.height : 400;
     const vel = dragRef.current.velocity;
@@ -716,7 +732,7 @@ function MobileTopBar() {
   }, [panelY, snapTo]);
 
   const handleKnobClick = useCallback(() => {
-    if (dragRef.current.isDragging) return;
+    if (dragRef.current.isDragging || justDraggedRef.current) return;
     const rect = panelRef.current?.getBoundingClientRect();
     const panelHeight = rect ? rect.height : 400;
     if (panelOpen) {
@@ -762,6 +778,7 @@ function MobileTopBar() {
       {/* Panel (always rendered, translateY-controlled) */}
       <div
         ref={panelRef}
+        data-testid="mobile-shade-panel"
         className="fixed left-0 right-0 z-[10000] glass-heavy overflow-y-auto"
         style={{
           top: 32,
@@ -774,10 +791,12 @@ function MobileTopBar() {
           transform: `translateY(${panelY}px)`,
           transition: animating ? "transform 300ms cubic-bezier(0.32, 0.72, 0, 1)" : "none",
           pointerEvents: panelY > -200 ? "auto" : "none",
-          touchAction: "none",
+          // pan-y: internal content is scrollable by touch; "none" deadened
+          // touch scrolling inside the overflow-y-auto panel entirely.
+          touchAction: "pan-y",
         }}
       >
-        <MobileControlContent onClose={() => snapTo(-400)} />
+        <MobileControlContent onClose={snapToClosed} />
       </div>
 
       {/* Backdrop */}
