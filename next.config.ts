@@ -22,6 +22,13 @@ const nextConfig: NextConfig = {
         { key: "Content-Security-Policy", value: csp },
       ],
     },
+    // Explicit fixture header for the WebView refusal tests: /embed-refusal is
+    // never embeddable, even if the global rule above ever changes. Additive on
+    // purpose — the CSP block above is owned by the hardening lane (Task 13).
+    {
+      source: "/embed-refusal",
+      headers: [{ key: "X-Frame-Options", value: "DENY" }],
+    },
   ],
 };
 
