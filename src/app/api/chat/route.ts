@@ -3,14 +3,26 @@ import { retrieveRelevantContext } from "@/lib/rag";
 const MAX_REQUESTS_PER_MINUTE = 15;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
+const ALLOWED_ROLES = new Set<string>(["user", "assistant"]);
+const MAX_MESSAGES = 20;
+const MAX_MESSAGE_LENGTH = 10_000;
+
 const requestLog = new Map<string, number[]>();
+
+export function pruneTimestamps(stamps: number[], now: number): number[] {
+  return stamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+}
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
-  const timestamps = requestLog.get(ip) ?? [];
-  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (recent.length >= MAX_REQUESTS_PER_MINUTE) return true;
-  requestLog.set(ip, [...recent, now]);
+  const pruned = pruneTimestamps(requestLog.get(ip) ?? [], now);
+  if (pruned.length === 0) {
+    requestLog.delete(ip);
+  }
+  if (pruned.length >= MAX_REQUESTS_PER_MINUTE) {
+    return true;
+  }
+  requestLog.set(ip, [...pruned, now]);
   return false;
 }
 
@@ -29,6 +41,43 @@ interface ChatMessage {
   content: string;
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isChatMessage(message: unknown): message is ChatMessage {
+  if (typeof message !== "object" || message === null) return false;
+  const role = (message as { role?: unknown }).role;
+  const content = (message as { content?: unknown }).content;
+  if (typeof role !== "string" || !ALLOWED_ROLES.has(role)) return false;
+  if (!isNonEmptyString(content)) return false;
+  return content.length <= MAX_MESSAGE_LENGTH;
+}
+
+type ValidationOk = { ok: true; messages: ChatMessage[] };
+type ValidationFail = { ok: false; reason: string };
+
+export function validateMessages(input: unknown): ValidationOk | ValidationFail {
+  if (!Array.isArray(input) || input.length === 0) {
+    return { ok: false, reason: "messages array is required" };
+  }
+  if (input.length > MAX_MESSAGES) {
+    return { ok: false, reason: "messages must contain at most 20 entries" };
+  }
+  if (!input.every(isChatMessage)) {
+    return {
+      ok: false,
+      reason:
+        "each message must have role 'user' or 'assistant' and string content of at most 10000 characters",
+    };
+  }
+  const messages = input.map((message) => {
+    const { role, content } = message as ChatMessage;
+    return { role, content } as ChatMessage;
+  });
+  return { ok: true, messages };
+}
+
 export async function POST(request: Request) {
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -39,17 +88,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "Rate limit exceeded. Try again in a minute." }, { status: 429 });
   }
 
-  let body: { messages: ChatMessage[] };
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { messages } = body;
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    return Response.json({ error: "messages array is required" }, { status: 400 });
+  const validated = validateMessages(
+    (body as { messages?: unknown } | null)?.messages,
+  );
+  if (!validated.ok) {
+    return Response.json({ error: validated.reason }, { status: 400 });
   }
+  const messages = validated.messages;
 
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
   const context = lastUserMessage ? retrieveRelevantContext(lastUserMessage.content) : "";
