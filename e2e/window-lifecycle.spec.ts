@@ -46,3 +46,26 @@ test.describe("Window lifecycle", () => {
     await expect(page.getByLabel("About Me")).not.toBeVisible();
   });
 });
+
+// First context-menu coverage in this file. Click point (400, 300) is empty
+// desktop: icons live in a top-left column, widgets hug the right edge.
+test.describe("Context menu (keyboard)", () => {
+  test.beforeEach(async ({ page }) => {
+    await gotoApp(page);
+    await page.mouse.click(400, 300, { button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Refresh" })).toBeVisible();
+  });
+
+  test("Escape closes the desktop context menu without side effects", async ({ page }) => {
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menuitem")).toHaveCount(0);
+  });
+
+  test("ArrowDown + Enter selects a menu item and runs its action", async ({ page }) => {
+    // Roving focus opens on "Refresh"; ArrowDown skips the separator and lands
+    // on the first app item ("About Me"). Enter actuates it and opens the app.
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "About Me" })).toBeVisible();
+  });
+});
