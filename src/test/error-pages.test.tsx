@@ -11,9 +11,7 @@ vi.mock("@/app/globals.css", () => ({}));
 // Client renderers are mounted inside a <div> by RTL, and React refuses to
 // nest raw <html> there — the raw-document contract is verified statically.
 function globalErrorMarkup(): string {
-  return renderToStaticMarkup(
-    <GlobalError error={new Error("boom")} reset={vi.fn()} />,
-  );
+  return renderToStaticMarkup(<GlobalError error={new Error("boom")} reset={vi.fn()} />);
 }
 
 function renderErrorPage(reset: () => void = vi.fn()) {

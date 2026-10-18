@@ -54,7 +54,9 @@ describe("WeatherWidget — retry on failure", () => {
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Upstream down" }) })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ current: { temperature_2m: 21.4, relative_humidity_2m: 55, weather_code: 0 } }),
+        json: async () => ({
+          current: { temperature_2m: 21.4, relative_humidity_2m: 55, weather_code: 0 },
+        }),
       });
     vi.stubGlobal("fetch", fetchMock);
 

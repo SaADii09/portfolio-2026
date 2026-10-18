@@ -104,7 +104,8 @@ function flagColorMatch(
   filePath: string,
   lineNumber: number,
 ): void {
-  const suggestion = getTailwindSuggestion(match[0]) || `Replace with a CSS variable from globals.css`;
+  const suggestion =
+    getTailwindSuggestion(match[0]) || `Replace with a CSS variable from globals.css`;
   violations.push({
     file: filePath,
     line: lineNumber,

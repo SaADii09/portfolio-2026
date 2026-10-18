@@ -18,10 +18,7 @@ const INTERRUPTION_TEXT = "The assistant was interrupted. Please try again.";
 const DEFAULT_BODY = { messages: [{ role: "user", content: "hello" }] };
 
 // The route only needs headers.get + json(); jsdom has no Request global.
-function makeRequest(
-  body: unknown = DEFAULT_BODY,
-  headers: Record<string, string> = {},
-): Request {
+function makeRequest(body: unknown = DEFAULT_BODY, headers: Record<string, string> = {}): Request {
   return {
     headers: { get: (name: string) => headers[name] ?? null },
     json: async () => body,
@@ -124,9 +121,7 @@ describe("validateMessages", () => {
   });
 
   it("rejects content over 10000 characters", () => {
-    expect(
-      validateMessages([{ role: "user", content: "a".repeat(10_001) }]),
-    ).toEqual({
+    expect(validateMessages([{ role: "user", content: "a".repeat(10_001) }])).toEqual({
       ok: false,
       reason:
         "each message must have role 'user' or 'assistant' and string content of at most 10000 characters",
@@ -203,13 +198,11 @@ describe("POST message validation", () => {
     let forwarded: unknown;
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockImplementation(
-        async (_url: string, init: { body: string }) => {
-          forwarded = JSON.parse(init.body);
-          // Fail upstream so the route returns 502 and no stream is built.
-          return { ok: false, text: async () => "" };
-        },
-      ),
+      vi.fn().mockImplementation(async (_url: string, init: { body: string }) => {
+        forwarded = JSON.parse(init.body);
+        // Fail upstream so the route returns 502 and no stream is built.
+        return { ok: false, text: async () => "" };
+      }),
     );
     const res = await POST(
       makeRequest(
@@ -223,8 +216,7 @@ describe("POST message validation", () => {
       ),
     );
     expect(res.status).toBe(502);
-    expect((forwarded as { messages: unknown })
-      .messages).toEqual([
+    expect((forwarded as { messages: unknown }).messages).toEqual([
       { role: "user", content: "a" },
       { role: "assistant", content: "b" },
     ]);
@@ -234,15 +226,10 @@ describe("POST message validation", () => {
 describe("rate limit", () => {
   it("429s the 16th rapid POST from one ip (15/min cap unchanged)", async () => {
     const ip = "192.0.2.77";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: false, text: async () => "" }),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, text: async () => "" }));
     const statuses: number[] = [];
     for (let i = 0; i < 16; i++) {
-      const res = await POST(
-        makeRequest(undefined, { "x-forwarded-for": ip }),
-      );
+      const res = await POST(makeRequest(undefined, { "x-forwarded-for": ip }));
       statuses.push(res.status);
     }
     expect(statuses.slice(0, 15)).toEqual(Array(15).fill(502));

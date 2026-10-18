@@ -40,7 +40,10 @@ describe("parseCoords", () => {
   });
 
   it("keeps a valid negative decimal coordinate", () => {
-    expect(parseCoords(new URLSearchParams("lat=-12.5&lon=-7.25"))).toEqual({ lat: -12.5, lon: -7.25 });
+    expect(parseCoords(new URLSearchParams("lat=-12.5&lon=-7.25"))).toEqual({
+      lat: -12.5,
+      lon: -7.25,
+    });
   });
 
   it("falls back for empty-string params (empty is present but invalid)", () => {

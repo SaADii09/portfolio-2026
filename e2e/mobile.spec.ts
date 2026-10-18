@@ -81,7 +81,10 @@ test.describe("Mobile shade gestures (touch)", () => {
     await page.waitForTimeout(400); // 300ms snap transition + trailing click settle
     const panel = page.getByTestId("mobile-shade-panel");
     const panelBox = (await panel.boundingBox())!;
-    expect(Math.abs(panelBox.y - 32), "shade stays fully open after a drag-open release").toBeLessThan(8);
+    expect(
+      Math.abs(panelBox.y - 32),
+      "shade stays fully open after a drag-open release",
+    ).toBeLessThan(8);
   });
 
   test("shade panel permits vertical touch scrolling (touch-action: pan-y)", async ({ page }) => {
@@ -115,7 +118,10 @@ test.describe("Mobile shade gestures (touch)", () => {
     expect(panelBox.y + panelBox.height, "panel is fully offscreen").toBeLessThanOrEqual(33);
     // Pin that close snaps to the *measured* panel height, not a hardcoded
     // -400 offset: translateY must be flush with -(measured height).
-    expect(Math.abs(ty + panelBox.height), "close target tracks the measured panel height").toBeLessThan(2);
+    expect(
+      Math.abs(ty + panelBox.height),
+      "close target tracks the measured panel height",
+    ).toBeLessThan(2);
   });
 
   test("a plain tap on the knob still toggles the shade under touch input", async ({

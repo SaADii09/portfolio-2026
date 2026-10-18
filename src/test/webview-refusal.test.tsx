@@ -56,7 +56,9 @@ describe("WebView fallback wiring", () => {
   beforeEach(() => {
     // `Date` is faked too: the supersede test below gates its unreadable/readable
     // document stub on the fake clock (relative to the test's own start time).
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+    });
   });
 
   afterEach(() => {
@@ -88,7 +90,11 @@ describe("WebView fallback wiring", () => {
   }
 
   function restoreContentDocument() {
-    Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", contentDocumentDescriptor);
+    Object.defineProperty(
+      HTMLIFrameElement.prototype,
+      "contentDocument",
+      contentDocumentDescriptor,
+    );
   }
 
   it("refused load (unreadable document) → fallback panel with screenshot img", () => {

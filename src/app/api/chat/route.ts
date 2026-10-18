@@ -95,9 +95,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const validated = validateMessages(
-    (body as { messages?: unknown } | null)?.messages,
-  );
+  const validated = validateMessages((body as { messages?: unknown } | null)?.messages);
   if (!validated.ok) {
     return Response.json({ error: validated.reason }, { status: 400 });
   }

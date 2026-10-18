@@ -92,7 +92,9 @@ test.describe("WebView embed refusal fallback", () => {
     );
   });
 
-  test("github-refused frame shows the screenshot fallback within watchdog window", async ({ page }) => {
+  test("github-refused frame shows the screenshot fallback within watchdog window", async ({
+    page,
+  }) => {
     await page.route("https://github.com/**", (route) =>
       route.fulfill({
         status: 200,

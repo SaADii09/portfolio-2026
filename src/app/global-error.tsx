@@ -22,8 +22,8 @@ export default function GlobalError({ reset }: GlobalErrorProps) {
               Something went wrong in the OS.
             </h1>
             <p className="text-xs text-os-muted mb-6 leading-relaxed">
-              A fatal error occurred and the system could not recover. Nothing
-              was lost — reset the shell and reboot.
+              A fatal error occurred and the system could not recover. Nothing was lost — reset the
+              shell and reboot.
             </p>
             <button
               onClick={reset}

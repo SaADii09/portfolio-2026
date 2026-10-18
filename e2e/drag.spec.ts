@@ -161,10 +161,9 @@ test.describe("Drag behavior", () => {
     await settledBox(page, win); // flush the cleanup's commit + re-render before reading the DOM
 
     const draggingAfterCancel = await win.evaluate((el) => el.classList.contains("os-dragging"));
-    expect(
-      draggingAfterCancel,
-      "pointercancel must remove the gesture's os-dragging class",
-    ).toBe(false);
+    expect(draggingAfterCancel, "pointercancel must remove the gesture's os-dragging class").toBe(
+      false,
+    );
 
     // A stray late pointermove (e.g. an unrelated drag elsewhere in the UI) must
     // no longer reach the canceled gesture: geometry must stay frozen.

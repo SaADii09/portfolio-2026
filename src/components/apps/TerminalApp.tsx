@@ -7,6 +7,12 @@ import { executeCommand, BANNER, type TerminalContext } from "@/lib/terminal-com
 
 type Line = { content: string; isOutput: boolean };
 
+// Prompt/accent green for the fixed CRT terminal palette (theme-invariant by design).
+// The inline-marker exemption is pinned by scripts/validate-design.ts — a JSX block
+// comment cannot carry it (prettier hoists comments out of JSX children), so the
+// literal lives here where a trailing `//` line marker survives formatting.
+const CRT_GREEN = "#00ff41"; // design-token-exempt: fixed CRT terminal palette (theme-invariant)
+
 /** Fresh snapshot of the store + os-actions, injected into the pure executor. */
 function buildTerminalContext(): TerminalContext {
   return {
@@ -105,10 +111,10 @@ export function TerminalApp() {
         className="flex items-center gap-2 p-3 border-t"
         style={{ borderColor: "#00ff4133", background: "#0a0a0a" }} // design-token-exempt: fixed CRT terminal palette (theme-invariant) by design
       >
-        <span style={{ color: "#00ff41" }}>$</span> {/* // design-token-exempt: fixed CRT terminal palette (theme-invariant) by design */}
-        {/* the checker's pinned marker is the substring `// design-token-exempt: <reason>`,
-            which is why the `//` is quoted inside the JSX block comment — it must sit on
-            the same line as the color literal it exempts */}
+        <span style={{ color: CRT_GREEN }}>$</span>
+        {/* the checkers' pinned marker format is the substring `// design-token-exempt: <reason>`;
+            the CRT_GREEN literal above carries it in a JS position — a JSX block comment would
+            be hoisted onto its own line by prettier, orphaning the literal */}
         <input
           ref={inputRef}
           value={input}

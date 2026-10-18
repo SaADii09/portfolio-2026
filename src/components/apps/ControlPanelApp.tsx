@@ -16,11 +16,11 @@ const THEME_SWATCHES: { name: ThemeName; label: string; colors: [string, string,
 ).map(({ name, label }) => ({
   name,
   label,
-  colors: [
-    THEMES[name]["accent-1"],
-    THEMES[name]["accent-2"],
-    THEMES[name]["accent-3"],
-  ] as [string, string, string],
+  colors: [THEMES[name]["accent-1"], THEMES[name]["accent-2"], THEMES[name]["accent-3"]] as [
+    string,
+    string,
+    string,
+  ],
 }));
 
 const COLOR_FALLBACKS: Record<string, string> = {
