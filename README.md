@@ -72,9 +72,8 @@ NEXT_PUBLIC_SITE_URL=https://saadahmad.dev
 | `npm run lint`                       | ESLint (flat config)                                                   |
 | `npm run format:check`               | Prettier check (`npm run format` to write)                             |
 | `npm run typecheck`                  | `tsc --noEmit`                                                         |
-| `npm run test`                       | Vitest unit/component tests (180 tests, 15 files)                      |
-| `npm run test:coverage`              | Vitest with coverage report                                            |
-| `npm run test:e2e`                   | Playwright E2E — 141 tests across chromium/firefox/webkit              |
+| `npm run test`                       | Vitest unit/component tests                                            |
+| `npm run test:e2e`                   | Playwright E2E tests (chromium/firefox/webkit)                         |
 | `npx tsx scripts/validate-design.ts` | Design-token audit (flags hardcoded colors and inline styles)          |
 | `npx fallow audit`                   | Dead code / duplication / complexity audit (new code vs `origin/main`) |
 
@@ -107,8 +106,8 @@ Theming tokens live in `src/app/globals.css` via `@theme inline`; glass behaviou
 
 ## Testing
 
-- **180 unit/component tests** across 15 files — all six Zustand slices, fuzzy scoring, shortcuts, terminal commands, drag boundaries, palette, Window, Taskbar, ControlPanel, sliders, selectors
-- **141 E2E tests** across 10 specs on chromium, firefox, and webkit — window lifecycle, theme switching, mobile layout and the 768px boundary, persistence, drag, shortcuts, command palette, terminal, and metadata
+- **Unit/component tests** (Vitest) — all six Zustand slices, fuzzy scoring, shortcuts, terminal commands, drag boundaries, palette, Window, Taskbar, ControlPanel, sliders, selectors
+- **E2E tests** (Playwright) on chromium, firefox, and webkit — window lifecycle, theme switching, mobile layout and the 768px boundary, persistence, drag, shortcuts, command palette, terminal, and metadata
 - `npm run validate:all` is the gate: lint + format + typecheck + unit tests + `fallow audit`
 
 ## Deployment
@@ -122,4 +121,4 @@ Deploy to Vercel, Netlify, or any Node.js host. Everything is prerendered except
 
 ## License
 
-MIT
+MIT — see [`LICENSE`](./LICENSE).
