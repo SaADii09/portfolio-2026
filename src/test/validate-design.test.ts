@@ -60,4 +60,15 @@ describe("widened color-literal checker", () => {
     const line = 'background: "#ff0000"; // selected accent';
     expect(isAllowedColorLiteral(line)).toBe(false);
   });
+
+  it("sees uppercase literals — case-insensitivity must match the widened regex", () => {
+    // COLOR_LITERAL_RE is `gi`; the allowed-context probe must be case-insensitive
+    // too, else uppercase literals silently pass the widened gate.
+    const upperHex = 'color: "#FF4D6D"';
+    const upperFn = "value: RGBA(16, 185, 129)";
+    const firstMatch = [...upperHex.matchAll(COLOR_LITERAL_RE)][0];
+    expect(firstMatch?.[0]).toBe("#FF4D6D");
+    expect(isAllowedColorLiteral(upperHex)).toBe(false);
+    expect(isAllowedColorLiteral(upperFn)).toBe(false);
+  });
 });

@@ -146,9 +146,10 @@ function isHexString(body: string): boolean {
 }
 
 function hasNoColorMatch(line: string): boolean {
-  // Fresh, flag-free regex: the shared `g` flag carries `lastIndex` state a
-  // bare `.test()` would leak across calls.
-  return !new RegExp(COLOR_LITERAL_RE.source).test(line);
+  // Fresh, flag-free regex: a non-global `i` copy so `.test()` never leaks the
+  // shared `g` flag's lastIndex — and so case behavior matches the widened
+  // `gi` regex (the `i` flag is load-bearing for uppercase literals).
+  return !new RegExp(COLOR_LITERAL_RE.source, "i").test(line);
 }
 
 /**
