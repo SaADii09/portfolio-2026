@@ -98,10 +98,14 @@ describe("chat route mid-stream failure", () => {
     // streams silently error on a rejected start(), so the fake surfaces
     // start()'s outcome explicitly; with the guards, the TypeError from the
     // dead controller must never leave start().
-    class RiggedReadableStream extends ReadableStream {
+    class RiggedReadableStream extends (ReadableStream as unknown as new (source: {
+      start: () => Promise<void>;
+      pull?: () => void;
+      cancel?: () => void;
+    }) => ReadableStream) {
       static instance: RiggedReadableStream | null = null;
       static startRejection: unknown = undefined;
-      static terminalEvent: string | null = null;
+      static terminalEvent: { type: string; text?: string } | null = null;
       static closeCalls = 0;
       #dead = false;
       constructor(source: { start: (c: unknown) => unknown }) {
@@ -127,7 +131,7 @@ describe("chat route mid-stream failure", () => {
         // rejection there is invisible (internally errored) to consumers.
         super({
           start: () => {
-            const result = Promise.resolve(source.start(controller));
+            const result: Promise<void> = Promise.resolve(source.start(controller)).then(() => {});
             result.then(
               () => {},
               (err: unknown) => {
