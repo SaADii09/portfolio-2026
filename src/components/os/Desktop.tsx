@@ -275,6 +275,11 @@ export function Desktop() {
                 <button
                   key={app.id}
                   onDoubleClick={() => handleIconDoubleClick(app)}
+                  onClick={(e) => {
+                    // Keyboard-generated clicks carry detail === 0; pointer
+                    // single-clicks (detail >= 1) must remain inert on desktop.
+                    if (e.nativeEvent.detail === 0) handleIconDoubleClick(app);
+                  }}
                   onContextMenu={(e) => openIconContextMenu(app.id, e)}
                   className="flex flex-col items-center gap-1 w-16 p-1.5 rounded-os transition-all hover:scale-110 active:scale-95 focus:outline-none focus:ring-1 focus:ring-os-accent"
                   title={`Open ${label}`}
