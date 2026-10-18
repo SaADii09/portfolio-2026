@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
@@ -34,6 +34,20 @@ export function Window({ id, children }: WindowProps) {
 
   const rafRef = useRef(0);
   const windowElRef = useRef<HTMLDivElement>(null);
+  // Live cleanup of an in-flight resize gesture. The gesture closure registers
+  // it on start; the unmount effect invokes it so a mid-gesture unmount cannot
+  // leave document listeners or a pending rAF behind. (Same contract as
+  // useDragPosition's cleanupRef.)
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+
+  // Abort any in-flight resize when the window unmounts mid-gesture.
+  useEffect(
+    () => () => {
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+    },
+    [],
+  );
 
   const getWindowMenuItems = useCallback(() => {
     if (!win) return [];
@@ -152,16 +166,31 @@ export function Window({ id, children }: WindowProps) {
         }
       };
 
-      const onUp = () => {
+      // One unified teardown for pointerup, pointercancel, and unmount alike:
+      // drop the gesture class, cancel the pending rAF, commit the pending
+      // geometry so a new drag starts from committed state, remove the
+      // document listeners, and clear the unmount hook.
+      const cleanup = () => {
         if (el) el.classList.remove("os-dragging");
-        cancelAnimationFrame(rafRef.current);
+        if (rafScheduled) {
+          rafScheduled = false;
+          cancelAnimationFrame(rafRef.current);
+        }
         updateWindowSize(id, pendingW, pendingH);
         updateWindowPosition(id, pendingX, pendingY);
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onCancel);
+        resizeCleanupRef.current = null;
       };
+
+      const onUp = () => cleanup();
+      const onCancel = () => cleanup();
+
+      resizeCleanupRef.current = cleanup;
       document.addEventListener("pointermove", onMove);
       document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onCancel);
     },
     [win, id, focusWindow, updateWindowSize, updateWindowPosition],
   );

@@ -138,6 +138,70 @@ test.describe("Drag behavior", () => {
     ).toBeLessThanOrEqual(otherBox.y + 1);
   });
 
+  test("window resize survives a mid-gesture pointercancel", async ({ page }) => {
+    await page.getByTitle("Open About Me").dblclick();
+    const win = page.locator(".os-window-enter");
+    await expect(win).toBeVisible();
+
+    const start = (await win.boundingBox())!;
+    // East resize handle is `right-0 w-2` (8px wide): its centre sits at width-4.
+    const hx = start.x + start.width - 4;
+    const hy = start.y + start.height / 2;
+
+    await page.mouse.move(hx, hy);
+    await page.mouse.down();
+    await page.mouse.move(hx + 40, hy, { steps: 5 }); // one resize gesture, in-viewport endpoints
+    const resized = await settledBox(page, win);
+    expect(resized.width, "east-drag must grow the window").toBeGreaterThan(start.width + 25);
+
+    // The browser cancels the pointer mid-gesture. The synthetic event must be
+    // dispatched on `document` — the listeners live at document level, and a
+    // window-targeted event does not propagate down to them.
+    await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointercancel")));
+    await settledBox(page, win); // flush the cleanup's commit + re-render before reading the DOM
+
+    const draggingAfterCancel = await win.evaluate((el) => el.classList.contains("os-dragging"));
+    expect(
+      draggingAfterCancel,
+      "pointercancel must remove the gesture's os-dragging class",
+    ).toBe(false);
+
+    // A stray late pointermove (e.g. an unrelated drag elsewhere in the UI) must
+    // no longer reach the canceled gesture: geometry must stay frozen.
+    await page.evaluate(() =>
+      document.dispatchEvent(new PointerEvent("pointermove", { clientX: 2400, clientY: 2400 })),
+    );
+    const afterStray = (await win.boundingBox())!;
+    expect(
+      Math.abs(afterStray.width - resized.width),
+      "leaked pointermove listener would keep resizing here",
+    ).toBeLessThanOrEqual(1);
+
+    // Resolve the physical press; a cleaned-up gesture ignores it entirely.
+    await page.mouse.up();
+
+    // The canceled gesture must still have committed its pending geometry, and a
+    // fresh real header drag must MOVE the window — not keep resizing the edge.
+    const committed = (await win.boundingBox())!;
+    expect(
+      Math.abs(committed.width - resized.width),
+      "pending size must be committed by the cleanup",
+    ).toBeLessThanOrEqual(1);
+
+    const header = (await win.locator(".os-drag-handle").boundingBox())!;
+    await dragHeader(page, header.x + 60, header.y + header.height / 2, 100, 40);
+    const after = (await win.boundingBox())!;
+    expect(
+      Math.abs(after.width - committed.width),
+      "a later header drag must not keep resizing the window",
+    ).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.height - committed.height)).toBeLessThanOrEqual(1);
+    expect(after.x, "the later drag must move the window").toBeGreaterThan(
+      committed.x + 100 - TOLERANCE,
+    );
+    expect(after.y).toBeGreaterThan(committed.y + 40 - TOLERANCE);
+  });
+
   test("pinned widget does not move on drag", async ({ page }) => {
     const widget = weatherWidget(page);
     await expect(widget).toBeVisible();
