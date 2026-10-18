@@ -33,15 +33,22 @@ function createNoiseTexture(w: number, h: number): ImageData | null {
   return img;
 }
 
+const COLORS: Record<string, string[]> = {
+  retro: ["#ff9f1c", "#ffcc00", "#00e5ff", "#ff69b4"],
+};
+const DEFAULT_PALETTE: string[] = COLORS.retro ?? [];
+
 const PARTICLE_BASE_COUNTS: Record<string, { far: number; near: number }> = {
   retro: { far: 25, near: 25 },
   neon: { far: 30, near: 30 },
   editorial: { far: 28, near: 27 },
 };
 
+const FALLBACK_COUNTS = PARTICLE_BASE_COUNTS.retro ?? { far: 25, near: 25 };
+
 /** Max particles per layer, scaled to viewport width (floored at 0.5x, capped at 1x of a 1440px-wide reference). */
 export function countParticles(theme: string, vw: number): { far: number; near: number } {
-  const base = PARTICLE_BASE_COUNTS[theme] || PARTICLE_BASE_COUNTS.retro;
+  const base = PARTICLE_BASE_COUNTS[theme] || PARTICLE_BASE_COUNTS.retro || FALLBACK_COUNTS;
   const scale = Math.max(0.5, Math.min(1, vw / 1440));
   return {
     far: Math.round(base.far * scale),
@@ -110,7 +117,7 @@ export function Wallpaper() {
       editorial: ["#f7a501", "#1a1a1a", "#cd4239", "#1d4ed8"],
     };
 
-    const palette = colors[theme] || colors.retro;
+    const palette = colors[theme] || colors.retro || DEFAULT_PALETTE;
 
     // Far layer particles (small, slow, low alpha)
     for (let i = 0; i < FAR_MAX; i++) {
@@ -254,7 +261,8 @@ export function Wallpaper() {
         p.x += p.vx;
         p.y += p.vy;
 
-        const color = palette[i % palette.length];
+        const color = palette[i % palette.length] ?? palette[0];
+        if (color === undefined) return; // empty palette — nothing to draw
         ctx.globalAlpha = p.alpha * (1 - p.life / p.maxLife) * p.depth;
         ctx.fillStyle = color;
         ctx.beginPath();

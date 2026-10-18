@@ -112,7 +112,7 @@ describe("CommandPalette", () => {
     fireEvent.keyDown(input, { key: "ArrowDown" });
     const afterDown = screen.getAllByRole("option");
     expect(afterDown[1]).toHaveAttribute("aria-selected", "true");
-    expect(input).toHaveAttribute("aria-activedescendant", afterDown[1].id);
+    expect(input).toHaveAttribute("aria-activedescendant", afterDown[1]?.id ?? "");
 
     fireEvent.keyDown(input, { key: "ArrowUp" });
     fireEvent.keyDown(input, { key: "ArrowUp" });
@@ -191,7 +191,7 @@ describe("CommandPalette", () => {
     expect(options[1]).toHaveFocus();
 
     // Walk off the end of the list: focus wraps back to the input, never out of the dialog.
-    options[options.length - 1].focus();
+    options[options.length - 1]?.focus();
     tab();
     expect(input).toHaveFocus();
 

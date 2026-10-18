@@ -125,6 +125,7 @@ test.describe("Security headers", () => {
     expect(response.status()).toBe(200);
     const csp = response.headers()["content-security-policy"];
     expect(csp).toBeTruthy();
+    if (!csp) return; // unreachable when the truthy assertion above passes; narrows for TS
     // Stronger directives added by the hardening lane.
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("base-uri 'self'");

@@ -82,10 +82,12 @@ export const createWidgetSlice: StateCreator<WidgetSlice> = (set) => ({
       const sorted = [...s.widgets].sort((a, b) => a.y - b.y || a.x - b.x);
       for (let i = 0; i < sorted.length; i++) {
         const a = sorted[i];
+        if (!a) break; // provably in-bounds; guard satisfies noUncheckedIndexedAccess
         const aw = a.width || DEFAULT_WIDGET_W;
         const ah = a.height || DEFAULT_WIDGET_H;
         for (let j = i + 1; j < sorted.length; j++) {
           const b = sorted[j];
+          if (!b) continue; // provably in-bounds; guard satisfies noUncheckedIndexedAccess
           const bw = b.width || DEFAULT_WIDGET_W;
           const bh = b.height || DEFAULT_WIDGET_H;
           const overlaps = a.x < b.x + bw && a.x + aw > b.x && a.y < b.y + bh && a.y + ah > b.y;

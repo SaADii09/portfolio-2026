@@ -10,7 +10,7 @@ function findChar(text: string, char: string, from: number): number {
 
 /** A +3 bonus for the first character or one following a non-word character. */
 function isWordStart(text: string, index: number): boolean {
-  return index === 0 || !WORD_CHAR.test(text[index - 1]);
+  return index === 0 || !WORD_CHAR.test(text[index - 1] ?? "");
 }
 
 /** A +2 bonus when the match continues an unbroken run from the previous one. */
@@ -45,7 +45,11 @@ export function fuzzyScore(query: string, text: string): number | null {
   let from = 0;
 
   for (let qi = 0; qi < q.length; qi++) {
-    const index = findChar(t, q[qi], from);
+    // qi < q.length guarantees an in-bounds read, but noUncheckedIndexedAccess
+    // still widens it; the guard keeps the loop provably safe at zero cost.
+    const char = q[qi];
+    if (char === undefined) return null;
+    const index = findChar(t, char, from);
     if (index === -1) return null;
 
     score += charScore(index, prevMatch, t);

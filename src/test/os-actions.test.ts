@@ -41,15 +41,15 @@ describe("os-actions", () => {
       openApp("about");
       const state = useStore.getState();
       expect(state.windows).toHaveLength(1);
-      expect(state.windows[0].title).toBe("About Me");
-      expect(state.windows[0].component).toBe("about");
-      expect(state.windows[0].type).toBe("app");
-      expect(state.activeWindowId).toBe(state.windows[0].id);
+      expect(state.windows[0]?.title).toBe("About Me");
+      expect(state.windows[0]?.component).toBe("about");
+      expect(state.windows[0]?.type).toBe("app");
+      expect(state.activeWindowId).toBe(state.windows[0]?.id);
     });
 
     it("focuses the existing window instead of duplicating", () => {
       openApp("projects");
-      const projectsId = useStore.getState().windows[0].id;
+      const projectsId = useStore.getState().windows[0]?.id;
       openApp("about");
 
       openApp("projects");
@@ -62,20 +62,20 @@ describe("os-actions", () => {
 
     it("restores a minimized window", () => {
       openApp("terminal");
-      const id = useStore.getState().windows[0].id;
+      const id = useStore.getState().windows[0]?.id ?? "";
       useStore.getState().minimizeWindow(id);
-      expect(useStore.getState().windows[0].isMinimized).toBe(true);
+      expect(useStore.getState().windows[0]?.isMinimized).toBe(true);
 
       openApp("terminal");
       const state = useStore.getState();
       expect(state.windows).toHaveLength(1);
-      expect(state.windows[0].isMinimized).toBe(false);
+      expect(state.windows[0]?.isMinimized).toBe(false);
       expect(state.activeWindowId).toBe(id);
     });
 
     it("titles the control-panel window 'Control Panel' while its desktop label stays 'Settings'", () => {
       openApp("control-panel");
-      expect(useStore.getState().windows[0].title).toBe("Control Panel");
+      expect(useStore.getState().windows[0]?.title).toBe("Control Panel");
       const def = APP_DEFS.find((a) => a.id === "control-panel");
       expect(def?.desktopLabel).toBe("Settings");
     });
@@ -132,8 +132,8 @@ describe("os-actions", () => {
       expect(toggleWidget("cpu")).toBe("added");
       const added = useStore.getState().widgets;
       expect(added).toHaveLength(1);
-      expect(added[0].type).toBe("cpu");
-      expect(added[0].title).toBe("CPU");
+      expect(added[0]?.type).toBe("cpu");
+      expect(added[0]?.title).toBe("CPU");
 
       expect(toggleWidget("cpu")).toBe("removed");
       expect(useStore.getState().widgets).toHaveLength(0);
@@ -142,8 +142,8 @@ describe("os-actions", () => {
     it("places a new widget inside the right edge of the content zone", () => {
       toggleWidget("weather");
       const widget = useStore.getState().widgets[0];
-      expect(widget.x).toBe(window.innerWidth - 220);
-      expect(widget.y).toBe(46); // topBar (36) + 10 with no widgets on screen
+      expect(widget?.x).toBe(window.innerWidth - 220);
+      expect(widget?.y).toBe(46); // topBar (36) + 10 with no widgets on screen
     });
   });
 });

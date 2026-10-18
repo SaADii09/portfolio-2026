@@ -48,7 +48,7 @@ export function NotesWidget({ id }: NotesWidgetProps) {
     const note: Note = {
       id: `note-${noteCounter++}`,
       text,
-      color: COLORS[localNotes.length % COLORS.length],
+      color: COLORS[localNotes.length % COLORS.length] ?? COLORS[0] ?? "#fef08a",
     };
     const updated = [...localNotes, note];
     setLocalNotes(updated);

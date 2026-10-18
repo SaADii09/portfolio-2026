@@ -259,7 +259,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
             <MenuItemRow
               key={item.label}
               item={item}
-              actionIdx={actionIndex[i]}
+              actionIdx={actionIndex[i] ?? -1}
               focused={actionIndex[i] === focusIdx}
               isMobile={isMobile}
               registerItemRef={registerItemRef}

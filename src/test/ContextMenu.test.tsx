@@ -98,9 +98,9 @@ describe("ContextMenu", () => {
     // Native button behavior: Enter/Space on the focused item produces a click.
     // jsdom does not synthesize that click, so fire it directly — real keyboard
     // actuation is covered in the Playwright suite.
-    fireEvent.click(target);
+    fireEvent.click(target ?? document.body);
 
-    expect(items[2].onClick).toHaveBeenCalledTimes(1);
+    expect(items[2]?.onClick).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

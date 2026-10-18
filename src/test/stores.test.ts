@@ -57,29 +57,29 @@ describe("windowSlice", () => {
     const id = store.openWindow({ title: "Test", type: "app", component: "AboutApp" });
     expect(store.windows).toHaveLength(1);
     const win = store.windows[0];
-    expect(win.id).toBe(id);
-    expect(win.title).toBe("Test");
-    expect(win.type).toBe("app");
-    expect(win.component).toBe("AboutApp");
-    expect(win.zIndex).toBe(101);
-    expect(win.opacity).toBe(1);
-    expect(win.isMinimized).toBe(false);
-    expect(win.isMaximized).toBe(false);
+    expect(win?.id).toBe(id);
+    expect(win?.title).toBe("Test");
+    expect(win?.type).toBe("app");
+    expect(win?.component).toBe("AboutApp");
+    expect(win?.zIndex).toBe(101);
+    expect(win?.opacity).toBe(1);
+    expect(win?.isMinimized).toBe(false);
+    expect(win?.isMaximized).toBe(false);
     expect(store.activeWindowId).toBe(id);
   });
 
   it("opens an iframe window with url", () => {
     store.openWindow({ title: "Web", type: "iframe", url: "https://example.com" });
     const win = store.windows[0];
-    expect(win.url).toBe("https://example.com");
-    expect(win.type).toBe("iframe");
+    expect(win?.url).toBe("https://example.com");
+    expect(win?.type).toBe("iframe");
   });
 
   it("increments z-index on new windows", () => {
     store.openWindow({ title: "A", type: "app", component: "A" });
     store.openWindow({ title: "B", type: "app", component: "B" });
-    expect(store.windows[0].zIndex).toBe(101);
-    expect(store.windows[1].zIndex).toBe(102);
+    expect(store.windows[0]?.zIndex).toBe(101);
+    expect(store.windows[1]?.zIndex).toBe(102);
   });
 
   it("closes a window", () => {
@@ -99,48 +99,48 @@ describe("windowSlice", () => {
   it("focuses a window", () => {
     store.openWindow({ title: "A", type: "app", component: "A" });
     store.openWindow({ title: "B", type: "app", component: "B" });
-    store.focusWindow(store.windows[0].id);
-    expect(store.windows[0].zIndex).toBe(103);
-    expect(store.activeWindowId).toBe(store.windows[0].id);
+    store.focusWindow(store.windows[0]?.id ?? "");
+    expect(store.windows[0]?.zIndex).toBe(103);
+    expect(store.activeWindowId).toBe(store.windows[0]?.id);
   });
 
   it("minimizes a window", () => {
     const id = store.openWindow({ title: "X", type: "app", component: "X" });
     store.minimizeWindow(id);
-    expect(store.windows[0].isMinimized).toBe(true);
+    expect(store.windows[0]?.isMinimized).toBe(true);
   });
 
   it("maximizes and restores a window", () => {
     const id = store.openWindow({ title: "X", type: "app", component: "X" });
     store.maximizeWindow(id);
-    expect(store.windows[0].isMaximized).toBe(true);
-    expect(store.windows[0].isMinimized).toBe(false);
+    expect(store.windows[0]?.isMaximized).toBe(true);
+    expect(store.windows[0]?.isMinimized).toBe(false);
     store.restoreWindow(id);
-    expect(store.windows[0].isMaximized).toBe(false);
-    expect(store.windows[0].isMinimized).toBe(false);
+    expect(store.windows[0]?.isMaximized).toBe(false);
+    expect(store.windows[0]?.isMinimized).toBe(false);
   });
 
   it("updates position", () => {
     const id = store.openWindow({ title: "X", type: "app", component: "X" });
     store.updateWindowPosition(id, 200, 300);
-    expect(store.windows[0].x).toBe(200);
-    expect(store.windows[0].y).toBe(300);
+    expect(store.windows[0]?.x).toBe(200);
+    expect(store.windows[0]?.y).toBe(300);
   });
 
   it("updates size with min constraints", () => {
     const id = store.openWindow({ title: "X", type: "app", component: "X" });
     store.updateWindowSize(id, 300, 250);
-    expect(store.windows[0].width).toBe(300);
-    expect(store.windows[0].height).toBe(250);
+    expect(store.windows[0]?.width).toBe(300);
+    expect(store.windows[0]?.height).toBe(250);
     store.updateWindowSize(id, 10, 10);
-    expect(store.windows[0].width).toBe(280);
-    expect(store.windows[0].height).toBe(200);
+    expect(store.windows[0]?.width).toBe(280);
+    expect(store.windows[0]?.height).toBe(200);
   });
 
   it("sets opacity", () => {
     const id = store.openWindow({ title: "X", type: "app", component: "X" });
     store.setWindowOpacity(id, 0.5);
-    expect(store.windows[0].opacity).toBe(0.5);
+    expect(store.windows[0]?.opacity).toBe(0.5);
   });
 });
 
@@ -191,45 +191,45 @@ describe("widgetSlice", () => {
     store.addWidget("cpu", "CPU", 100, 100);
     expect(store.widgets).toHaveLength(1);
     const w = store.widgets[0];
-    expect(w.type).toBe("cpu");
-    expect(w.title).toBe("CPU");
-    expect(w.x).toBe(100);
-    expect(w.y).toBe(100);
-    expect(w.isPinned).toBe(false);
-    expect(w.isCollapsed).toBe(false);
+    expect(w?.type).toBe("cpu");
+    expect(w?.title).toBe("CPU");
+    expect(w?.x).toBe(100);
+    expect(w?.y).toBe(100);
+    expect(w?.isPinned).toBe(false);
+    expect(w?.isCollapsed).toBe(false);
   });
 
   it("removes a widget", () => {
     store.addWidget("cpu", "CPU", 0, 0);
-    const id = store.widgets[0].id;
+    const id = store.widgets[0]?.id ?? "";
     store.removeWidget(id);
     expect(store.widgets).toHaveLength(0);
   });
 
   it("updates widget position", () => {
     store.addWidget("weather", "Weather", 0, 0);
-    const id = store.widgets[0].id;
+    const id = store.widgets[0]?.id ?? "";
     store.updateWidgetPosition(id, 50, 60);
-    expect(store.widgets[0].x).toBe(50);
-    expect(store.widgets[0].y).toBe(60);
+    expect(store.widgets[0]?.x).toBe(50);
+    expect(store.widgets[0]?.y).toBe(60);
   });
 
   it("toggles collapse", () => {
     store.addWidget("music", "Music", 0, 0);
-    const id = store.widgets[0].id;
-    expect(store.widgets[0].isCollapsed).toBe(false);
+    const id = store.widgets[0]?.id ?? "";
+    expect(store.widgets[0]?.isCollapsed).toBe(false);
     store.toggleWidgetCollapse(id);
-    expect(store.widgets[0].isCollapsed).toBe(true);
+    expect(store.widgets[0]?.isCollapsed).toBe(true);
     store.toggleWidgetCollapse(id);
-    expect(store.widgets[0].isCollapsed).toBe(false);
+    expect(store.widgets[0]?.isCollapsed).toBe(false);
   });
 
   it("toggles pin", () => {
     store.addWidget("notes", "Notes", 0, 0);
-    const id = store.widgets[0].id;
-    expect(store.widgets[0].isPinned).toBe(false);
+    const id = store.widgets[0]?.id ?? "";
+    expect(store.widgets[0]?.isPinned).toBe(false);
     store.toggleWidgetPin(id);
-    expect(store.widgets[0].isPinned).toBe(true);
+    expect(store.widgets[0]?.isPinned).toBe(true);
   });
 });
 

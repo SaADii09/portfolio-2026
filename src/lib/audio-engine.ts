@@ -7,15 +7,18 @@ interface TrackPreset {
   gain: number;
 }
 
+/** The `t1` preset doubles as the fallback so `??` below is provably defined. */
+const DEFAULT_PRESET: TrackPreset = {
+  waveform: "sawtooth",
+  notes: [261.63, 329.63, 392, 523.25],
+  tempo: 0.4,
+  filterFreq: 800,
+  lfoRate: 2,
+  gain: 0.3,
+};
+
 const TRACK_PRESETS: Record<string, TrackPreset> = {
-  t1: {
-    waveform: "sawtooth",
-    notes: [261.63, 329.63, 392, 523.25],
-    tempo: 0.4,
-    filterFreq: 800,
-    lfoRate: 2,
-    gain: 0.3,
-  },
+  t1: DEFAULT_PRESET,
   t2: {
     waveform: "square",
     notes: [440, 554.37, 659.25, 880],
@@ -132,8 +135,9 @@ export class SynthEngine {
   private scheduleNote() {
     if (!this._isPlaying || !this.ctx || !this.filter) return;
 
-    const preset = TRACK_PRESETS[this._currentTrackId] ?? TRACK_PRESETS.t1;
+    const preset = TRACK_PRESETS[this._currentTrackId] ?? DEFAULT_PRESET;
     const note = preset.notes[this.noteIndex % preset.notes.length];
+    if (note === undefined) return; // empty/missing notes — nothing to play
     this.noteIndex++;
 
     const osc = this.ctx.createOscillator();
@@ -158,7 +162,7 @@ export class SynthEngine {
       void this.ctx.resume().catch(() => {});
     }
     this._currentTrackId = trackId;
-    const preset = TRACK_PRESETS[trackId] ?? TRACK_PRESETS.t1;
+    const preset = TRACK_PRESETS[trackId] ?? DEFAULT_PRESET;
     if (this.filter) {
       this.filter.frequency.value = preset.filterFreq;
     }

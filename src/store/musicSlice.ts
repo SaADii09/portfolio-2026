@@ -7,8 +7,14 @@ export interface Track {
   artist: string;
 }
 
+const DEFAULT_TRACK: Track = {
+  id: "t1",
+  title: "Neon Lights",
+  artist: "Synthwave Dreams",
+};
+
 const DEFAULT_TRACKS: Track[] = [
-  { id: "t1", title: "Neon Lights", artist: "Synthwave Dreams" },
+  DEFAULT_TRACK,
   { id: "t2", title: "Pixel Rain", artist: "8-Bit Universe" },
   { id: "t3", title: "Midnight Code", artist: "DevOS Beats" },
   { id: "t4", title: "Terminal Sunrise", artist: "The Debuggers" },
@@ -40,7 +46,7 @@ function tryAudio(fn: () => void): void {
 
 export const createMusicSlice: StateCreator<MusicSlice> = (set, get) => ({
   isPlaying: false,
-  currentTrack: DEFAULT_TRACKS[0],
+  currentTrack: DEFAULT_TRACK,
   volume: 0.7,
   queue: DEFAULT_TRACKS,
 
@@ -58,7 +64,9 @@ export const createMusicSlice: StateCreator<MusicSlice> = (set, get) => ({
   nextTrack: () => {
     const { queue, currentTrack } = get();
     const idx = queue.findIndex((t) => t.id === currentTrack.id);
-    const next = queue[(idx + 1) % queue.length];
+    // Queue length ≥ 1 in practice; clamp + fallback keep the read provably safe
+    // without changing the wrap-around behavior.
+    const next = queue[(idx + 1) % Math.max(1, queue.length)] ?? currentTrack;
     tryAudio(() => getSynthEngine().play(next.id));
     set({ currentTrack: next, isPlaying: true });
   },
@@ -66,7 +74,7 @@ export const createMusicSlice: StateCreator<MusicSlice> = (set, get) => ({
   prevTrack: () => {
     const { queue, currentTrack } = get();
     const idx = queue.findIndex((t) => t.id === currentTrack.id);
-    const prev = queue[(idx - 1 + queue.length) % queue.length];
+    const prev = queue[(idx - 1 + queue.length) % Math.max(1, queue.length)] ?? currentTrack;
     tryAudio(() => getSynthEngine().play(prev.id));
     set({ currentTrack: prev, isPlaying: true });
   },
