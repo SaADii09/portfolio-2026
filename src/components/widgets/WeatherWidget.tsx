@@ -54,7 +54,8 @@ export function WeatherWidget() {
     let cancelled = false;
     const isCurrent = () => !cancelled;
 
-    setLoading(true);
+    // No sync setState here (react-hooks/set-state-in-effect): initial mount
+    // already has loading === true; the Retry handler resets it for re-attempts.
     loadWeather()
       .catch(() => null) // failure state is simply "no data"
       .then((result) => {
@@ -69,7 +70,11 @@ export function WeatherWidget() {
     };
   }, [attempt]);
 
-  const retry = () => setAttempt((n) => n + 1);
+  const retry = () => {
+    setWeather(null);
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  };
 
   if (loading) {
     return (
