@@ -45,6 +45,51 @@ export function persistPartialize(state: AppStore): PersistedAppState {
   };
 }
 
+/**
+ * Defaults for every persisted key, captured from the real slices at module
+ * load so this mapping can never drift from what the slices actually declare.
+ * (The audio engine is only touched by actions, never at slice construction.)
+ */
+function createPersistedDefaults(): PersistedAppState {
+  const store = {} as AppStore;
+  const set = (partial: Partial<AppStore> | ((s: AppStore) => Partial<AppStore>)) => {
+    Object.assign(store, typeof partial === "function" ? partial(store) : partial);
+  };
+  const get = () => store;
+  // Same reasoning as the test harness: slices only use `set`/`get`.
+  const api = {} as never;
+  Object.assign(
+    store,
+    createWindowSlice(set, get, api),
+    createThemeSlice(set, get, api),
+    createWidgetSlice(set, get, api),
+    createMusicSlice(set, get, api),
+  );
+  return persistPartialize(store);
+}
+
+const PERSISTED_DEFAULTS = createPersistedDefaults();
+
+/**
+ * Migration for zustand-persist: merges an old persisted value over the
+ * current defaults, then reshapes through `persistPartialize` so unknown or
+ * obsolete keys drop and every persisted key rehydrates onto its own field.
+ * Merge order is pinned: defaults first, persisted values on top — the
+ * reverse would clobber the user's state with defaults.
+ */
+export function persistMigrator(persisted: unknown, _fromVersion: number): PersistedAppState {
+  return persistPartialize(mergePersisted(persisted));
+}
+
+function mergePersisted(persisted: unknown): AppStore {
+  const old = isRecord(persisted) ? persisted : {};
+  return { ...PERSISTED_DEFAULTS, ...old } as AppStore;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export const useStore = create<AppStore>()(
   persist(
     (...a) => ({
@@ -57,7 +102,9 @@ export const useStore = create<AppStore>()(
     }),
     {
       name: "devos-store",
+      version: 1,
       partialize: persistPartialize,
+      migrate: persistMigrator,
     },
   ),
 );

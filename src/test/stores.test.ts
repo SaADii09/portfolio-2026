@@ -4,7 +4,7 @@ import { createThemeSlice, ThemeSlice } from "@/store/themeSlice";
 import { createWidgetSlice, WidgetSlice } from "@/store/widgetSlice";
 import { createMusicSlice, MusicSlice } from "@/store/musicSlice";
 import { createUiSlice, UiSlice } from "@/store/uiSlice";
-import { useStore, persistPartialize } from "@/store";
+import { useStore, persistPartialize, persistMigrator, PersistedAppState } from "@/store";
 
 // jsdom has no Web Audio API — stub the synth engine so music slice logic is testable
 vi.mock("@/lib/audio-engine", () => ({
@@ -324,6 +324,94 @@ describe("persist partialize", () => {
     expect(raw.state.volume).toBe(0.33);
     expect(raw.state.currentTrack).toEqual(track);
     expect(raw.state.music).toBeUndefined();
+  });
+});
+
+describe("persist migrator", () => {
+  const PERSISTED_KEYS = [
+    "currentTrack",
+    "customTokens",
+    "glassBlur",
+    "glassOpacity",
+    "glassSaturate",
+    "theme",
+    "volume",
+    "widgets",
+    "windows",
+  ];
+
+  it("migrates a version-less state: persisted keys survive, missing keys get defaults, junk keys drop", () => {
+    const legacy = {
+      theme: "neon",
+      customTokens: { "--bg": "#000000" },
+      windows: [{ id: "w1" }],
+      widgets: [{ id: "wid1" }],
+      // Legacy pre-Phase-12 nested music shape + other stray fields
+      music: { volume: 0.2 },
+      isPlaying: true,
+      chatMessages: [{ role: "user", content: "hi" }],
+    };
+
+    const migrated = persistMigrator(legacy, 0);
+
+    expect(Object.keys(migrated).sort()).toEqual(PERSISTED_KEYS);
+    // Persisted values win over defaults (defaults merged FIRST)
+    expect(migrated.theme).toBe("neon");
+    expect(migrated.customTokens).toEqual({ "--bg": "#000000" });
+    expect(migrated.windows).toEqual([{ id: "w1" }]);
+    expect(migrated.widgets).toEqual([{ id: "wid1" }]);
+    // Missing keys land on real slice defaults
+    expect(migrated.volume).toBe(0.7);
+    expect(migrated.currentTrack.title).toBe("Neon Lights");
+    expect(migrated.glassBlur).toBe(0);
+    expect(migrated.glassSaturate).toBe(100);
+    expect(migrated.glassOpacity).toBe(70);
+    // Junk / obsolete keys never rehydrate
+    expect(migrated).not.toHaveProperty("music");
+    expect(migrated).not.toHaveProperty("isPlaying");
+    expect(migrated).not.toHaveProperty("chatMessages");
+  });
+
+  it("migrates an already-current version-1 state as an identity merge", () => {
+    const state: PersistedAppState = {
+      theme: "editorial",
+      customTokens: { "--bg": "#faf8f6" },
+      glassBlur: 12,
+      glassSaturate: 140,
+      glassOpacity: 65,
+      windows: [],
+      widgets: [],
+      volume: 0.4,
+      currentTrack: { id: "t3", title: "Midnight Code", artist: "DevOS Beats" },
+    };
+
+    expect(persistMigrator(state, 1)).toEqual(state);
+  });
+
+  it("does not crash on a junk customTokens entry and keeps the rest of the merge", () => {
+    const legacy = {
+      customTokens: { "--bg": "#000000", junkEntry: 5 },
+      theme: "retro",
+    };
+
+    const migrated = persistMigrator(legacy, 0);
+
+    expect(migrated.customTokens).toEqual({ "--bg": "#000000", junkEntry: 5 });
+    expect(migrated.theme).toBe("retro");
+    expect(migrated.windows).toEqual([]);
+    expect(migrated.volume).toBe(0.7);
+  });
+
+  it("returns pure defaults when nothing usable was persisted", () => {
+    const migrated = persistMigrator(null, 0);
+
+    expect(migrated.theme).toBe("retro");
+    expect(migrated.customTokens).toEqual({});
+    expect(migrated.glassBlur).toBe(0);
+    expect(migrated.windows).toEqual([]);
+    expect(migrated.widgets).toEqual([]);
+    expect(migrated.volume).toBe(0.7);
+    expect(migrated.currentTrack.title).toBe("Neon Lights");
   });
 });
 
