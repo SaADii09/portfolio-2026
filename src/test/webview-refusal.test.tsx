@@ -54,7 +54,9 @@ describe("decideRefusal", () => {
 
 describe("WebView fallback wiring", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    // `Date` is faked too: the supersede test below gates its unreadable/readable
+    // document stub on the fake clock (relative to the test's own start time).
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
   });
 
   afterEach(() => {
@@ -152,6 +154,47 @@ describe("WebView fallback wiring", () => {
 
     act(() => {
       vi.advanceTimersByTime(3600);
+    });
+    restoreContentDocument();
+
+    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("second load supersedes a pending stale probe (webkit two-commit mounts)", () => {
+    // WebKit fires two load events per mount: an initial readable-blank
+    // about:blank commit, then the real document. The probe scheduled by the
+    // first load must be canceled by the second load — a lost timer id would
+    // leak past cleanup/unmount, and if the stale probe fires during the
+    // load₁→load₂ gap it reads the mid-navigation document and mis-fails the
+    // frame (the newer probe's ok path does not reset `failed`).
+    //
+    // Stub the frame document time-gated on the fake clock: unreadable during
+    // the gap window, readable once the second commit has landed. With the
+    // supersede fix only the second probe runs (after the gate) → frame stays.
+    // Without it the stale probe fires first (before the gate) → fallback.
+    const clockStart = Date.now();
+    Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
+      get() {
+        if (Date.now() - clockStart < 400) {
+          throw new DOMException("unreadable mid-navigation", "SecurityError");
+        }
+        return { body: { childElementCount: 2 } } as unknown as Document;
+      },
+      configurable: true,
+    });
+    render(<WebView url="/embeddable-ok" />);
+
+    const frame = screen.getByTitle("Website preview");
+    act(() => {
+      fireEvent.load(frame); // commit 1 — probe due at +250ms
+    });
+    act(() => {
+      vi.advanceTimersByTime(200);
+      fireEvent.load(frame); // commit 2 — must supersede commit 1's probe
+    });
+    act(() => {
+      vi.advanceTimersByTime(320); // runs only the surviving probe (t=520 > gate)
     });
     restoreContentDocument();
 

@@ -148,6 +148,13 @@ export function WebView({ url }: WebViewProps) {
     }
   }, []);
 
+  const cancelProbe = useCallback(() => {
+    if (probeTimerRef.current !== null) {
+      clearTimeout(probeTimerRef.current);
+      probeTimerRef.current = null;
+    }
+  }, []);
+
   const probeFrame = useCallback((): FrameSignal => {
     const doc = readFrameDocument(iframeRef.current);
     if (doc && doc.body) {
@@ -167,6 +174,17 @@ export function WebView({ url }: WebViewProps) {
   }, [clearWatchdog]);
 
   const handleLoad = useCallback(() => {
+    // WebKit fires TWO load events per mount (initial readable-blank
+    // about:blank commit, then the real document). The second load must
+    // supersede, not overwrite, the pending probe — otherwise the first
+    // timer's id is lost: it leaks past cleanup/unmount and can fire during
+    // the gap, reading a mid-navigation document and mis-failing the frame.
+    // WebKit fires TWO load events per mount (initial readable-blank
+    // about:blank commit, then the real document). The second load must
+    // supersede, not overwrite, the pending probe — otherwise the first
+    // timer's id is lost: it leaks past cleanup/unmount and can fire during
+    // the gap, reading a mid-navigation document and mis-failing the frame.
+    cancelProbe();
     probeTimerRef.current = setTimeout(() => {
       const signal = probeFrame();
       if (decideRefusal([signal]) === "refused") {
@@ -176,15 +194,12 @@ export function WebView({ url }: WebViewProps) {
       clearWatchdog();
       setLoading(false);
     }, FRAME_PROBE_DELAY_MS);
-  }, [probeFrame, markFailed, clearWatchdog]);
+  }, [probeFrame, markFailed, clearWatchdog, cancelProbe]);
 
   const handleError = useCallback(() => {
-    if (probeTimerRef.current !== null) {
-      clearTimeout(probeTimerRef.current);
-      probeTimerRef.current = null;
-    }
+    cancelProbe();
     markFailed();
-  }, [markFailed]);
+  }, [markFailed, cancelProbe]);
 
   const handleRetry = useCallback(() => {
     setScreenshotFailed(false);
