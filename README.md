@@ -92,7 +92,7 @@ src/
 ├── store/                  # Zustand slices (window, theme, widget, chat, music, ui)
 ├── hooks/                  # Drag, glass glare, keyboard shortcuts, palette, long-press, viewport clamp
 ├── types/                  # TypeScript interfaces
-└── lib/                    # App registry, shortcuts, palette data/DOM, terminal commands, RAG, design tokens
+└── lib/                    # App registry, shortcuts, palette data/DOM, terminal commands, RAG
 ```
 
 ## Design System
@@ -103,7 +103,7 @@ Three themes defined entirely via CSS custom properties — no hardcoded colors 
 - **Neon City** — dark background, cyan/magenta/green accents, neon glow effects
 - **Classic Editorial** — cream/sepia tones, serif typography, subtle shadows
 
-Theming tokens live in `src/app/globals.css` via `@theme inline`; glass behaviour is driven by six CSS variables (`--glass-blur`, `--glass-saturate`, `--glass-opacity-*`, `--glass-edge-opacity`, `--glass-specular-opacity`) with per-theme presets. Design tokens are mirrored in `src/lib/design-tokens.ts` and checked by `scripts/validate-design.ts`.
+Theming tokens live in `src/app/globals.css` via `@theme inline`; glass behaviour is driven by six CSS variables (`--glass-blur`, `--glass-saturate`, `--glass-opacity-*`, `--glass-edge-opacity`, `--glass-specular-opacity`) with per-theme presets. Design tokens live in `lib/design-tokens.ts` (root-level, imported by the validator) and are checked by `scripts/validate-design.ts`.
 
 ## Testing
 
