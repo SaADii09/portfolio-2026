@@ -33,6 +33,27 @@ function createNoiseTexture(w: number, h: number): ImageData | null {
   return img;
 }
 
+const PARTICLE_BASE_COUNTS: Record<string, { far: number; near: number }> = {
+  retro: { far: 25, near: 25 },
+  neon: { far: 30, near: 30 },
+  editorial: { far: 28, near: 27 },
+};
+
+/** Max particles per layer, scaled to viewport width (floored at 0.5x, capped at 1x of a 1440px-wide reference). */
+export function countParticles(theme: string, vw: number): { far: number; near: number } {
+  const base = PARTICLE_BASE_COUNTS[theme] || PARTICLE_BASE_COUNTS.retro;
+  const scale = Math.max(0.5, Math.min(1, vw / 1440));
+  return {
+    far: Math.round(base.far * scale),
+    near: Math.round(base.near * scale),
+  };
+}
+
+/** Animation runs only when the user has not requested reduced motion. */
+export function shouldAnimate(reduceMotion: boolean): boolean {
+  return !reduceMotion;
+}
+
 export function Wallpaper() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useStore((s) => s.theme);
@@ -44,20 +65,35 @@ export function Wallpaper() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let animate = shouldAnimate(mediaQuery.matches);
     let w = window.innerWidth;
     let h = window.innerHeight;
-    canvas.width = w;
-    canvas.height = h;
+    // HiDPI: render at device resolution, capped at 2x to bound the buffer cost
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     let mouseX = w / 2;
     let mouseY = h / 2;
 
+    let noiseTexture = createNoiseTexture(w * dpr, h * dpr);
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+
     const handleResize = () => {
       w = window.innerWidth;
       h = window.innerHeight;
-      canvas.width = w;
-      canvas.height = h;
-      noiseTexture = createNoiseTexture(w, h);
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Debounce the expensive noise-texture regeneration; geometry updates above stay immediate
+      if (resizeTimer !== undefined) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        resizeTimer = undefined;
+        noiseTexture = createNoiseTexture(w * dpr, h * dpr);
+      }, 150);
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -65,14 +101,8 @@ export function Wallpaper() {
       mouseY = e.clientY;
     };
 
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("mousemove", handleMouseMove);
-
-    let noiseTexture = createNoiseTexture(w, h);
-
     const particles: Particle[] = [];
-    const FAR_MAX = theme === "neon" ? 30 : theme === "editorial" ? 28 : 25;
-    const NEAR_MAX = theme === "neon" ? 30 : theme === "editorial" ? 27 : 25;
+    const { far: FAR_MAX, near: NEAR_MAX } = countParticles(theme, window.innerWidth);
 
     const colors: Record<string, string[]> = {
       retro: ["#ff9f1c", "#ffcc00", "#00e5ff", "#ff69b4"],
@@ -251,15 +281,36 @@ export function Wallpaper() {
         ctx.putImageData(noiseTexture, 0, 0);
       }
 
-      animRef.current = requestAnimationFrame(draw);
+      if (animate) {
+        animRef.current = requestAnimationFrame(draw);
+      }
     };
 
-    animRef.current = requestAnimationFrame(draw);
-
-    return () => {
+    // Tear down whatever mode is running, then (re)enter the mode the current
+    // reduced-motion preference asks for. Used at mount and on preference flips;
+    // detach calls are no-ops on a fresh mount.
+    const applyMotionMode = () => {
+      animate = shouldAnimate(mediaQuery.matches);
       cancelAnimationFrame(animRef.current);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("mousemove", handleMouseMove);
+      if (animate) {
+        window.addEventListener("resize", handleResize);
+        window.addEventListener("mousemove", handleMouseMove);
+        animRef.current = requestAnimationFrame(draw); // animation loop
+      } else {
+        draw(); // reduced motion: freeze on a single static frame
+      }
+    };
+    mediaQuery.addEventListener("change", applyMotionMode);
+    applyMotionMode();
+
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      if (resizeTimer !== undefined) clearTimeout(resizeTimer);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("mousemove", handleMouseMove);
+      mediaQuery.removeEventListener("change", applyMotionMode);
     };
   }, [theme]);
 
