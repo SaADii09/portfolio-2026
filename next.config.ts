@@ -1,13 +1,26 @@
 import type { NextConfig } from "next";
 
+// Dev runtime needs 'unsafe-eval' (Turbopack/webpack HMR + dynamic imports);
+// production must not have it, so it is gated on the environment Next.js sets.
+// 'unsafe-inline' stays on script-src until the nonce upgrade (inline boot
+// script — documented in the hardening spec).
+const scriptSrc = `script-src 'self' 'unsafe-inline'${
+  process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""
+}`;
+
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // need 'unsafe-eval' for next dynamic imports
+  scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "img-src 'self' data: blob: https:",
   "frame-src 'self' https:",
-  "connect-src 'self' https:",
+  // Vercel Analytics (<Analytics /> in layout.tsx) beacons to this origin
+  // client-side; a bare 'self' would silently block it.
+  "connect-src 'self' https://va.vercel-scripts.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
 ].join("; ");
 
 const nextConfig: NextConfig = {

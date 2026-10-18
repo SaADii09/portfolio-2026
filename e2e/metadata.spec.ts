@@ -105,3 +105,39 @@ test.describe("SEO truth & accessibility metadata", () => {
     expect(lastmod).toBe(SITE_LAST_UPDATED);
   });
 });
+
+test.describe("Security headers", () => {
+  /**
+   * The `script-src` assertion only holds against a production server: the
+   * Next.js dev runtime (HMR/dynamic imports) legitimately needs
+   * 'unsafe-eval', and the dev-server default launches `npm run dev`. Set
+   * `PLAYWRIGHT_NEXT_SERVER_MODE=production` when the suite runs against a
+   * `next build && next start` server (this is what the final-gate spot check
+   * does) to enable the assertion.
+   */
+  const isProductionServer = process.env.PLAYWRIGHT_NEXT_SERVER_MODE === "production";
+
+  test("serves a hardened Content-Security-Policy", async ({ page }) => {
+    await gotoApp(page);
+
+    const response = await page.request.get("/");
+
+    expect(response.status()).toBe(200);
+    const csp = response.headers()["content-security-policy"];
+    expect(csp).toBeTruthy();
+    // Stronger directives added by the hardening lane.
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'self'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    // Vercel Analytics mounts client-side beacons to this origin; a bare
+    // 'self' connect-src would silently block them.
+    expect(csp).toContain("va.vercel-scripts.com");
+    if (isProductionServer) {
+      const scriptSrc = csp
+        .split(";")
+        .find((directive) => directive.trim().startsWith("script-src"));
+      expect(scriptSrc).toBeDefined();
+      expect(scriptSrc).not.toContain("'unsafe-eval'");
+    }
+  });
+});
