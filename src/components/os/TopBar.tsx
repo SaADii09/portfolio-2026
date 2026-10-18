@@ -11,6 +11,7 @@ import {
   useMusicVolume,
 } from "@/hooks/useOsSelectors";
 import { openApp } from "@/lib/os-actions";
+import { THEME_CHIP_COLORS } from "../../../lib/design-tokens";
 import type { ThemeName } from "@/types/theme";
 import { GlassSlider } from "./GlassSlider";
 import {
@@ -32,9 +33,9 @@ import {
 } from "lucide-react";
 
 const THEMES: { name: ThemeName; color: string; label: string }[] = [
-  { name: "retro", color: "#ff9f1c", label: "Retro" },
-  { name: "neon", color: "#ff00ff", label: "Neon" },
-  { name: "editorial", color: "#f7a501", label: "Editorial" },
+  { name: "retro", color: THEME_CHIP_COLORS.retro, label: "Retro" },
+  { name: "neon", color: THEME_CHIP_COLORS.neon, label: "Neon" },
+  { name: "editorial", color: THEME_CHIP_COLORS.editorial, label: "Editorial" },
 ];
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -809,7 +810,7 @@ function MobileTopBar() {
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[9999]"
             style={{
-              background: "rgba(0,0,0,0.3)",
+              background: "rgba(0,0,0,0.3)", // design-token-exempt: theme-invariant dark scrim over app content
               top: 32,
               pointerEvents: panelY > -200 ? "auto" : "none",
             }}

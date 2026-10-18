@@ -115,12 +115,15 @@ export function ContactApp() {
           style={{
             background: "var(--bg-primary)",
             color: "var(--text-primary)",
-            borderColor: errors.name ? "#ff4444" : "var(--border)",
+            borderColor: errors.name ? "#ff4444" : "var(--border)", // design-token-exempt: semantic validation-error red; no error token exists in the theme system
           }}
           placeholder="Your name"
         />
         {errors.name && (
-          <span className="text-[10px] flex items-center gap-1" style={{ color: "#ff4444" }}>
+          <span
+            className="text-[10px] flex items-center gap-1"
+            style={{ color: "#ff4444" }} // design-token-exempt: semantic validation-error red; no error token exists in the theme system
+          >
             <AlertCircle size={10} /> {errors.name}
           </span>
         )}
@@ -138,12 +141,15 @@ export function ContactApp() {
           style={{
             background: "var(--bg-primary)",
             color: "var(--text-primary)",
-            borderColor: errors.email ? "#ff4444" : "var(--border)",
+            borderColor: errors.email ? "#ff4444" : "var(--border)", // design-token-exempt: semantic validation-error red; no error token exists in the theme system
           }}
           placeholder="your@email.com"
         />
         {errors.email && (
-          <span className="text-[10px] flex items-center gap-1" style={{ color: "#ff4444" }}>
+          <span
+            className="text-[10px] flex items-center gap-1"
+            style={{ color: "#ff4444" }} // design-token-exempt: semantic validation-error red; no error token exists in the theme system
+          >
             <AlertCircle size={10} /> {errors.email}
           </span>
         )}
@@ -161,12 +167,15 @@ export function ContactApp() {
           style={{
             background: "var(--bg-primary)",
             color: "var(--text-primary)",
-            borderColor: errors.message ? "#ff4444" : "var(--border)",
+            borderColor: errors.message ? "#ff4444" : "var(--border)", // design-token-exempt: semantic validation-error red; no error token exists in the theme system
           }}
           placeholder="Your message (min 10 characters)"
         />
         {errors.message && (
-          <span className="text-[10px] flex items-center gap-1" style={{ color: "#ff4444" }}>
+          <span
+            className="text-[10px] flex items-center gap-1"
+            style={{ color: "#ff4444" }} // design-token-exempt: semantic validation-error red; no error token exists in the theme system
+          >
             <AlertCircle size={10} /> {errors.message}
           </span>
         )}

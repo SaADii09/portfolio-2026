@@ -108,7 +108,84 @@ export const DYNAMIC_COLOR_CONTEXTS = new Set([
   "tailwind.config.ts",
   // OG image is not a themed surface (no CSS cascade) — documented exception
   "opengraph-image.tsx",
+  // Canvas wallpaper paints raw theme palettes in 2D contexts — no CSS
+  // cascade applies to ctx.fillStyle/strokeStyle, so tokens are meaningless
+  // there and the per-theme palette values are intentional literals.
+  "Wallpaper.tsx",
 ]);
+
+/**
+ * Swatch colors for the theme selector chips (desktop control center and
+ * mobile pull-down). Centralized so TopBar and the design validator share one
+ * source of truth instead of the validator flagging the literals in TopBar.
+ */
+export const THEME_CHIP_COLORS: Record<ThemeName, string> = {
+  retro: "#ff9f1c",
+  neon: "#ff00ff",
+  editorial: "#f7a501",
+};
+
+// ── Widened color-literal checking ───────────────────
+//
+// The old inline re in the validator blinded itself to every quoted literal
+// (a `(?<!['"`])` lookbehind) and skipped whole lines carrying `//`, so
+// `color: "#ff9f1c"` was never reported. The checks now live here as pure
+// predicates shared with `scripts/validate-design.ts` (which keeps its own
+// `main()`/`process.exit()` logic — never import that script into vitest).
+
+/**
+ * Matches color literals with no guard against adjacent quotes: the widened
+ * check must surface literals inside quoted strings too. Covers 3/6/8-digit
+ * hex, rgb(a) and hsl(a). Global flag for `matchAll` consumption.
+ */
+export const COLOR_LITERAL_RE: RegExp =
+  /(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b|rgba?\([^)]+\)|hsla?\([^)]+\))/gi;
+
+function isHexString(body: string): boolean {
+  return /^[a-fA-F0-9]+$/.test(body);
+}
+
+function hasNoColorMatch(line: string): boolean {
+  // Fresh, flag-free regex: the shared `g` flag carries `lastIndex` state a
+  // bare `.test()` would leak across calls.
+  return !new RegExp(COLOR_LITERAL_RE.source).test(line);
+}
+
+/**
+ * Masks URL strings and non-hex `#fragment` strings for checking purposes.
+ * A fragment whose body IS valid hex (`#face` — chars [a-fA-F0-9]) is left
+ * untouched so the widened check still sees it. Comment contexts are masked
+ * too, so a literal is judged by the code text around it, not its whole line.
+ */
+export function stripNonColorContexts(line: string): string {
+  let rest = line.replace(/['"`](?:https?:)?\/\/[^'"`]*['"`]/g, "");
+  // Quoted `#…` fragments: mask unless the body is valid hex
+  rest = rest.replace(/['"`](#[^'"`]*)['"`]/g, (frag, body: string) =>
+    isHexString(body.slice(1)) ? frag : "",
+  );
+  // Block comment pairs, then a lone `/*` comment tail
+  rest = rest.replace(/\/\*[\s\S]*?\*\/|\/\*.*$/g, "");
+  // Line-comment tail (bare `//` only — quoted URLs are already masked)
+  rest = rest.replace(/\/\/.*$/g, "");
+  return rest;
+}
+
+/**
+ * True when a line carries the per-line exemption marker
+ * `// design-token-exempt: <reason>` pinned by the design spec.
+ */
+export function hasTokenExemptMarker(line: string): boolean {
+  return line.includes("// design-token-exempt:");
+}
+
+/**
+ * True iff every widened-color match on the line survives the stripping /
+ * marker checks — i.e. nothing here is a bare code-context color literal.
+ */
+export function isAllowedColorLiteral(line: string): boolean {
+  if (hasTokenExemptMarker(line)) return true;
+  return hasNoColorMatch(stripNonColorContexts(line));
+}
 
 export function isHardcodedColor(value: string): boolean {
   return (

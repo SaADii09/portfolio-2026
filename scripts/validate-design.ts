@@ -14,6 +14,8 @@ import {
   TAILWIND_TOKEN_MAP,
   ALLOWED_INLINE_STYLE_PROPS,
   DYNAMIC_COLOR_CONTEXTS,
+  COLOR_LITERAL_RE,
+  isAllowedColorLiteral,
   isHardcodedColor,
 } from "../lib/design-tokens";
 
@@ -77,41 +79,40 @@ function isTokenExemptFile(filePath: string): boolean {
 function checkHardcodedColors(content: string, filePath: string, lines: string[]): void {
   if (isTokenExemptFile(filePath)) return;
 
-  const colorRegex =
-    /(?<!['"`]var\(--)(?<!['"`])(#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b|rgba?\([^)]+\)|hsla?\([^)]+\))/gi;
-  const excludePatterns = [
-    /['"`]\/\/[^'"]*['"`]/, // URLs
-    /['"`]#[^'"]*['"`]/, // hash fragments
-    /\/\/.*/, // line comments
-    /\*.*\*/, // block comments
-  ];
-
-  for (const match of content.matchAll(colorRegex)) {
-    const fullContent = match[0];
-    const pos = match.index!;
-
-    // Compute line/col
-    const before = content.slice(0, pos);
-    const line = (before.match(/\n/g) || []).length + 1;
-    const lastNewline = before.lastIndexOf("\n");
-    const column = pos - lastNewline;
-
-    const lineContent = lines[line - 1];
-
-    // Skip if inside a comment, URL, or allowed context
-    if (excludePatterns.some((p) => p.test(lineContent))) continue;
-    if (lineContent?.includes("//")) continue;
-
-    const suggestion = getTailwindSuggestion(fullContent);
-    violations.push({
-      file: filePath,
-      line,
-      column,
-      severity: "ERROR",
-      message: `Hardcoded color "${fullContent}" found. Use a design token instead.`,
-      suggestion: suggestion || `Replace with a CSS variable from globals.css`,
-    });
+  for (let i = 0; i < lines.length; i++) {
+    flagColorLine(lines[i] ?? "", filePath, i + 1);
   }
+}
+
+/**
+ * Per-line widened color check: every COLOR_LITERAL_RE match is evaluated,
+ * not just unquoted ones — the allowed-context decision (comments, URLs,
+ * fragments, the per-line exempt marker) is delegated to `isAllowedColorLiteral`
+ * in `lib/design-tokens.ts`, which masks match-scoped contexts instead of
+ * skipping whole lines.
+ */
+function flagColorLine(lineContent: string, filePath: string, lineNumber: number): void {
+  if (isAllowedColorLiteral(lineContent)) return;
+
+  for (const match of lineContent.matchAll(COLOR_LITERAL_RE)) {
+    flagColorMatch(match, filePath, lineNumber);
+  }
+}
+
+function flagColorMatch(
+  match: RegExpExecArray & { index: number },
+  filePath: string,
+  lineNumber: number,
+): void {
+  const suggestion = getTailwindSuggestion(match[0]) || `Replace with a CSS variable from globals.css`;
+  violations.push({
+    file: filePath,
+    line: lineNumber,
+    column: match.index + 1,
+    severity: "ERROR",
+    message: `Hardcoded color "${match[0]}" found. Use a design token instead.`,
+    suggestion,
+  });
 }
 
 function getTailwindSuggestion(color: string): string {
@@ -146,6 +147,8 @@ function checkInlineStyleViolations(content: string, filePath: string): void {
     const before = content.slice(0, pos);
     const line = (before.match(/\n/g) || []).length + 1;
 
+    if (!styleContent) continue; // empty style block — nothing to check
+
     if (isHardcodedColor(styleContent)) {
       violations.push({
         file: filePath,
@@ -161,6 +164,7 @@ function checkInlineStyleViolations(content: string, filePath: string): void {
     const propRegex = /(\w+):\s*(['"`][^'"`]+['"`]|\d+)/g;
     for (const propMatch of styleContent.matchAll(propRegex)) {
       const propName = propMatch[1];
+      if (!propName) continue; // empty prop name — nothing to report
       if (!ALLOWED_INLINE_STYLE_PROPS.has(propName) && !propName.startsWith("--")) {
         violations.push({
           file: filePath,

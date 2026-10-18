@@ -1,32 +1,31 @@
 "use client";
 
 import { useStore } from "@/store";
-import type { ThemeName } from "@/types/theme";
+import { THEMES, type ThemeName } from "../../../lib/design-tokens";
 import { useGlassControls, useMusicPlayback, useMusicVolume } from "@/hooks/useOsSelectors";
 import { GlassSlider } from "@/components/os/GlassSlider";
 import { Play, Pause, SkipBack, SkipForward, Volume2, RotateCcw } from "lucide-react";
 
-const THEMES: { name: ThemeName; label: string; colors: string[] }[] = [
-  {
-    name: "retro",
-    label: "Retro 2D",
-    colors: ["#ff9f1c", "#ffbf00", "#2ec4b6"],
-  },
-  {
-    name: "neon",
-    label: "Neon City",
-    colors: ["#00f5ff", "#ff00ff", "#39ff14"],
-  },
-  {
-    name: "editorial",
-    label: "Classic Editorial",
-    colors: ["#f7a501", "#23251d", "#2c84e0"],
-  },
-];
+/** Swatch preview per theme: its accent-1/2/3 palette straight from the token source. */
+const THEME_SWATCHES: { name: ThemeName; label: string; colors: [string, string, string] }[] = (
+  [
+    { name: "retro", label: "Retro 2D" },
+    { name: "neon", label: "Neon City" },
+    { name: "editorial", label: "Classic Editorial" },
+  ] as { name: ThemeName; label: string }[]
+).map(({ name, label }) => ({
+  name,
+  label,
+  colors: [
+    THEMES[name]["accent-1"],
+    THEMES[name]["accent-2"],
+    THEMES[name]["accent-3"],
+  ] as [string, string, string],
+}));
 
 const COLOR_FALLBACKS: Record<string, string> = {
-  "accent-1": "#ff9f1c",
-  "bg-primary": "#2d1b14",
+  "accent-1": THEMES.retro["accent-1"],
+  "bg-primary": THEMES.retro["bg-primary"],
 };
 
 /** Current custom token, or its default when the user has not picked one. */
@@ -69,7 +68,7 @@ export function ControlPanelApp() {
       <section>
         <h3 className="font-display text-xs mb-2.5 text-os-accent">Theme</h3>
         <div className="flex gap-2">
-          {THEMES.map((t) => (
+          {THEME_SWATCHES.map((t) => (
             <button
               key={t.name}
               onClick={() => setTheme(t.name)}

@@ -105,7 +105,10 @@ export function TerminalApp() {
         className="flex items-center gap-2 p-3 border-t"
         style={{ borderColor: "#00ff4133", background: "#0a0a0a" }} // design-token-exempt: fixed CRT terminal palette (theme-invariant) by design
       >
-        <span style={{ color: "#00ff41" }}>$</span> {/* design-token-exempt: fixed CRT terminal palette (theme-invariant) by design */}
+        <span style={{ color: "#00ff41" }}>$</span> {/* // design-token-exempt: fixed CRT terminal palette (theme-invariant) by design */}
+        {/* the checker's pinned marker is the substring `// design-token-exempt: <reason>`,
+            which is why the `//` is quoted inside the JSX block comment — it must sit on
+            the same line as the color literal it exempts */}
         <input
           ref={inputRef}
           value={input}

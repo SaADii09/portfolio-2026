@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useStore } from "@/store";
 import { Plus, X, Edit3, Check } from "lucide-react";
 
-const COLORS = ["#fef08a", "#bbf7d0", "#bfdbfe", "#fbcfe8", "#e9d5ff"];
+const COLORS = ["#fef08a", "#bbf7d0", "#bfdbfe", "#fbcfe8", "#e9d5ff"]; // design-token-exempt: sticky-note pastel swatches are intentionally literal note data
 
 interface Note {
   id: string;
@@ -48,7 +48,7 @@ export function NotesWidget({ id }: NotesWidgetProps) {
     const note: Note = {
       id: `note-${noteCounter++}`,
       text,
-      color: COLORS[localNotes.length % COLORS.length] ?? COLORS[0] ?? "#fef08a",
+      color: COLORS[localNotes.length % COLORS.length] ?? COLORS[0] ?? "#fef08a", // design-token-exempt: persists as literal note data alongside the sticky swatches above
     };
     const updated = [...localNotes, note];
     setLocalNotes(updated);
@@ -110,7 +110,7 @@ export function NotesWidget({ id }: NotesWidgetProps) {
           <div
             key={note.id}
             className="group flex items-start gap-1 p-2 rounded-os text-xs leading-relaxed"
-            style={{ background: note.color, color: "#1a1a1a" }}
+            style={{ background: note.color, color: "#1a1a1a" }} // design-token-exempt: fixed dark ink on pastel swatches, theme-invariant
           >
             {editingId === note.id ? (
               <div className="flex-1 flex gap-1">
