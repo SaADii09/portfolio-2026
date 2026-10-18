@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
@@ -679,6 +679,15 @@ function MobileTopBar() {
     [snapTo],
   );
 
+  // Mount-time correction for the resting `panelY = -400` initial state: -400
+  // only fully hides a panel ≤ 400px tall. If the measured panel is taller,
+  // re-snap to it before first paint (the shade is always closed at mount, so
+  // -400 can only ever leave a protruding sliver over the status bar here).
+  useLayoutEffect(() => {
+    const height = panelRef.current?.getBoundingClientRect().height ?? 400;
+    if (height > 400) setPanelY(-height);
+  }, []);
+
   const handleKnobPointerDown = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
@@ -814,7 +823,7 @@ function MobileTopBar() {
               top: 32,
               pointerEvents: panelY > -200 ? "auto" : "none",
             }}
-            onClick={() => snapTo(-400)}
+            onClick={snapToClosed}
           />
         )}
       </AnimatePresence>
