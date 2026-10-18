@@ -105,12 +105,13 @@ afterEach(() => {
 });
 
 describe("Wallpaper reduced motion", () => {
-  it("draws one static frame and never starts rAF or attaches mousemove/resize listeners", () => {
+  it("draws one static frame, tracks resize, and never starts rAF or attaches mousemove", () => {
     reduceMotion = true;
     const { container } = render(<Wallpaper />);
     expect(container.querySelector("canvas")).not.toBeNull();
     expect(rafSpy).not.toHaveBeenCalled();
-    expect(callsWithType(addSpy, "resize")).toHaveLength(0);
+    // resize is tracked in both modes (cheap geometric update); mousemove is not
+    expect(callsWithType(addSpy, "resize")).toHaveLength(1);
     expect(callsWithType(addSpy, "mousemove")).toHaveLength(0);
     // exactly one static frame drawn (clearRect runs once, no loop)
     expect(ctxStub.clearRect).toHaveBeenCalledTimes(1);
@@ -132,8 +133,9 @@ describe("Wallpaper reduced motion", () => {
     expect(rafCallsAnimated).toBeGreaterThan(0);
     flipReducedMotion(true);
     expect(cancelRafSpy).toHaveBeenCalled();
-    expect(callsWithType(removeSpy, "resize").length).toBeGreaterThanOrEqual(1);
+    // mousemove detaches on flip-back; resize stays attached in both modes
     expect(callsWithType(removeSpy, "mousemove").length).toBeGreaterThanOrEqual(1);
+    expect(callsWithType(removeSpy, "resize")).toHaveLength(0);
     // static frame drawn on flip-back (the animated rAF stub never executed draw)
     expect(ctxStub.clearRect).toHaveBeenCalledTimes(1);
   });
@@ -202,5 +204,25 @@ describe("Wallpaper resize", () => {
     expect(ctxStub.createImageData).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(1);
     expect(ctxStub.createImageData).toHaveBeenCalledTimes(2);
+  });
+
+  it("reduced motion: a resize repaints exactly one static frame after the debounce window", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    reduceMotion = true;
+    render(<Wallpaper />);
+    // one static frame + one initial noise generation at mount
+    expect(ctxStub.clearRect).toHaveBeenCalledTimes(1);
+    expect(ctxStub.createImageData).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 10; i++) {
+      window.dispatchEvent(new Event("resize"));
+    }
+    // debounce still pending — no extra draw, no noise regen
+    vi.advanceTimersByTime(149);
+    expect(ctxStub.clearRect).toHaveBeenCalledTimes(1);
+    expect(ctxStub.createImageData).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    // debounced tail regenerates noise AND repaints exactly one static frame
+    expect(ctxStub.createImageData).toHaveBeenCalledTimes(2);
+    expect(ctxStub.clearRect).toHaveBeenCalledTimes(2);
   });
 });

@@ -100,6 +100,7 @@ export function Wallpaper() {
       resizeTimer = setTimeout(() => {
         resizeTimer = undefined;
         noiseTexture = createNoiseTexture(w * dpr, h * dpr);
+        if (!animate) draw(); // reduced motion: repaint the static frame on the new geometry
       }, 150);
     };
 
@@ -107,6 +108,10 @@ export function Wallpaper() {
       mouseX = e.clientX;
       mouseY = e.clientY;
     };
+
+    // Resize is tracked in BOTH modes — the geometry update is cheap, so even
+    // reduced-motion users get a correctly sized/repainted static frame.
+    window.addEventListener("resize", handleResize);
 
     const particles: Particle[] = [];
     const { far: FAR_MAX, near: NEAR_MAX } = countParticles(theme, window.innerWidth);
@@ -295,15 +300,12 @@ export function Wallpaper() {
     };
 
     // Tear down whatever mode is running, then (re)enter the mode the current
-    // reduced-motion preference asks for. Used at mount and on preference flips;
-    // detach calls are no-ops on a fresh mount.
+    // reduced-motion preference asks for. Used at mount and on preference flips.
     const applyMotionMode = () => {
       animate = shouldAnimate(mediaQuery.matches);
       cancelAnimationFrame(animRef.current);
-      window.removeEventListener("resize", handleResize);
       window.removeEventListener("mousemove", handleMouseMove);
       if (animate) {
-        window.addEventListener("resize", handleResize);
         window.addEventListener("mousemove", handleMouseMove);
         animRef.current = requestAnimationFrame(draw); // animation loop
       } else {
