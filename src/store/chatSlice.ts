@@ -93,14 +93,20 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
 
       const decoder = new TextDecoder();
 
+      // Accumulate across reader chunks: a token payload can be split mid-line,
+      // so only complete lines are handed to the parser until the next chunk.
+      let buffer = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n").filter((l) => l.startsWith("data: "));
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
           try {
             const data = JSON.parse(line.slice(6));
             if (data.type === "token") {
@@ -114,6 +120,25 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
           } catch {
             // skip malformed lines
           }
+        }
+      }
+
+      // Flush the decoder's tail and parse any remaining complete line.
+      buffer += decoder.decode();
+      for (const line of buffer.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === "token") {
+            const text: string = data.text;
+            set((s) => ({
+              messages: s.messages.map((m) =>
+                m.id === assistantId ? { ...m, content: m.content + text } : m,
+              ),
+            }));
+          }
+        } catch {
+          // skip malformed lines
         }
       }
     } catch {
