@@ -90,6 +90,109 @@ describe("chat route mid-stream failure", () => {
     expect(events[1]).toEqual({ type: "token", text: " there" });
     expect(events[2]).toEqual({ type: "error", text: INTERRUPTION_TEXT });
   });
+
+  it("swallows terminal enqueue/close failures when the client aborted mid-stream", async () => {
+    // Aborted-controller simulation: the global ReadableStream is replaced
+    // with a fake whose controller goes dead (enqueue/close throw) once
+    // disconnect() is called — exactly the state after a client cancel. Real
+    // streams silently error on a rejected start(), so the fake surfaces
+    // start()'s outcome explicitly; with the guards, the TypeError from the
+    // dead controller must never leave start().
+    class RiggedReadableStream extends ReadableStream {
+      static instance: RiggedReadableStream | null = null;
+      static startRejection: unknown = undefined;
+      static terminalEvent: string | null = null;
+      static closeCalls = 0;
+      #dead = false;
+      constructor(source: { start: (c: unknown) => unknown }) {
+        const controller = {
+          enqueue: (chunk: unknown): void => {
+            const text = JSON.parse(new TextDecoder().decode(chunk as Uint8Array).slice(6)) as {
+              type: string;
+            };
+            if (text.type === "error") RiggedReadableStream.terminalEvent = text;
+            if (this.#dead) {
+              throw new TypeError("Invalid state: Controller is already closed");
+            }
+          },
+          close: (): void => {
+            RiggedReadableStream.closeCalls++;
+            if (this.#dead) {
+              throw new TypeError("Invalid state: Controller is already closed");
+            }
+          },
+        };
+        // The real constructor runs this start wrapper; unlike the real
+        // machinery we also observe start()'s conclusion explicitly, since a
+        // rejection there is invisible (internally errored) to consumers.
+        super({
+          start: () => {
+            const result = Promise.resolve(source.start(controller));
+            result.then(
+              () => {},
+              (err: unknown) => {
+                RiggedReadableStream.startRejection = err;
+              },
+            );
+            return result;
+          },
+          pull: () => {},
+          cancel: () => {},
+        });
+        RiggedReadableStream.instance = this;
+      }
+      disconnect(): void {
+        this.#dead = true;
+      }
+    }
+
+    const upstreamEncoder = new TextEncoder();
+    let errorUpstream: (err: unknown) => void = () => {};
+    const upstream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        // First pull: one delta, as in the normal relay path. Second pull
+        // hangs until the test lets the upstream fail, so the route's catch
+        // runs strictly after the controller went dead.
+        controller.enqueue(
+          upstreamEncoder.encode(
+            'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',
+          ),
+        );
+        return new Promise((_, reject) => {
+          errorUpstream = reject;
+        });
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, body: upstream }));
+    const prevStream = (globalThis as { ReadableStream: unknown }).ReadableStream;
+    vi.stubGlobal("ReadableStream", RiggedReadableStream);
+
+    try {
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(200);
+
+      // Client aborts (stream cancelled → controller dead), then the upstream
+      // explodes: the terminal-error enqueue and the finally close() both hit
+      // a dead controller and must be swallowed, with start() still resolving.
+      RiggedReadableStream.instance!.disconnect();
+      RiggedReadableStream.startRejection = undefined;
+      RiggedReadableStream.terminalEvent = null;
+      RiggedReadableStream.closeCalls = 0;
+      errorUpstream(new Error("upstream exploded"));
+
+      // Let start()'s catch/finally microtask chain settle.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(RiggedReadableStream.startRejection).toBeUndefined();
+      expect(RiggedReadableStream.terminalEvent).toEqual({
+        type: "error",
+        text: INTERRUPTION_TEXT,
+      });
+      expect(RiggedReadableStream.closeCalls).toBe(1);
+    } finally {
+      vi.stubGlobal("ReadableStream", prevStream);
+    }
+  });
 });
 
 describe("validateMessages", () => {

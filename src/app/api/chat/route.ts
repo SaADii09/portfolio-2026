@@ -179,16 +179,26 @@ export async function POST(request: Request) {
           console.error("Stream error:", err);
           // One-shot terminal error event so the client can render the
           // interruption. Must land before controller.close() in finally.
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "error",
-                text: "The assistant was interrupted. Please try again.",
-              })}\n\n`,
-            ),
-          );
+          // enqueue can throw if the client aborted mid-stream — swallow, the response is dead either way.
+          // enqueue can throw if the client aborted mid-stream — swallow, the response is dead either way.
+          try {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: "error",
+                  text: "The assistant was interrupted. Please try again.",
+                })}\n\n`,
+              ),
+            );
+          } catch {
+            // stream already closed or cancelled — nothing left to deliver
+          }
         } finally {
-          controller.close();
+          try {
+            controller.close();
+          } catch {
+            // stream already closed or cancelled — nothing left to close
+          }
         }
       },
     });
