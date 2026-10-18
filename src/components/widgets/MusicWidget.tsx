@@ -29,7 +29,7 @@ export function MusicWidget() {
       <div className="flex items-center gap-2">
         <button
           onClick={prevTrack}
-          className="flex items-center justify-center w-6 h-6 rounded-os hover:opacity-70 transition-opacity"
+          className="flex items-center justify-center w-11 h-11 md:w-6 md:h-6 rounded-os hover:opacity-70 transition-opacity"
           style={{ background: "var(--bg-tertiary)" }}
           aria-label="Previous track"
         >
@@ -38,7 +38,7 @@ export function MusicWidget() {
 
         <button
           onClick={togglePlay}
-          className="flex items-center justify-center w-7 h-7 rounded-os transition-opacity hover:opacity-80"
+          className="flex items-center justify-center w-11 h-11 md:w-7 md:h-7 rounded-os transition-opacity hover:opacity-80"
           style={{ background: "var(--accent-1)", color: "var(--bg-primary)" }}
           aria-label={isPlaying ? "Pause" : "Play"}
         >
@@ -47,7 +47,7 @@ export function MusicWidget() {
 
         <button
           onClick={nextTrack}
-          className="flex items-center justify-center w-6 h-6 rounded-os hover:opacity-70 transition-opacity"
+          className="flex items-center justify-center w-11 h-11 md:w-6 md:h-6 rounded-os hover:opacity-70 transition-opacity"
           style={{ background: "var(--bg-tertiary)" }}
           aria-label="Next track"
         >

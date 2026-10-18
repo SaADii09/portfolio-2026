@@ -124,6 +124,7 @@ export function ChatPanel() {
 
               <div
                 ref={listRef}
+                aria-live="polite"
                 className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 font-body text-xs"
               >
                 {messages.length === 0 && (
@@ -298,6 +299,7 @@ export function ChatPanel() {
         <>
           <div
             ref={listRef}
+            aria-live="polite"
             className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 font-body text-xs"
           >
             {messages.length === 0 && (

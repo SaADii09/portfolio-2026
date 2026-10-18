@@ -179,6 +179,9 @@ export function WidgetWrapper({ id, children }: WidgetWrapperProps) {
           onPointerMove={headerMove}
           onPointerUp={headerUp}
           onContextMenu={(e) => {
+            // The desktop wrapper's right-click must not also bubble to the
+            // desktop/window handlers — otherwise two ContextMenus open.
+            e.stopPropagation();
             e.preventDefault();
             openContextMenuAt(e.clientX, e.clientY);
           }}

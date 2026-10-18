@@ -69,9 +69,13 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Request failed" }));
+        const errorCopy =
+          err.error === "ANTHROPIC_API_KEY not configured"
+            ? "The assistant is not configured yet."
+            : `Error: ${err.error}`;
         set((s) => ({
           messages: s.messages.map((m) =>
-            m.id === assistantId ? { ...m, content: `Error: ${err.error}`, streaming: false } : m,
+            m.id === assistantId ? { ...m, content: errorCopy, streaming: false } : m,
           ),
           isLoading: false,
         }));

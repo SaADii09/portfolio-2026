@@ -20,36 +20,56 @@ function weatherEmoji(code: number): string {
   return "☁️";
 }
 
+interface WeatherCurrent {
+  temperature_2m?: number;
+  relative_humidity_2m?: number;
+  weather_code?: number;
+}
+
+function toWeatherData(current: WeatherCurrent): WeatherData {
+  return {
+    temperature: Math.round(current.temperature_2m ?? 0),
+    humidity: current.relative_humidity_2m ?? 0,
+    weatherCode: current.weather_code ?? 0,
+  };
+}
+
+/**
+ * One API round-trip. Throws on transport/HTTP failure so callers can route
+ * through `.catch` — keeps this function branch-free apart from `!res.ok`.
+ */
+async function loadWeather(): Promise<WeatherData> {
+  const res = await fetch("/api/weather");
+  if (!res.ok) throw new Error("Failed");
+  const data = await res.json();
+  return toWeatherData(data.current);
+}
+
 export function WeatherWidget() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    const isCurrent = () => !cancelled;
 
-    async function fetchWeather() {
-      try {
-        const res = await fetch("/api/weather");
-        if (!res.ok) throw new Error("Failed");
-        const data = await res.json();
-        if (cancelled) return;
-        setWeather({
-          temperature: Math.round(data.current?.temperature_2m ?? 0),
-          humidity: data.current?.relative_humidity_2m ?? 0,
-          weatherCode: data.current?.weather_code ?? 0,
-        });
-      } catch {
-        // silently fail
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
+    setLoading(true);
+    loadWeather()
+      .catch(() => null) // failure state is simply "no data"
+      .then((result) => {
+        if (isCurrent()) {
+          setWeather(result);
+          setLoading(false);
+        }
+      });
 
-    fetchWeather();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
+
+  const retry = () => setAttempt((n) => n + 1);
 
   if (loading) {
     return (
@@ -66,7 +86,14 @@ export function WeatherWidget() {
         style={{ color: "var(--text-secondary)" }}
       >
         <CloudSun size={14} />
-        Weather unavailable
+        <span>Weather unavailable</span>
+        <button
+          onClick={retry}
+          aria-label="Retry"
+          className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center rounded-os underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70"
+        >
+          Retry
+        </button>
       </div>
     );
   }
