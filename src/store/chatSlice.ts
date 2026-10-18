@@ -117,6 +117,18 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
                 ),
               }));
             }
+            // Terminal mid-stream failure from the route: render the
+            // interruption into the streaming message (idempotent against a
+            // double flush) and stop streaming.
+            if (data.type === "error") {
+              const text: string = data.text;
+              set((s) => ({
+                messages: s.messages.map((m) => {
+                  if (m.id !== assistantId || m.content.includes(text)) return m;
+                  return { ...m, content: m.content + text, streaming: false };
+                }),
+              }));
+            }
           } catch {
             // skip malformed lines
           }
@@ -137,17 +149,28 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
               ),
             }));
           }
+          if (data.type === "error") {
+            const text: string = data.text;
+            set((s) => ({
+              messages: s.messages.map((m) => {
+                if (m.id !== assistantId || m.content.includes(text)) return m;
+                return { ...m, content: m.content + text, streaming: false };
+              }),
+            }));
+          }
         } catch {
           // skip malformed lines
         }
       }
     } catch {
       set((s) => ({
-        messages: s.messages.map((m) =>
-          m.id === assistantId
-            ? { ...m, content: "Network error. Please try again.", streaming: false }
-            : m,
-        ),
+        messages: s.messages.map((m) => {
+          if (m.id !== assistantId) return m;
+          // Already finalized (e.g. by an error event before the reader
+          // rejected) — leave the rendered interruption in place.
+          if (!m.streaming) return m;
+          return { ...m, content: "Network error. Please try again.", streaming: false };
+        }),
         isLoading: false,
       }));
       return;

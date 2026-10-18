@@ -127,6 +127,16 @@ export async function POST(request: Request) {
           }
         } catch (err) {
           console.error("Stream error:", err);
+          // One-shot terminal error event so the client can render the
+          // interruption. Must land before controller.close() in finally.
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: "error",
+                text: "The assistant was interrupted. Please try again.",
+              })}\n\n`,
+            ),
+          );
         } finally {
           controller.close();
         }

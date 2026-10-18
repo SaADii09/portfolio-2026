@@ -63,3 +63,80 @@ describe("chatSlice SSE streaming", () => {
     }
   });
 });
+
+// Exact terminal-error copy emitted by the route's mid-stream catch
+// (src/app/api/chat/route.ts) — keep verbatim with the route.
+const INTERRUPTION_TEXT = "The assistant was interrupted. Please try again.";
+const ERROR_EVENT = `data: ${JSON.stringify({ type: "error", text: INTERRUPTION_TEXT })}\n\n`;
+
+describe("chatSlice mid-stream interruption", () => {
+  it("renders the error event into the assistant message and ends streaming even when the reader then rejects", async () => {
+    const encoder = new TextEncoder();
+    // Simulates the route having already emitted the one-shot error event and
+    // then the connection dying before a clean close: tokens land, the error
+    // event lands, then reader.read() rejects. The catch path must not clobber
+    // the already-rendered interruption.
+    let sent = 0;
+    const chunks = [
+      'data: {"type":"token","text":"Hi"}\n\n',
+      'data: {"type":"token","text":" there"}\n\n',
+      ERROR_EVENT,
+    ];
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: new ReadableStream<Uint8Array>({
+        // pull-based so chunks survive until each read; erroring in start()
+        // would discard already-enqueued chunks per the streams spec
+        pull(controller) {
+          if (sent < chunks.length) {
+            controller.enqueue(encoder.encode(chunks[sent]));
+            sent++;
+          } else {
+            controller.error(new Error("upstream broke mid-stream"));
+          }
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const store = createTestStore();
+      await store.sendMessage("t");
+
+      const assistant = store.messages.find((m) => m.role === "assistant");
+      expect(assistant?.content).toBe(`Hi there${INTERRUPTION_TEXT}`);
+      expect(assistant?.streaming).toBe(false);
+      expect(store.isLoading).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not duplicate the interruption text when the same error event arrives twice", async () => {
+    const encoder = new TextEncoder();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: {"type":"token","text":"Hi"}\n\n'));
+          controller.enqueue(encoder.encode(ERROR_EVENT));
+          controller.enqueue(encoder.encode(ERROR_EVENT));
+          controller.close();
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const store = createTestStore();
+      await store.sendMessage("t");
+
+      const assistant = store.messages.find((m) => m.role === "assistant");
+      expect(assistant?.content).toBe(`Hi${INTERRUPTION_TEXT}`);
+      expect(assistant?.streaming).toBe(false);
+      expect(store.isLoading).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
