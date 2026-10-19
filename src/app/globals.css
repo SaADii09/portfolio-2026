@@ -30,6 +30,9 @@
   --glass-opacity-dark: 75%;
   --glass-edge-opacity: 12%;
   --glass-specular-opacity: 0.25;
+  /* Readability floor for window surfaces (spec §4.3) — windows hold this much
+     background opacity when the user lowers Tint below the theme's rest look. */
+  --glass-window-floor: 55%;
 }
 
 :root,
@@ -335,6 +338,16 @@ select,
   transition: box-shadow 0.3s ease;
 }
 
+/* Windows must stay readable as the user lowers Tint: floors window
+   surfaces at their theme's rest readability. */
+.os-window-surface {
+  background: color-mix(
+    in srgb,
+    var(--bg-secondary) max(var(--glass-opacity-light), var(--glass-window-floor)),
+    transparent
+  );
+}
+
 /* Positioning context for pseudo-elements (dither/spotlight).
    Use on glass elements that lack absolute/fixed positioning. */
 .glass-pos {
@@ -393,6 +406,21 @@ select,
       color-mix(in srgb, rgba(255, 255, 255, 1) var(--glass-specular-opacity), transparent);
 }
 
+/* Neon window readability floor — sits after the neon glass block so it wins
+   the (0,2,0) tie with `[data-theme="neon"] .glass`; reproduces the gradient
+   with floored stops so the rest look is identical and low-Tint windows hold. */
+[data-theme="neon"] .os-window-surface {
+  background: linear-gradient(
+    135deg,
+    color-mix(
+      in srgb,
+      var(--bg-primary) calc(max(var(--glass-opacity-dark) * 2.5, 100%)),
+      transparent
+    ),
+    color-mix(in srgb, var(--bg-secondary) max(var(--glass-opacity-dark), 60%), transparent)
+  );
+}
+
 [data-theme="neon"] .glass::after,
 [data-theme="neon"] .glass-heavy::after,
 [data-theme="neon"] .glass-light::after {
@@ -429,15 +457,27 @@ select,
 [data-theme="retro"] .glass,
 [data-theme="retro"] .glass-heavy,
 [data-theme="retro"] .glass-light {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  background: color-mix(in srgb, #000000 calc(var(--glass-opacity-dark) * 0.643), transparent);
   border-top: 3px solid #ffffff;
   border-left: 3px solid #ffffff;
   border-right: 3px solid #555555;
   border-bottom: 3px solid #555555;
   box-shadow: 4px 4px 0px 0px #000000;
   border-radius: 0 !important;
+}
+
+/* Retro window readability floor — must sit AFTER the retro glass block above
+   (same (0,2,0) tie-break as the neon floor); a max floor placed before it
+   would be dead code. 0.643 maps rest --glass-opacity-dark: 70% → 45.01% ≈ the
+   previous hard-coded rgba(0, 0, 0, 0.45). */
+[data-theme="retro"] .os-window-surface {
+  background: color-mix(
+    in srgb,
+    #000000 max(calc(var(--glass-opacity-dark) * 0.643), 45%),
+    transparent
+  );
 }
 
 /* Retro dither grid overlay */

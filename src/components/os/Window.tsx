@@ -278,7 +278,7 @@ export function Window({ id, children }: WindowProps) {
       <div
         ref={windowElRef}
         onPointerDown={() => !isActive && focusWindow(id)}
-        className={`absolute glass overflow-hidden flex flex-col os-window-enter pointer-events-auto ${isActive ? "glass-border-active" : "glass-border"}`}
+        className={`absolute glass os-window-surface overflow-hidden flex flex-col os-window-enter pointer-events-auto ${isActive ? "glass-border-active" : "glass-border"}`}
         style={windowStyle(mobileX, mobileY, mobileW, mobileH, win.isMaximized)}
       >
         <div
@@ -351,7 +351,7 @@ export function Window({ id, children }: WindowProps) {
     <div
       ref={windowElRef}
       onPointerDown={() => !isActive && focusWindow(id)}
-      className={`absolute glass overflow-hidden flex flex-col os-window-enter ${isActive ? "glass-border-active" : "glass-border"}`}
+      className={`absolute glass os-window-surface overflow-hidden flex flex-col os-window-enter ${isActive ? "glass-border-active" : "glass-border"}`}
       style={windowStyle(win.x, win.y, win.width, win.height, win.isMaximized)}
     >
       <div
