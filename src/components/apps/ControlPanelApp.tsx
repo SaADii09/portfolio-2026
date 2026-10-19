@@ -6,7 +6,6 @@ import { useGlassControls, useMusicPlayback, useMusicVolume } from "@/hooks/useO
 import { GlassSlider } from "@/components/os/GlassSlider";
 import { Play, Pause, SkipBack, SkipForward, Volume2, RotateCcw } from "lucide-react";
 
-
 /** Swatch preview per theme: its accent-1/2/3 palette straight from the token source. */
 const THEME_SWATCHES: { name: ThemeName; label: string; colors: [string, string, string] }[] = (
   [
