@@ -40,11 +40,11 @@ function geometryKeyForWindow(w: WindowInstance): string {
  * Re-clamps a remembered rect so it fits the current viewport — in the ZONE
  * frame (content-zone-relative store coords: painted y = store y + topBar,
  * see the container offset in Desktop.tsx). y stays within
- * [0, zoneHeight − h], mirroring `settle()` in window-geometry.ts — NOT
- * `clampWindowPosition`, which clamps in the painted frame ([topBar, …]) and
- * would double-add the topBar shift on restore. Zone clamp variants pending in
- * boundaries.ts (Task-3 fix lane owns that file) — post-wave dedupe target:
- * swap this local implementation onto that export when it lands.
+ * [0, zoneHeight − h], mirroring `settle()` in window-geometry.ts and the
+ * zone-floor semantics of `clampWindowPosition` in boundaries.ts, which now
+ * clamps the y floor at zone 0 instead of topBar (no +topBar shift on
+ * restore). Post-wave dedupe target: swap this local implementation onto
+ * that export.
  */
 function clampRemembered(rect: WindowGeometry, vw: number, vh: number): WindowGeometry {
   const size = clampWindowSize(rect.width, rect.height, vw, vh);
