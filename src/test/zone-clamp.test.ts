@@ -33,9 +33,11 @@ describe("clampWindowPosition — zone floor", () => {
   });
 
   it("keeps the pre-existing max bound (Task 4 remembered-geometry contract)", () => {
-    // Oversized remembered rect: clampWindowSize caps h at vh−112 = 656, then
-    // position pins to vh − h − bottomBar = 36 (painted-frame max semantics
-    // that stores.test.ts pins for remembered geometry).
+    // Oversized rect: clampWindowSize caps h at vh − 112 = 656, then the max
+    // bound pins y to vh − h − bottomBar = 36. That max bound predates the
+    // zone-frame work (Task 3 re-floored the y floor only) and is kept as-is;
+    // note stores.test.ts pins remembered geometry via the zone-frame
+    // clampRemembered max (y = zoneHeight − h), not this helper.
     const pos = clampWindowPosition(9000, 9000, 1024, 656, 1024, 768);
     expect(pos).toEqual({ x: 0, y: 36 });
   });
