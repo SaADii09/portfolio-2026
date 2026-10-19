@@ -32,6 +32,12 @@ test.describe("Window lifecycle", () => {
     await page.getByTitle("Open About Me").dblclick();
     await expect(page.getByLabel("About Me")).toBeVisible();
 
+    // Close About before opening Projects: the About window anchors wide
+    // enough to occlude the desktop icon grid, which would make the next
+    // double-click land on the window surface instead of the icon.
+    await page.getByLabel("Close").first().click();
+    await expect(page.getByLabel("About Me")).not.toBeVisible();
+
     await page.getByTitle("Open Projects").dblclick();
     await expect(page.getByLabel("Projects")).toBeVisible();
   });
