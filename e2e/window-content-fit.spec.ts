@@ -243,14 +243,39 @@ test.describe("zone-frame clamp holds on viewport resize (no painted-frame telep
 });
 
 test.describe("webview window geometry", () => {
-  // The locked webview row (800×560 via the `webview:<url>` key) is only
-  // reachable from the UI once Task 4 removes ProjectsApp's hardcoded
-  // 520×400 open — while that explicit-size call exists, a project-card
-  // webview can never carry the table geometry. The table row is pinned at
-  // the unit level (src/test/window-geometry.test.ts) so this spec skips
-  // rather than lies. Task 6's diagnostic cleanup / Task 4 Step 0 should
-  // flip this to a real open-and-assert.
-  test.skip("webview opens at the locked 800×560 default", async () => {});
+  // The locked webview row (800×560 via the `webview:<url>` key) is reachable
+  // from the UI: ProjectsApp opens project previews with no explicit geometry,
+  // so the table row resolves (Task 4 removed the hardcoded 520×400 open).
+  // Asserted at browser level with the same UI path as the safe-zone case
+  // below; the table row itself is also pinned at the unit level
+  // (src/test/window-geometry.test.ts).
+  test("webview opens at the locked 800×560 default @ 1440×900", async ({ page }) => {
+    await page.route("**/embeddable-ok", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html; charset=utf-8",
+        body: "<html><body><h1>Embeddable preview</h1></body></html>",
+      }),
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await gotoApp(page);
+
+    await openApp(page, "projects", false);
+    await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
+    await expect(page.locator('iframe[title="Website preview"]')).toBeVisible({ timeout: 20000 });
+
+    // The webview surface (not the Projects list window) via the iframe it
+    // contains; measured with the file's bounding-box pattern.
+    const webview = page
+      .locator(".os-window-surface")
+      .filter({ has: page.locator('iframe[title="Website preview"]') });
+    await expect(webview).toHaveCount(1);
+    const box = await webview.boundingBox();
+    expect(box, "webview window paints").not.toBeNull();
+    expect(Math.abs(box!.width - 800), "webview width = locked 800").toBeLessThanOrEqual(2);
+    expect(Math.abs(box!.height - 560), "webview height = locked 560").toBeLessThanOrEqual(2);
+    expectInSafeZone(box!, 1440, 900);
+  });
 
   test("project preview window opens inside the safe zone @ 1440×900", async ({ page }) => {
     await page.route("**/embeddable-ok", (route) =>
