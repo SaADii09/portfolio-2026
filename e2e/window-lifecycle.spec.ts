@@ -170,3 +170,74 @@ test.describe("WebView embed refusal fallback", () => {
     await expect(page.locator('iframe[title="Website preview"]')).toBeVisible();
   });
 });
+
+// Reset-widget regression: a widget dragged off-screen must be recoverable to
+// the default right-edge bootstrap column from the desktop context menu.
+//
+// The widget is seeded through the persisted `devos-store` state BEFORE first
+// navigation (addInitScript runs ahead of hydration and of the app's own
+// persist writes — same pattern as in persistence.spec.ts / the embed spec
+// above). Note x: -300 means "dragged off the left edge"; the boot-time clamp
+// will pull it to x=0, so the interesting pre/post discriminator is the
+// default column position (x = vw - 220), not raw viewport containment.
+test.describe("Reset widgets (context menu)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("repositions an off-screen widget to the default desktop column", async ({ page }) => {
+    await page.addInitScript(() => {
+      const seeded = {
+        state: {
+          widgets: [
+            {
+              id: "seed-weather-e2e",
+              type: "weather",
+              title: "Weather",
+              x: -300,
+              y: 120,
+              width: 200,
+              height: 100,
+              isPinned: false,
+              isCollapsed: false,
+            },
+          ],
+        },
+        version: 1,
+      };
+      localStorage.setItem("devos-store", JSON.stringify(seeded));
+    });
+    await gotoApp(page);
+
+    // The single seeded widget: the glass card whose header reads exactly "Weather".
+    const weatherWidget = page
+      .locator(".glass-light")
+      .filter({ has: page.getByText("Weather", { exact: true }) })
+      .first();
+
+    await expect(weatherWidget).toBeVisible();
+
+    // Sanity: before the reset the widget is NOT at the default column, so the
+    // later assertion cannot pass vacuously.
+    const before = await weatherWidget.boundingBox();
+    expect(before).not.toBeNull();
+    expect((before as { x: number }).x).toBeLessThan(1440 - 220 - 5);
+
+    // Right-click empty desktop (icons live top-left, widgets hug the right edge).
+    await page.mouse.click(400, 300, { button: "right" });
+    await page.getByRole("menuitem", { name: "Reset Widgets" }).click();
+
+    // After the reset: at the default bootstrap column (x = vw - 220 = 1220)
+    // and bounding box fully inside the viewport.
+    await expect
+      .poll(async () => (await weatherWidget.boundingBox())?.x ?? -1)
+      .toBeGreaterThanOrEqual(1440 - 220 - 2);
+
+    const after = await weatherWidget.boundingBox();
+    expect(after).not.toBeNull();
+    const box = after as { x: number; y: number; width: number; height: number };
+    expect(Math.abs(box.x - (1440 - 220))).toBeLessThanOrEqual(2); // default column
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(1440);
+    expect(box.y).toBeGreaterThanOrEqual(36); // TopBar safe zone
+    expect(box.y + box.height).toBeLessThanOrEqual(900);
+  });
+});

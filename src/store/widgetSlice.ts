@@ -1,9 +1,20 @@
 import { StateCreator } from "zustand";
 import { WidgetInstance, WidgetType } from "@/types/widget";
-import { clampWidgetBounds, DEFAULT_WIDGET_W, DEFAULT_WIDGET_H } from "@/lib/boundaries";
+import {
+  clampWidgetBounds,
+  getViewportBounds,
+  DEFAULT_WIDGET_W,
+  DEFAULT_WIDGET_H,
+} from "@/lib/boundaries";
 
 let nextId = 1;
 const genId = () => `widget-${nextId++}-${Date.now()}`;
+
+/** Default right-edge column x: widgets hug the viewport's right edge. */
+const DEFAULT_WIDGET_COLUMN_X_OFFSET = 220;
+/** Vertical stride of the bootstrap column: a 10px top gap plus one 110px row per widget. */
+const DEFAULT_WIDGET_COLUMN_TOP_GAP = 10;
+const DEFAULT_WIDGET_COLUMN_ROW_STRIDE = 110;
 
 export interface WidgetSlice {
   widgets: WidgetInstance[];
@@ -14,6 +25,7 @@ export interface WidgetSlice {
   toggleWidgetPin: (id: string) => void;
   clampAllWidgets: () => void;
   resolveAllWidgetCollisions: () => void;
+  resetWidgetPositions: () => void;
 }
 
 export const createWidgetSlice: StateCreator<WidgetSlice> = (set) => ({
@@ -71,6 +83,30 @@ export const createWidgetSlice: StateCreator<WidgetSlice> = (set) => ({
         const clamped = clampWidgetBounds(w.x, w.y, cw, ch, vw, vh);
         return { ...w, ...clamped };
       }),
+    }));
+  },
+
+  resetWidgetPositions: () => {
+    if (typeof window === "undefined") return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const { topBar } = getViewportBounds(vw);
+    set((s) => ({
+      // Same bootstrap column Desktop seeds new widgets into (x = vw - 220,
+      // y = topBar + 10 + i * 110), in membership (array) order. Sizes reset
+      // through clampWidgetBounds' width/height result; flag state is preserved
+      // by the spread.
+      widgets: s.widgets.map((w, i) => ({
+        ...w,
+        ...clampWidgetBounds(
+          vw - DEFAULT_WIDGET_COLUMN_X_OFFSET,
+          topBar + DEFAULT_WIDGET_COLUMN_TOP_GAP + DEFAULT_WIDGET_COLUMN_ROW_STRIDE * i,
+          DEFAULT_WIDGET_W,
+          DEFAULT_WIDGET_H,
+          vw,
+          vh,
+        ),
+      })),
     }));
   },
 

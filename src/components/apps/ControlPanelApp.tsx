@@ -6,6 +6,7 @@ import { useGlassControls, useMusicPlayback, useMusicVolume } from "@/hooks/useO
 import { GlassSlider } from "@/components/os/GlassSlider";
 import { Play, Pause, SkipBack, SkipForward, Volume2, RotateCcw } from "lucide-react";
 
+
 /** Swatch preview per theme: its accent-1/2/3 palette straight from the token source. */
 const THEME_SWATCHES: { name: ThemeName; label: string; colors: [string, string, string] }[] = (
   [
@@ -48,6 +49,7 @@ export function ControlPanelApp() {
   const customTokens = useStore((s) => s.customTokens);
   const updateCustomToken = useStore((s) => s.updateCustomToken);
   const resetCustomTokens = useStore((s) => s.resetCustomTokens);
+  const resetWidgetPositions = useStore((s) => s.resetWidgetPositions);
 
   const {
     glassBlur,
@@ -172,6 +174,18 @@ export function ControlPanelApp() {
             Reset Colors
           </button>
         </div>
+      </section>
+
+      {/* Widgets */}
+      <section>
+        <h3 className="font-display text-xs mb-2.5 text-os-accent">Widgets</h3>
+        <button
+          onClick={resetWidgetPositions}
+          className="text-xs px-2 py-1 rounded-os self-start transition-opacity hover:opacity-80"
+          style={{ background: "var(--bg-tertiary)", color: "var(--text-secondary)" }}
+        >
+          Reset Widget Positions
+        </button>
       </section>
 
       {/* Music Player */}

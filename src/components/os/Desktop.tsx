@@ -31,7 +31,7 @@ import { CommandPalette } from "@/components/os/CommandPalette";
 import { APP_ICONS } from "@/components/os/appIcons";
 import { APP_DEFS, type AppDef, type AppId } from "@/lib/apps";
 import { openApp } from "@/lib/os-actions";
-import { RefreshCw, Monitor, Info } from "lucide-react";
+import { RefreshCw, Monitor, Info, LayoutGrid } from "lucide-react";
 
 function renderAppContent(component?: string, url?: string) {
   switch (component) {
@@ -140,6 +140,8 @@ export function Desktop() {
     }, 350);
   }, []);
 
+  const resetWidgetPositions = useStore((s) => s.resetWidgetPositions);
+
   const openIconContextMenu = useCallback((id: AppId, e: React.MouseEvent | React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -180,6 +182,16 @@ export function Desktop() {
       label: "About DevOS",
       icon: Info,
       onClick: () => openApp("about"),
+    },
+    // Reset Widgets lives at the tail of the menu (its own group after About
+    // DevOS) so the roving keyboard focus that opens on "Refresh" still steps
+    // onto the first app item — the desktop menu keyboard-nav e2e depends on
+    // that ordering.
+    { label: "", separator: true as const, onClick: () => {} },
+    {
+      label: "Reset Widgets",
+      icon: LayoutGrid,
+      onClick: resetWidgetPositions,
     },
   ];
 
