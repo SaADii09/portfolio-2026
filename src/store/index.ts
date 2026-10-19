@@ -27,6 +27,7 @@ export type PersistedAppState = Pick<
   | "glassOpacity"
   | "windows"
   | "widgets"
+  | "lastGeometry"
   | "volume"
   | "currentTrack"
 >;
@@ -40,6 +41,7 @@ export function persistPartialize(state: AppStore): PersistedAppState {
     glassOpacity: state.glassOpacity,
     windows: state.windows,
     widgets: state.widgets,
+    lastGeometry: state.lastGeometry,
     volume: state.volume,
     currentTrack: state.currentTrack,
   };

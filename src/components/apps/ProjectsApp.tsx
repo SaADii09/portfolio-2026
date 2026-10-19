@@ -18,8 +18,6 @@ export function ProjectsApp() {
       title: p.title,
       type: "iframe",
       url: p.url,
-      width: 520,
-      height: 400,
     });
   };
 

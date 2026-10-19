@@ -51,6 +51,7 @@ describe("windowSlice", () => {
   it("starts empty", () => {
     expect(store.windows).toEqual([]);
     expect(store.activeWindowId).toBeNull();
+    expect(store.lastGeometry).toEqual({});
   });
 
   it("opens a window with default dimensions", () => {
@@ -141,6 +142,82 @@ describe("windowSlice", () => {
     const id = store.openWindow({ title: "X", type: "app", component: "X" });
     store.setWindowOpacity(id, 0.5);
     expect(store.windows[0]?.opacity).toBe(0.5);
+  });
+
+  it("saves a closed window's committed rect under lastGeometry[component]", () => {
+    const id = store.openWindow({ title: "X", type: "app", component: "X" });
+    store.updateWindowPosition(id, 120, 90);
+    store.updateWindowSize(id, 420, 360);
+    store.closeWindow(id);
+    expect(store.lastGeometry["X"]).toEqual({ x: 120, y: 90, width: 420, height: 360 });
+  });
+
+  it("reopens a component at its remembered rect instead of the defaults table", () => {
+    const id = store.openWindow({ title: "About", type: "app", component: "about" });
+    store.updateWindowPosition(id, 140, 80);
+    store.updateWindowSize(id, 500, 300);
+    store.closeWindow(id);
+    store.openWindow({ title: "About", type: "app", component: "about" });
+    const win = store.windows[0];
+    // The defaults table resolves "about" to 560×620 at its slot — the
+    // remembered rect (500×300 @ 140,80) must win instead.
+    expect(win?.x).toBe(140);
+    expect(win?.y).toBe(80);
+    expect(win?.width).toBe(500);
+    expect(win?.height).toBe(300);
+  });
+
+  it("saves webview geometry under webview:<url> independently per url", () => {
+    const a = store.openWindow({ title: "A", type: "iframe", url: "https://a.test" });
+    const b = store.openWindow({ title: "B", type: "iframe", url: "https://b.test" });
+    store.updateWindowPosition(a, 40, 50);
+    store.updateWindowSize(a, 300, 280);
+    const openedB = store.windows[1];
+    store.closeWindow(a);
+    store.closeWindow(b);
+
+    const savedA = store.lastGeometry["webview:https://a.test"];
+    const savedB = store.lastGeometry["webview:https://b.test"];
+    expect(savedA).toEqual({ x: 40, y: 50, width: 300, height: 280 });
+    // B's rect was never touched — it saves its own open-time geometry, so the
+    // two urls never share or clobber each other's memory slot.
+    expect(savedB).toEqual({
+      x: openedB?.x ?? -1,
+      y: openedB?.y ?? -1,
+      width: openedB?.width ?? -1,
+      height: openedB?.height ?? -1,
+    });
+    expect(savedA).not.toEqual(savedB);
+  });
+
+  it("does not save geometry on minimize or restore — only on close", () => {
+    const id = store.openWindow({ title: "X", type: "app", component: "X" });
+    store.updateWindowPosition(id, 120, 90);
+    store.minimizeWindow(id);
+    store.restoreWindow(id);
+    expect(store.lastGeometry).toEqual({});
+    store.updateWindowSize(id, 460, 380);
+    store.closeWindow(id);
+    expect(Object.keys(store.lastGeometry)).toEqual(["X"]);
+    expect(store.lastGeometry["X"]?.width).toBe(460);
+    expect(store.lastGeometry["X"]?.height).toBe(380);
+  });
+
+  it("clamps remembered geometry that exceeds the viewport at open time", () => {
+    const id = store.openWindow({ title: "X", type: "app", component: "X" });
+    store.updateWindowPosition(id, 9000, 9000);
+    store.updateWindowSize(id, 5000, 5000);
+    store.closeWindow(id);
+    store.openWindow({ title: "X", type: "app", component: "X" });
+    const win = store.windows[0];
+    const vw = window.innerWidth; // jsdom default 1024
+    const vh = window.innerHeight; // jsdom default 768
+    // clampWindowSize caps at the safe-zone size; clampWindowPosition pins
+    // the oversized top-left back into view.
+    expect(win?.width).toBe(vw);
+    expect(win?.height).toBe(vh - 36 - 76); // desktop top/bottom chrome
+    expect(win?.x).toBe(0);
+    expect(win?.y).toBe(36);
   });
 });
 
@@ -302,6 +379,7 @@ describe("persist partialize", () => {
       "glassBlur",
       "glassOpacity",
       "glassSaturate",
+      "lastGeometry",
       "theme",
       "volume",
       "widgets",
@@ -325,6 +403,19 @@ describe("persist partialize", () => {
     expect(raw.state.currentTrack).toEqual(track);
     expect(raw.state.music).toBeUndefined();
   });
+
+  it("round-trips lastGeometry through localStorage", () => {
+    localStorage.clear();
+    const geometry = {
+      terminal: { x: 11, y: 22, width: 640, height: 420 },
+      "webview:https://example.com": { x: 50, y: 60, width: 800, height: 560 },
+    };
+
+    useStore.setState({ lastGeometry: geometry });
+
+    const raw = JSON.parse(localStorage.getItem("devos-store") ?? "{}");
+    expect(raw.state.lastGeometry).toEqual(geometry);
+  });
 });
 
 describe("persist migrator", () => {
@@ -334,6 +425,7 @@ describe("persist migrator", () => {
     "glassBlur",
     "glassOpacity",
     "glassSaturate",
+    "lastGeometry",
     "theme",
     "volume",
     "widgets",
@@ -366,6 +458,9 @@ describe("persist migrator", () => {
     expect(migrated.glassBlur).toBe(0);
     expect(migrated.glassSaturate).toBe(100);
     expect(migrated.glassOpacity).toBe(70);
+    // lastGeometry is additive (Task 4): older persisted states can lack it —
+    // the migrator settles it on the slice default without a version bump.
+    expect(migrated.lastGeometry).toEqual({});
     // Junk / obsolete keys never rehydrate
     expect(migrated).not.toHaveProperty("music");
     expect(migrated).not.toHaveProperty("isPlaying");
@@ -379,6 +474,7 @@ describe("persist migrator", () => {
       glassBlur: 12,
       glassSaturate: 140,
       glassOpacity: 65,
+      lastGeometry: { terminal: { x: 11, y: 22, width: 640, height: 420 } },
       windows: [],
       widgets: [],
       volume: 0.4,
@@ -410,6 +506,7 @@ describe("persist migrator", () => {
     expect(migrated.glassBlur).toBe(0);
     expect(migrated.windows).toEqual([]);
     expect(migrated.widgets).toEqual([]);
+    expect(migrated.lastGeometry).toEqual({});
     expect(migrated.volume).toBe(0.7);
     expect(migrated.currentTrack.title).toBe("Neon Lights");
   });
