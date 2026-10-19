@@ -208,6 +208,40 @@ test.describe("mobile content fit @ 375×812", () => {
   }
 });
 
+test.describe("zone-frame clamp holds on viewport resize (no painted-frame teleport)", () => {
+  // Windows opened in the content zone's top slots (store y < topBar) must
+  // not teleport down by a chrome-bar offset when clampAllWindows runs on a
+  // viewport resize (useViewportClamp → clampToViewport).
+  test("desktop zone-top window stays put across a viewport resize", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await gotoApp(page);
+    await openApp(page, "about", false);
+    const before = await measureWindow(page);
+    expect(before.y, "about opens at its zone-top slot").toBeLessThanOrEqual(38);
+
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await expect(async () => {
+      const after = await measureWindow(page);
+      expect(after.y, "no +36px teleport after clampAllWindows").toBeLessThanOrEqual(before.y + 1);
+      expect(after.y, "still at the zone top").toBeGreaterThanOrEqual(35);
+    }).toPass();
+  });
+
+  test("mobile status-bar window stays put across a viewport resize", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await gotoApp(page);
+    await openApp(page, "contact", true);
+    const before = await measureWindow(page);
+    expect(before.y, "contact opens just under the status bar").toBeLessThanOrEqual(42);
+
+    await page.setViewportSize({ width: 320, height: 700 });
+    await expect(async () => {
+      const after = await measureWindow(page);
+      expect(after.y, "no +32px teleport after clampAllWindows").toBeLessThanOrEqual(before.y + 1);
+    }).toPass();
+  });
+});
+
 test.describe("webview window geometry", () => {
   // The locked webview row (800×560 via the `webview:<url>` key) is only
   // reachable from the UI once Task 4 removes ProjectsApp's hardcoded
