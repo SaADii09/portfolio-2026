@@ -1,17 +1,20 @@
 import { StateCreator } from "zustand";
 import { WindowInstance, WindowConfig } from "@/types/window";
 import { clampWindowSize, clampWindowPosition } from "@/lib/boundaries";
-import {
-  MIN_WINDOW_WIDTH,
-  MIN_WINDOW_HEIGHT,
-  INITIAL_Z_INDEX,
-  DEFAULT_WINDOW_WIDTH,
-  DEFAULT_WINDOW_HEIGHT,
-} from "@/lib/constants";
+import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, INITIAL_Z_INDEX } from "@/lib/constants";
+import { resolveOpenGeometry } from "@/lib/window-geometry";
 
 let nextId = 1;
 function generateId(): string {
   return `win-${nextId++}-${Date.now()}`;
+}
+
+/** Viewport for open-time geometry resolution (windowSlice only runs client-side). */
+function viewportSize() {
+  if (typeof window === "undefined") {
+    return { vw: MIN_WINDOW_WIDTH, vh: MIN_WINDOW_HEIGHT };
+  }
+  return { vw: window.innerWidth, vh: window.innerHeight };
 }
 
 function clampToViewport(w: WindowInstance): WindowInstance {
@@ -48,16 +51,21 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
     const maxZ = existing.reduce((max, w) => Math.max(max, w.zIndex), INITIAL_Z_INDEX);
     const offset = (existing.length % 8) * 50;
 
+    // Per-app default size + first-open anchor slot (§4.4). Explicit config
+    // values win per-field (legacy behavior) — resolved in window-geometry.
+    const { vw, vh } = viewportSize();
+    const geometry = resolveOpenGeometry(config, vw, vh, offset);
+
     const win: WindowInstance = {
       id,
       title: config.title,
       type: config.type,
       component: config.component,
       url: config.url,
-      x: config.x ?? 80 + offset,
-      y: config.y ?? 60 + offset,
-      width: config.width ?? DEFAULT_WINDOW_WIDTH,
-      height: config.height ?? DEFAULT_WINDOW_HEIGHT,
+      x: geometry.x,
+      y: geometry.y,
+      width: geometry.width,
+      height: geometry.height,
       zIndex: maxZ + 1,
       opacity: 1,
       isMinimized: false,
