@@ -23,6 +23,5 @@ export default {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- runtime require below; static bundling it breaks lightningcss's conditional native require
     require(/* turbopackIgnore: true */ "@tailwindcss/postcss"),
     unlowerBackdropFilter(),
-    unlowerBackdropFilter(),
   ],
 };
