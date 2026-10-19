@@ -1,6 +1,30 @@
 export type ShortcutId =
   "escape" | "palette" | "close-window" | "snap-left" | "snap-right" | "maximize" | "restore";
 
+interface SnapPosition {
+  x: number;
+  y: number;
+}
+
+/**
+ * Zone-frame placement for the Alt+Arrow half-screen snaps.
+ *
+ * Window store coords are content-zone-relative — `Window.tsx` paints at
+ * `translate(x, y)` inside a container offset by the top bar (Desktop.tsx:
+ * top 36/bottom 76 desktop, top 32/bottom 52 mobile), the same convention as
+ * `settle()` in window-geometry.ts and the zone floor in boundaries.ts.
+ * x has no bar offsets, so 0 / vw − width is the zone's left/right edge
+ * either way — but y must be the zone top (0). The old snap wrote the
+ * painted-frame value (`y: topBar`), pushing snapped windows 36px (desktop)
+ * / 32px (mobile) below the zone top.
+ */
+export function snapZonePosition(side: "left" | "right", vw: number, width: number): SnapPosition {
+  return {
+    x: side === "left" ? 0 : Math.max(0, vw - width),
+    y: 0,
+  };
+}
+
 const EDITABLE_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 /**

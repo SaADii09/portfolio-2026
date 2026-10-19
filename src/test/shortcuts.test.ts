@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { isEditableElement, matchShortcut, ShortcutId } from "@/lib/shortcuts";
+import { isEditableElement, matchShortcut, snapZonePosition, ShortcutId } from "@/lib/shortcuts";
+import { MIN_WINDOW_WIDTH } from "@/lib/constants";
 
 type Mods = {
   altKey?: boolean;
@@ -128,6 +129,40 @@ describe("matchShortcut", () => {
 
   it("suppresses Cmd+W inside a contenteditable", () => {
     expect(matchShortcut(keydown("w", { metaKey: true }, contentEditableDiv()))).toBeNull();
+  });
+});
+
+/**
+ * Zone-frame snap placement (control-panel/geometry plan, Task 6a).
+ *
+ * Window store coords are content-zone-relative — Window.tsx paints at
+ * `translate(x, y)` inside a container offset by the top bar (Desktop.tsx:
+ * top 36/bottom 76 desktop, top 32/bottom 52 mobile), mirroring `settle()`
+ * in window-geometry.ts. The old Alt+Arrow snap wrote the painted-frame
+ * `y: topBar`, which placed the snapped window 36px (desktop) / 32px
+ * (mobile) BELOW the zone top. x has no bar offsets, so 0 / vw−width is
+ * already the zone's left/right edge.
+ */
+describe("snapZonePosition — zone-frame snap placement", () => {
+  it("snaps left flush to the zone: x 0, y 0 (NOT the painted topBar)", () => {
+    const snapped = snapZonePosition("left", 1024, 512);
+    expect(snapped).toEqual({ x: 0, y: 0 });
+    expect(snapped.y, "painted-frame bug would return 36").not.toBe(36);
+  });
+
+  it("snaps right flush to the zone's right edge: x vw − width, y 0", () => {
+    expect(snapZonePosition("right", 1024, 512)).toEqual({ x: 512, y: 0 });
+  });
+
+  it("mobile: y 0, not the 32px status-bar offset", () => {
+    const snapped = snapZonePosition("left", 375, 200);
+    expect(snapped).toEqual({ x: 0, y: 0 });
+    expect(snapped.y + 32, "painted top == status-bar edge").toBe(32);
+  });
+
+  it("keeps x in the viewport frame at the snapped width (no horizontal bars)", () => {
+    const width = Math.max(MIN_WINDOW_WIDTH, Math.round(1024 / 2));
+    expect(snapZonePosition("right", 1024, width)).toEqual({ x: 1024 - width, y: 0 });
   });
 });
 

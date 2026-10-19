@@ -4,7 +4,12 @@ import { useEffect } from "react";
 import { useStore } from "@/store";
 import { getViewportBounds } from "@/lib/boundaries";
 import { MIN_WINDOW_WIDTH } from "@/lib/constants";
-import { isEditableElement, matchShortcut, type ShortcutId } from "@/lib/shortcuts";
+import {
+  isEditableElement,
+  matchShortcut,
+  snapZonePosition,
+  type ShortcutId,
+} from "@/lib/shortcuts";
 
 type StoreState = ReturnType<typeof useStore.getState>;
 type WindowState = StoreState["windows"][number];
@@ -38,10 +43,6 @@ function dismissOnEscape(target: EventTarget | null): void {
   if (activeWindowId) closeWindow(activeWindowId);
 }
 
-function snapX(side: "left" | "right", vw: number, width: number): number {
-  return side === "left" ? 0 : vw - width;
-}
-
 /** snap-left / snap-right — ignored while maximized or minimized. */
 function snapWindow(store: StoreState, active: WindowState, side: "left" | "right"): void {
   if (active.isMaximized || active.isMinimized) return;
@@ -50,8 +51,9 @@ function snapWindow(store: StoreState, active: WindowState, side: "left" | "righ
   const vh = window.innerHeight;
   const { topBar, bottomBar } = getViewportBounds(vw);
   const width = Math.max(MIN_WINDOW_WIDTH, Math.round(vw / 2));
+  const snapped = snapZonePosition(side, vw, width);
   store.updateWindowSize(active.id, width, vh - topBar - bottomBar);
-  store.updateWindowPosition(active.id, snapX(side, vw, width), topBar);
+  store.updateWindowPosition(active.id, snapped.x, snapped.y);
 }
 
 type WindowShortcutHandler = (store: StoreState, active: WindowState) => void;
