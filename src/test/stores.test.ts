@@ -212,12 +212,53 @@ describe("windowSlice", () => {
     const win = store.windows[0];
     const vw = window.innerWidth; // jsdom default 1024
     const vh = window.innerHeight; // jsdom default 768
-    // clampWindowSize caps at the safe-zone size; clampWindowPosition pins
-    // the oversized top-left back into view.
+    // Zone frame (store coords): size clamps to the safe-zone size and the
+    // oversized top-left pins to the zone origin — y stays 0 in store coords
+    // and paints at topBar (36) via the content-zone container.
     expect(win?.width).toBe(vw);
     expect(win?.height).toBe(vh - 36 - 76); // desktop top/bottom chrome
     expect(win?.x).toBe(0);
-    expect(win?.y).toBe(36);
+    expect(win?.y).toBe(0);
+    expect(win?.y).toBeLessThan(36); // zone frame: never pushed below topBar pre-shift
+  });
+
+  it("keeps a remembered y below the top bar in the zone frame (no +topBar shift)", () => {
+    const id = store.openWindow({ title: "X", type: "app", component: "X" });
+    store.updateWindowPosition(id, 10, 8);
+    store.closeWindow(id);
+    store.openWindow({ title: "X", type: "app", component: "X" });
+    // The painted-frame bug clamped y to topBar (36), painting at 72.
+    // Zone-frame clamp leaves it untouched: paints at 8 + 36 = 44.
+    expect(store.windows[0]?.y).toBe(8);
+  });
+
+  it("re-clamps a desktop-remembered rect to fit a smaller mobile viewport", () => {
+    const originalW = window.innerWidth;
+    const originalH = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
+
+    // Remember on desktop: 500×500 @ 800,400 — inside 1440×900's safe zone.
+    const id = store.openWindow({ title: "X", type: "app", component: "X" });
+    store.updateWindowPosition(id, 800, 400);
+    store.updateWindowSize(id, 500, 500);
+    store.closeWindow(id);
+
+    // Reopen at mobile 375×812: topBar 32, bottomBar 52 → zoneHeight 728.
+    // clampWindowSize: 375×500 (height still fits; min height is 200).
+    // Zone clamp: x → vw − w = 0; y → zoneHeight − h = 228 (never negative).
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 812 });
+    store.openWindow({ title: "X", type: "app", component: "X" });
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: originalW });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: originalH });
+
+    const win = store.windows[0];
+    expect(win?.width).toBe(375);
+    expect(win?.height).toBe(500);
+    expect(win?.x).toBe(0);
+    expect(win?.y).toBe(228);
+    expect(win?.y).toBeLessThanOrEqual(812 - 32 - 52 - (win?.height ?? 0));
   });
 });
 

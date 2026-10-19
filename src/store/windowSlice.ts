@@ -1,6 +1,6 @@
 import { StateCreator } from "zustand";
 import { WindowInstance, WindowConfig } from "@/types/window";
-import { clampWindowSize, clampWindowPosition } from "@/lib/boundaries";
+import { clampWindowSize, clampWindowPosition, getViewportBounds } from "@/lib/boundaries";
 import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, INITIAL_Z_INDEX } from "@/lib/constants";
 import { resolveOpenGeometry, WEBVIEW_GEOMETRY_KEY, WindowGeometry } from "@/lib/window-geometry";
 
@@ -36,11 +36,26 @@ function geometryKeyForWindow(w: WindowInstance): string {
   return w.component ?? (w.url ? `${WEBVIEW_GEOMETRY_KEY}${w.url}` : "");
 }
 
-/** Re-clamps a remembered rect so it fits the current viewport (safe-zone aware). */
+/**
+ * Re-clamps a remembered rect so it fits the current viewport — in the ZONE
+ * frame (content-zone-relative store coords: painted y = store y + topBar,
+ * see the container offset in Desktop.tsx). y stays within
+ * [0, zoneHeight − h], mirroring `settle()` in window-geometry.ts — NOT
+ * `clampWindowPosition`, which clamps in the painted frame ([topBar, …]) and
+ * would double-add the topBar shift on restore. Zone clamp variants pending in
+ * boundaries.ts (Task-3 fix lane owns that file) — post-wave dedupe target:
+ * swap this local implementation onto that export when it lands.
+ */
 function clampRemembered(rect: WindowGeometry, vw: number, vh: number): WindowGeometry {
   const size = clampWindowSize(rect.width, rect.height, vw, vh);
-  const pos = clampWindowPosition(rect.x, rect.y, size.width, size.height, vw, vh);
-  return { ...rect, ...size, ...pos };
+  const { topBar, bottomBar } = getViewportBounds(vw);
+  const zoneHeight = vh - topBar - bottomBar;
+  return {
+    x: Math.max(0, Math.min(rect.x, vw - size.width)),
+    y: Math.max(0, Math.min(rect.y, zoneHeight - size.height)),
+    width: size.width,
+    height: size.height,
+  };
 }
 
 export interface WindowSlice {
