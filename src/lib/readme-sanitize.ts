@@ -25,7 +25,11 @@
  *    it would leak its attributes. The forced `target`/`rel` pair is
  *    appended only after every `target`/`rel` in the tag has been removed,
  *    so exactly one of each survives and the browser cannot honour a
- *    duplicate that came first.
+ *    duplicate that came first. An attribute that carries NO value is
+ *    removed too: the parser keeps the first duplicate, so a valueless
+ *    `target`/`rel` would shadow the forced pair, and a valueless `href`
+ *    swallows it (`<a href= target="_blank">` parses as
+ *    `href="target=_blank"`).
  *
  * URLs are scheme-checked: only `http:`, `https:`, `mailto:`, `tel:` and
  * relative / fragment / protocol-relative references survive. Elements
@@ -33,13 +37,19 @@
  * document or navigate it (`style`, `link`, `base`, `meta`) are removed
  * outright.
  *
+ * Character references are decoded before a value is judged — the URL
+ * path has always done this, and the style filter does the same, so a
+ * paint property cannot hide behind `&#99;olor:red` (the browser decodes
+ * it, so the paint is real).
+ *
  * Remaining known-safe-for-README-shapes gaps (covered upstream by GitHub):
  * blocked-element text content that itself contains a literal closing tag
  * sequence; paint properties ending in something other than `-color`/
  * `-image` (e.g. `border-image-source`); attribute values that contain an
  * `on…=` sequence (over-stripped, fail-closed direction — the value is
- * emptied, the element and the tag stay intact); odd backtick quoting
- * tricks targeted at legacy engines.
+ * emptied, the element and the tag stay intact; the VALUELESS scan does
+ * not have this gap, it never looks inside a quoted value); odd backtick
+ * quoting tricks targeted at legacy engines.
  */
 
 /** Block-level elements removed together with everything inside them. */
@@ -73,9 +83,50 @@ const ATTRIBUTE_VALUE = String.raw`("[^"]*"|'[^']*'|[^\s>"']+)`;
  */
 const ATTRIBUTE_BOUNDARY = String.raw`(?<![-\w])`;
 
+/**
+ * A quoted attribute value. The content between the quotes is DATA, never
+ * an attribute name — the valueless-attribute scan skips these regions, so
+ * a word inside a value (`alt="only one"`) is never mistaken for an
+ * attribute.
+ */
+const QUOTED_VALUE = /("[^"]*"|'[^']*')/;
+
+/**
+ * Attribute names that must not survive without a value:
+ *
+ * - `on…` — a valueless handler is still a live handler attribute. Its
+ *   body is empty, so it runs nothing, but it breaks the "no live
+ *   handler" invariant and it is an attribute the DOM still reports.
+ * - `target` / `rel` — the parser keeps the FIRST duplicate, so a
+ *   valueless one shadows the forced pair the sanitizer appends.
+ * - `href` / `src` / `xlink:href` / `formaction` — a valueless URL is
+ *   useless, and on an anchor it SWALLOWS the forced `target="_blank"`
+ *   (`<a href= target="_blank">` parses as `href="target=_blank"`).
+ * - `style` — a valueless style paints nothing, but the sanitizer would
+ *   otherwise have rewritten it.
+ */
+const VALUELESS_ATTRIBUTE_NAMES = String.raw`(?:on[a-z]+|xlink:href|href|src|formaction|target|rel|style)`;
+
 /** Whitespace trailing an attribute value — consumed by the rules that drop
  *  an attribute, so the drop leaves no double gap behind. */
 const TRAILING_SPACE = String.raw`\s*`;
+
+/**
+ * A valueless attribute, or one whose `=` has no value. The name must end
+ * at an attribute boundary (whitespace, `/` or the tag's `>`), and a name
+ * whose `=` binds a value is left to the value rules below — so
+ * `href="x"`, `href =x` and `hreflang="en"` are all untouched, while
+ * `href=`, `href` and `onerror` are dropped. The `=`-without-a-value form
+ * is only recognised when the tag's own `>` follows it: a `=` in front of a
+ * quoted value binds that value, it is not an empty value.
+ */
+const VALUELESS_ATTRIBUTE = new RegExp(
+  ATTRIBUTE_BOUNDARY +
+    VALUELESS_ATTRIBUTE_NAMES +
+    String.raw`(?:\s*=(?=\s*>))?(?=[\s>/])(?!\s*=)` +
+    TRAILING_SPACE,
+  "gi",
+);
 
 /** `onclick="..."` / `<img/onerror=x>` — the boundary keeps `data-onclick`
  *  safe; the name may follow whitespace, `/` or a closing quote. */
@@ -192,19 +243,31 @@ function unprefixedName(declaration: string): string {
   return declaration.replace(/^\s*-[a-z0-9]+-/i, "");
 }
 
-/** True when the (prefix-stripped) declaration paints color/image —
- * `color`, `background`, or any `*-color`/`*-image` property. */
+/**
+ * True when the declaration paints color/image — the (prefix-stripped)
+ * property is `color`, `background`, or any `*-color`/`*-image` name. The
+ * character references a browser resolves are decoded FIRST, so a property
+ * cannot hide behind `&#99;olor` (the browser decodes it, so the paint is
+ * real).
+ */
 export function isBlockedStyleDeclaration(declaration: string): boolean {
-  return BLOCKED_STYLE_DECLARATION.test(unprefixedName(declaration));
+  return BLOCKED_STYLE_DECLARATION.test(unprefixedName(decodeReferences(declaration)));
 }
 
 /**
  * Strips blocked declarations from one style value and keeps the rest.
+ * The value is decoded FIRST: a character reference can hide a property
+ * name (`&#99;olor:red`) or the `;` that separates two declarations
+ * (`margin:0&#59;color:red`), and the browser decodes both. The parts are
+ * classified through the exported helper, so a declaration is judged the
+ * same way whether it arrives whole or inside a value.
  * Note: a trailing `;` yields an empty tail part whose join collapses to ""
  * — caller treats "" as "no style attribute at all", which is safe.
  */
 export function removeBlockedStyleDeclarations(value: string): string {
-  const kept = value.split(";").filter((part) => !isBlockedStyleDeclaration(part));
+  const kept = decodeReferences(value)
+    .split(";")
+    .filter((part) => !isBlockedStyleDeclaration(part));
   return kept
     .map((part) => part.trim())
     .filter(Boolean)
@@ -310,9 +373,23 @@ function trimTrailingSpace(tag: string): string {
   return start === close ? tag : tag.slice(0, start) + tag.slice(close);
 }
 
+/**
+ * Removes the attributes that carry no value. The scan runs on the tag's
+ * attribute regions only — the text BETWEEN quoted values — so a word
+ * inside a value is never mistaken for an attribute name.
+ */
+function removeValuelessAttributes(tag: string): string {
+  const segments = tag.split(QUOTED_VALUE);
+  const kept = segments.map((segment, index) =>
+    index % 2 === 0 ? segment.replace(VALUELESS_ATTRIBUTE, "") : segment,
+  );
+  return kept.join("");
+}
+
 /** Applies every per-tag transform to a single open tag. */
 function sanitizeOpenTag(tag: string): string {
-  let next = tag.replace(ON_ATTRIBUTE, "");
+  let next = removeValuelessAttributes(tag);
+  next = next.replace(ON_ATTRIBUTE, "");
   next = filterStyleAttribute(next);
   next = filterUrlAttributes(next);
   if (ANCHOR_TAG.test(next)) next = normalizeAnchor(next);

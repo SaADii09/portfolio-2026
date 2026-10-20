@@ -17,6 +17,12 @@ function parseHtml(html: string): HTMLElement {
   return host;
 }
 
+/** The number of attributes with this name on the parsed element. */
+function attributeCount(el: Element | null, name: string): number {
+  if (!el) return 0;
+  return Array.from(el.attributes).filter((attr) => attr.name === name).length;
+}
+
 describe("sanitizeReadmeHtml — blocked element removal", () => {
   it("removes <script> with its contents", () => {
     expect(sanitizeReadmeHtml('<p>hi</p><script>alert("x")</script>')).toBe("<p>hi</p>");
@@ -347,12 +353,6 @@ describe("review I-2 — element blocklist and URL scheme validation", () => {
 });
 
 describe("review I-1 round 2 — packed attributes and unparseable tags", () => {
-  /** The number of attributes with this name on the parsed element. */
-  function attributeCount(el: Element | null, name: string): number {
-    if (!el) return 0;
-    return Array.from(el.attributes).filter((attr) => attr.name === name).length;
-  }
-
   it("strips a quoted handler that is packed against the previous attribute", () => {
     const host = parseHtml(sanitizeReadmeHtml('<img onerror="x"onload="alert(1)">'));
     const img = host.querySelector("img");
@@ -441,5 +441,88 @@ describe("blocked style declaration helpers", () => {
 
   it("returns an empty string when everything is blocked", () => {
     expect(removeBlockedStyleDeclarations("color:#fff;background:url(x)")).toBe("");
+  });
+});
+
+describe("round-3 review — valueless attributes and entity-hidden paint", () => {
+  it("drops a valueless on* attribute", () => {
+    const img = parseHtml(sanitizeReadmeHtml("<img onerror>")).querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.hasAttribute("onerror")).toBe(false);
+  });
+
+  it("drops an on* attribute whose value is empty", () => {
+    const img = parseHtml(sanitizeReadmeHtml("<img onerror=>")).querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.hasAttribute("onerror")).toBe(false);
+  });
+
+  it("keeps the forced rel when a valueless rel shadows it", () => {
+    const a = parseHtml(
+      sanitizeReadmeHtml('<a rel rel="noopener noreferrer" href="https://evil.example">go</a>'),
+    ).querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(attributeCount(a, "rel")).toBe(1);
+  });
+
+  it("keeps the forced target when a valueless target shadows it", () => {
+    const a = parseHtml(
+      sanitizeReadmeHtml('<a target target="_blank" href="u">go</a>'),
+    ).querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute("target")).toBe("_blank");
+    expect(attributeCount(a, "target")).toBe(1);
+  });
+
+  it("keeps the forced pair when target and rel are both valueless", () => {
+    const a = parseHtml(sanitizeReadmeHtml('<a target rel href="u">go</a>')).querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute("target")).toBe("_blank");
+    expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(attributeCount(a, "target")).toBe(1);
+    expect(attributeCount(a, "rel")).toBe(1);
+  });
+
+  it("drops a valueless href so it cannot swallow the forced target", () => {
+    const a = parseHtml(sanitizeReadmeHtml("<a href=>go</a>")).querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.hasAttribute("href")).toBe(false);
+    expect(a?.getAttribute("target")).toBe("_blank");
+  });
+
+  it("decodes character references before it classifies a style declaration", () => {
+    for (const value of ["&#99;olor:red", "&#98;ackground:url(x)", "color&#58;red"]) {
+      const p = parseHtml(sanitizeReadmeHtml(`<p style="${value}">t</p>`)).querySelector("p");
+      expect(p).not.toBeNull();
+      expect(p?.hasAttribute("style")).toBe(false);
+    }
+  });
+
+  it("keeps a benign style declaration", () => {
+    const p = parseHtml(sanitizeReadmeHtml('<p style="margin:0">t</p>')).querySelector("p");
+    expect(p?.getAttribute("style")).toBe("margin:0");
+  });
+
+  it("keeps legitimate attributes untouched", () => {
+    const host = parseHtml(
+      sanitizeReadmeHtml(
+        '<a href="https://example.com/x" class="link">go</a><img src="pic.png" alt="a" data-onclick="c">',
+      ),
+    );
+    const a = host.querySelector("a");
+    expect(a?.getAttribute("href")).toBe("https://example.com/x");
+    expect(a?.getAttribute("class")).toBe("link");
+    const img = host.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("pic.png");
+    expect(img?.getAttribute("alt")).toBe("a");
+    expect(img?.getAttribute("data-onclick")).toBe("c");
+  });
+
+  it("never mistakes a word inside a value for a valueless attribute", () => {
+    const img = parseHtml(sanitizeReadmeHtml('<img alt="only one on target rel">')).querySelector(
+      "img",
+    );
+    expect(img?.getAttribute("alt")).toBe("only one on target rel");
   });
 });
