@@ -42,6 +42,20 @@ function cachePut(url: string, entry: { bytes: ArrayBuffer; contentType: string 
 }
 
 /**
+ * Cache key: origin + pathname (query/hash dropped). The route is public and
+ * unauthenticated, so a `?utm=…` variant of an allow-listed page must share
+ * ONE cache entry instead of triggering a fresh Microlink capture.
+ */
+function cacheKeyFor(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Test plumbing: vitest shares the module instance across a file's tests.
  * @expected-unused -- reset consumed only by test files (cache isolation)
  */
@@ -102,7 +116,10 @@ export async function GET(request: Request) {
     return Response.json({ error: "Invalid url" }, { status: 400 });
   }
 
-  const cached = cachedResponse(url);
+  // The cache keys on origin + pathname; the capture still uses the full url.
+  const cacheKey = cacheKeyFor(url);
+
+  const cached = cachedResponse(cacheKey);
   if (cached) return cached;
 
   try {
@@ -117,7 +134,7 @@ export async function GET(request: Request) {
       .jpeg({ quality: SLICE_QUALITY })
       .toBuffer();
     const bytes = new Uint8Array(jpeg).buffer;
-    cachePut(url, { bytes, contentType: "image/jpeg" });
+    cachePut(cacheKey, { bytes, contentType: "image/jpeg" });
     return jpegResponse(bytes, "image/jpeg");
   } catch {
     // Error bodies never echo internal state (requested url, upstream URLs).

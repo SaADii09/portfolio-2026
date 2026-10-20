@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BROWSER_TILES } from "@/lib/browser-apps";
 import { PROJECTS } from "@/lib/portfolio-data";
@@ -64,5 +64,33 @@ describe("isScreenshotAllowed", () => {
   it("rejects unparseable urls", () => {
     expect(isScreenshotAllowed("not a url")).toBe(false);
     expect(isScreenshotAllowed("://missing-scheme")).toBe(false);
+  });
+});
+
+describe("allow-list module load", () => {
+  afterEach(() => {
+    vi.doUnmock("@/lib/browser-apps");
+    vi.resetModules();
+  });
+
+  it("imports cleanly and skips a malformed tile url", async () => {
+    // The allow set is derived from the tile registry at MODULE LOAD — a
+    // malformed tile url must be skipped, never thrown (a throw would take
+    // down BOTH /api/screenshot and /api/project-meta). The tile registry
+    // itself is owned elsewhere, so the resilience lives on this side.
+    vi.doMock("@/lib/browser-apps", () => ({
+      BROWSER_TILES: [
+        { name: "Broken", url: "not a url", kind: "blocked", icon: "globe" },
+        { name: "Wiki", url: "https://en.wikipedia.org", kind: "web", icon: "globe" },
+      ],
+    }));
+    vi.resetModules();
+
+    const allowlist = await import("@/lib/screenshot-allowlist");
+
+    // The good tile origin made it into the allow set…
+    expect(allowlist.isScreenshotAllowed("https://en.wikipedia.org/wiki/DevOS")).toBe(true);
+    // …the malformed one was skipped, not fatal.
+    expect(allowlist.isScreenshotAllowed("https://not a url")).toBe(false);
   });
 });

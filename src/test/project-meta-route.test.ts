@@ -60,6 +60,14 @@ function mockGitHubFlow(
     });
 }
 
+/** Upstream failure: the repo-meta fetch 404s (the 502 path). */
+function mockRepoMetaFailure() {
+  fetchMock
+    .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) })
+    .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "" })
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) });
+}
+
 describe("GET /api/project-meta", () => {
   it("returns 400 unknown repo without making any outbound calls", async () => {
     const res = await GET(makeRequest("?repo=evil/example"));
@@ -245,6 +253,85 @@ describe("GET /api/project-meta", () => {
 
       const res = await GET(makeRequest(`?repo=${repo}`));
       expect(res.status).toBe(200);
+    }
+  });
+
+  it("returns 502 with the fixed body when the README body read rejects", async () => {
+    // A truncated upstream body rejects `text()` — the read must degrade
+    // into the contracted 502 {"error":"unavailable"}, never a 500 crash
+    // with a non-JSON body.
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => REPO_FACTS_JSON })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => {
+          throw new Error("truncated body");
+        },
+      })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ tag_name: "v1.0.0" }) });
+
+    const res = await GET(makeRequest(`?repo=${REPO}`));
+
+    expect(res.status).toBe(502);
+    const text = await res.text();
+    expect(text).toBe('{"error":"unavailable"}');
+    expect(text).not.toContain(REPO);
+  });
+
+  it("caches a failed fetch — a repeat failure makes no second upstream round-trip", async () => {
+    mockRepoMetaFailure();
+
+    const first = await GET(makeRequest(`?repo=${REPO}`));
+    expect(first.status).toBe(502);
+    const callsAfterFirst = fetchMock.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    const second = await GET(makeRequest(`?repo=${REPO}`));
+    expect(second.status).toBe(502);
+    await expect(second.json()).resolves.toEqual({ error: "unavailable" });
+    // The negative cache absorbs the repeat — no new upstream calls.
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  it("re-attempts the upstream once the negative-cache TTL expires", async () => {
+    vi.useFakeTimers();
+    try {
+      mockRepoMetaFailure();
+
+      const first = await GET(makeRequest(`?repo=${REPO}`));
+      expect(first.status).toBe(502);
+      const callsAfterFirst = fetchMock.mock.calls.length;
+
+      // Still inside the negative TTL — no new upstream attempt.
+      await GET(makeRequest(`?repo=${REPO}`));
+      expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+
+      vi.advanceTimersByTime(61_000);
+
+      const third = await GET(makeRequest(`?repo=${REPO}`));
+      expect(third.status).toBe(502);
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("serves a successful fetch after a cached failure once the TTL expires", async () => {
+    vi.useFakeTimers();
+    try {
+      mockRepoMetaFailure();
+      const first = await GET(makeRequest(`?repo=${REPO}`));
+      expect(first.status).toBe(502);
+
+      vi.advanceTimersByTime(61_000);
+
+      mockGitHubFlow();
+      const recovered = await GET(makeRequest(`?repo=${REPO}`));
+      expect(recovered.status).toBe(200);
+      await expect(recovered.json()).resolves.toMatchObject({ degraded: false });
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

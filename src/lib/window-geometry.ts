@@ -51,6 +51,8 @@ export const BROWSER_SLOT: SlotSpec = { leftFrac: 0.5, topFrac: 0.1 };
 /** Locked per-app content-fit sizes — measured content footprints (spec §4.4). */
 const APP_SIZES: Record<string, SizeSpec> = {
   about: { width: 560, height: 620 },
+  // Legacy row — nothing new opens a "projects" window (the launcher opens
+  // the Browser); kept only for visitors with a persisted projects window.
   projects: { width: 720, height: 640 },
   "control-panel": { width: 460, height: 640 },
   resume: { width: 700, height: 760 },
@@ -63,6 +65,7 @@ const APP_SIZES: Record<string, SizeSpec> = {
 /** Locked first-open anchor slots in leftover safe-zone space (spec §4.4). */
 const APP_SLOTS: Record<string, SlotSpec> = {
   about: { leftFrac: 0, topFrac: 0.18 },
+  // Legacy row — see the `projects` size row above (persisted windows only).
   projects: { leftFrac: 0.55, topFrac: 0.25 },
   "control-panel": { leftFrac: 0.5, topFrac: 0.5 },
   resume: { leftFrac: 0.5, topFrac: 0.06 },

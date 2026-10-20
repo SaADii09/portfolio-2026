@@ -20,7 +20,7 @@ import {
   setThemeByName,
   type MusicAction,
 } from "@/lib/os-actions";
-import { APP_DEFS, resolveAppId } from "@/lib/apps";
+import { APP_DEFS, resolveAppId, type AppId } from "@/lib/apps";
 
 describe("os-actions", () => {
   beforeEach(() => {
@@ -78,6 +78,16 @@ describe("os-actions", () => {
       expect(useStore.getState().windows[0]?.title).toBe("Control Panel");
       const def = APP_DEFS.find((a) => a.id === "control-panel");
       expect(def?.desktopLabel).toBe("Settings");
+    });
+
+    it("no-ops (instead of throwing) on an unknown app id", () => {
+      // Same posture as musicControl: an id outside the launch table is a
+      // silent no-op — never a crash, never a window.
+      const unknown = "not-an-app" as AppId;
+      expect(() => openApp(unknown)).not.toThrow();
+      const state = useStore.getState();
+      expect(state.windows).toHaveLength(0);
+      expect(state.activeWindowId).toBeNull();
     });
   });
 

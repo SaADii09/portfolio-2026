@@ -26,7 +26,12 @@ const PROJECT_ORIGINS: readonly string[] = PROJECTS.flatMap((project) =>
   ),
 );
 
-const TILE_ORIGINS: readonly string[] = BROWSER_TILES.map((tile) => new URL(tile.url).origin);
+// Same safe derivation as PROJECTS: a malformed tile url is skipped, never
+// thrown — this module loads at import time and a throw would take down
+// BOTH API routes.
+const TILE_ORIGINS: readonly string[] = BROWSER_TILES.map((tile) => safeOrigin(tile.url)).filter(
+  (origin): origin is string => origin !== null,
+);
 
 export const SCREENSHOT_ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
   ...PROJECT_ORIGINS,

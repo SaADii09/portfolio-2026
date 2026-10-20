@@ -48,9 +48,14 @@ const APP_LAUNCHERS: Record<AppId, (id: AppId) => void> = {
 /**
  * Launch an app by id — the single choke point every launcher funnels
  * through (desktop icons, Start menu, palette rows, terminal `open`).
+ *
+ * An id outside the launch table is a silent no-op, never a crash (same
+ * posture as `musicControl`): the table itself stays exhaustive, so a NEW
+ * `AppId` is still a COMPILE error until its launcher row exists.
  */
 export function openApp(id: AppId): void {
-  APP_LAUNCHERS[id](id);
+  const launcher: ((appId: AppId) => void) | undefined = APP_LAUNCHERS[id];
+  launcher?.(id);
 }
 
 /**

@@ -57,31 +57,58 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — repo facts rarely move
 const CACHE_MAX = 16;
 const metaCache = new Map<string, { meta: ProjectMeta; at: number }>();
 
+/**
+ * Negative cache for FAILED upstream reads (60s). Without it a broken
+ * upstream is re-hit on every request; the short TTL keeps a failed read
+ * from burning the shared 60/h per-IP GitHub quota while still recovering
+ * quickly (the success cache stays at 6h — a failure never blocks recovery
+ * for that long).
+ */
+const FAILURE_TTL_MS = 60 * 1000; // 60s — a failure must recover fast
+const failureCache = new Map<string, { at: number }>();
+
 function metaCacheGet(repo: string): ProjectMeta | null {
   const cached = metaCache.get(repo);
   if (cached === undefined || Date.now() - cached.at >= CACHE_TTL_MS) return null;
   return cached.meta;
 }
 
+/** True when a recent failure is still cached (the upstream must not be re-hit). */
+function failureCached(repo: string): boolean {
+  const cached = failureCache.get(repo);
+  if (cached === undefined) return false;
+  return Date.now() - cached.at < FAILURE_TTL_MS;
+}
+
+function failureCachePut(repo: string): void {
+  // Same bounding as the success cache: drop expired entries first, then
+  // oldest (insertion order) until the new entry fits under the cap.
+  evictExpiredEntries(failureCache, FAILURE_TTL_MS);
+  evictOldestEntries(failureCache, CACHE_MAX);
+  failureCache.set(repo, { at: Date.now() });
+}
+
 function metaCachePut(repo: string, meta: ProjectMeta): void {
   // Bound the map: drop expired entries first, then oldest (insertion order)
   // until the new entry fits under the cap.
-  evictExpiredCacheEntries();
-  evictOldestCacheEntries();
+  evictExpiredEntries(metaCache, CACHE_TTL_MS);
+  evictOldestEntries(metaCache, CACHE_MAX);
   metaCache.set(repo, { meta, at: Date.now() });
 }
 
-function evictExpiredCacheEntries(): void {
-  for (const [key, value] of metaCache) {
-    if (Date.now() - value.at > CACHE_TTL_MS) metaCache.delete(key);
+/** Drop entries whose `at` stamp is older than the TTL. */
+function evictExpiredEntries(cache: Map<string, { at: number }>, ttlMs: number): void {
+  for (const [key, value] of cache) {
+    if (Date.now() - value.at >= ttlMs) cache.delete(key);
   }
 }
 
-function evictOldestCacheEntries(): void {
-  while (metaCache.size >= CACHE_MAX) {
-    const oldest = metaCache.keys().next().value;
+/** Drop the oldest entries (insertion order) until the map fits under the cap. */
+function evictOldestEntries(cache: Map<string, { at: number }>, max: number): void {
+  while (cache.size >= max) {
+    const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
-    metaCache.delete(oldest);
+    cache.delete(oldest);
   }
 }
 
@@ -92,6 +119,7 @@ function evictOldestCacheEntries(): void {
  */
 export function resetProjectMetaCache(): void {
   metaCache.clear();
+  failureCache.clear();
 }
 
 const GITHUB_API_BASE = "https://api.github.com/repos";
@@ -161,7 +189,8 @@ async function releaseTagOf(response: Response | null): Promise<string | null> {
 
 interface UpstreamResponse {
   facts: RepoFacts;
-  readmeRes: Response | null;
+  /** Sanitized README html, or null when GitHub refused the README. */
+  readmeHtml: string | null;
   releaseRes: Response | null;
 }
 
@@ -170,6 +199,18 @@ async function repoFactsRequest(repo: string): Promise<RepoFacts | null> {
   if (repoRes === null) return null;
   if (!repoRes.ok) return null;
   return repoFactsOf(await repoRes.json());
+}
+
+/**
+ * Sanitized README html, or null when GitHub refused it (403/429 rate
+ * limits). The body read may REJECT on a truncated stream — the rejection
+ * escapes into the caller's catch, so a broken body degrades into the
+ * route's contracted 502 instead of a 500 with a non-JSON body.
+ */
+async function readmeHtmlOf(readmeRes: Response | null): Promise<string | null> {
+  if (readmeRes === null || !readmeRes.ok) return null;
+  // Sanitized BEFORE caching — the cache must never hold raw GitHub HTML.
+  return sanitizeReadmeHtml(await readmeRes.text());
 }
 
 /** The 3-upstream parallel flow: repo meta (JSON), README (HTML), latest release. */
@@ -182,7 +223,9 @@ async function fetchUpstream(repo: string): Promise<UpstreamResponse | null> {
       }),
       safeFetch(`${GITHUB_API_BASE}/${repo}/releases/latest`),
     ]);
-    return facts === null ? null : { facts, readmeRes, releaseRes };
+    if (facts === null) return null;
+    const readmeHtml = await readmeHtmlOf(readmeRes);
+    return { facts, readmeHtml, releaseRes };
   } catch {
     return null;
   }
@@ -191,12 +234,7 @@ async function fetchUpstream(repo: string): Promise<UpstreamResponse | null> {
 async function fetchProjectMeta(repo: string): Promise<ProjectMeta | null> {
   const upstream = await fetchUpstream(repo);
   if (upstream === null) return null;
-  const { facts, readmeRes, releaseRes } = upstream;
-  let readmeHtml: string | null = null;
-  if (readmeRes !== null && readmeRes.ok) {
-    // Sanitized BEFORE caching — the cache must never hold raw GitHub HTML.
-    readmeHtml = sanitizeReadmeHtml(await readmeRes.text());
-  }
+  const { facts, readmeHtml, releaseRes } = upstream;
   const meta: ProjectMeta = {
     slug: projectSlugFor(repo),
     readmeHtml,
@@ -212,6 +250,18 @@ async function fetchProjectMeta(repo: string): Promise<ProjectMeta | null> {
   return meta;
 }
 
+/**
+ * Meta for a repo, honouring the negative cache: a recent failure is served
+ * from it (the upstream is not re-hit), and a fresh failure is cached so the
+ * next request inside the short TTL costs no upstream call.
+ */
+async function metaFor(repo: string): Promise<ProjectMeta | null> {
+  if (failureCached(repo)) return null;
+  const meta = await fetchProjectMeta(repo);
+  if (meta === null) failureCachePut(repo);
+  return meta;
+}
+
 // GET /api/project-meta?repo=<owner/name>
 //   → 200 ProjectMeta | 400 {"error":"unknown repo"} (no outbound calls)
 //   → 502 {"error":"unavailable"} (upstream failure; never echoes repo/url)
@@ -224,7 +274,7 @@ export async function GET(request: Request) {
   const cached = metaCacheGet(repo);
   if (cached !== null) return Response.json(cached);
 
-  const meta = await fetchProjectMeta(repo);
+  const meta = await metaFor(repo);
   if (meta === null) {
     return Response.json({ error: "unavailable" }, { status: 502 });
   }

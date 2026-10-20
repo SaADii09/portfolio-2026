@@ -174,6 +174,25 @@ describe("GET route", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("shares one cache entry across query-string variants of the same path", async () => {
+    // The cache keys on origin + pathname: a `?utm=…` suffix must not
+    // trigger a second Microlink capture on a public, unauthenticated route.
+    mockScreenshotFlow();
+
+    const first = await GET(
+      makeRequest(`?url=${encodeURIComponent("https://github.com/SaADii09/devos?utm_source=a")}`),
+    );
+    expect(first.status).toBe(200);
+
+    const second = await GET(
+      makeRequest(`?url=${encodeURIComponent("https://github.com/SaADii09/devos?utm_source=b")}`),
+    );
+    expect(second.status).toBe(200);
+    expect(second.headers.get("content-type")).toBe("image/jpeg");
+    // Only the initial capture (2 fetches) ran — the variant hit the cache.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("returns 502 when Microlink resolves no screenshot url", async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: {} }) });
 
