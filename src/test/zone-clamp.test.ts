@@ -32,21 +32,21 @@ describe("clampWindowPosition — zone floor", () => {
     expect(pos.y).toBe(0);
   });
 
-  it("keeps the pre-existing max bound (Task 4 remembered-geometry contract)", () => {
+  it("clamps an oversized rect to the zone frame (y max = zoneHeight − h)", () => {
     // Oversized rect: clampWindowSize caps h at vh − 112 = 656, then the max
-    // bound pins y to vh − h − bottomBar = 36. That max bound predates the
-    // zone-frame work (Task 3 re-floored the y floor only) and is kept as-is;
-    // note stores.test.ts pins remembered geometry via the zone-frame
-    // clampRemembered max (y = zoneHeight − h), not this helper.
+    // bound pins y to zoneHeight − h = (768 − 112) − 656 = 0. The previous
+    // pin froze a pre-zone translation bug (y max missing −topBar), which let
+    // reload-clamped windows paint 36px into the dock zone and reverted
+    // committed drags on reload (pinned by the full-matrix run).
     const pos = clampWindowPosition(9000, 9000, 1024, 656, 1024, 768);
-    expect(pos).toEqual({ x: 0, y: 36 });
+    expect(pos).toEqual({ x: 0, y: 0 });
   });
 
-  it("keeps the pre-existing right/bottom clamps for oversized windows", () => {
+  it("keeps the right/bottom clamps for oversized windows", () => {
     const pos = clampWindowPosition(100, 100, 400, 320, 1024, 768);
     expect(pos).toEqual({ x: 100, y: 100 });
     expect(clampWindowPosition(2000, 100, 400, 320, 1024, 768).x).toBe(1024 - 400);
-    expect(clampWindowPosition(100, 2000, 400, 320, 1024, 768).y).toBe(768 - 320 - 76);
+    expect(clampWindowPosition(100, 2000, 400, 320, 1024, 768).y).toBe(768 - 36 - 76 - 320);
   });
 });
 
@@ -56,8 +56,12 @@ describe("clampDragPosition — zone floor", () => {
     expect(clampDragPosition(100, -100, 400, 1024, 768).y).toBe(0);
   });
 
-  it("keeps the pre-existing bottom drag affordance (park past the dock)", () => {
-    expect(clampDragPosition(100, 700, 400, 1024, 768).y).toBe(768 - 76);
+  it("parks the painted top at the dock top (faithful pre-zone allowance)", () => {
+    // y max = zoneHeight: painted top (store y + topBar) reaches the dock top
+    // (768 − 76 = 692), the same allowance the painted-frame clamp had before
+    // the zone shift. The previous pin ((768 − 76) in store coords) left the
+    // −topBar untranslated, parking the painted top 36px inside the dock.
+    expect(clampDragPosition(100, 700, 400, 1024, 768).y).toBe(768 - 36 - 76);
   });
 
   it("keeps the horizontal half-visibility drag clamps", () => {

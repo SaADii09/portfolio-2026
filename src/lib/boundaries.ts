@@ -39,8 +39,9 @@ export function clampWindowPosition(
     // in the zone's top slots (per-app geometry) on drag, resize, or any
     // viewport resize. Visible top edge never goes above the zone: the
     // Window component paints inside the content zone (top = topBar), and
-    // the max bound below keeps windows fully above the bottom bar.
-    y: Math.max(0, Math.min(y, vh - maxH - bottomBar)),
+    // the max bound keeps painted windows fully above the bottom bar
+    // (paintedY ≤ vh − bottomBar − h ⇒ store y ≤ zoneHeight − h).
+    y: Math.max(0, Math.min(y, vh - topBar - bottomBar - maxH)),
   };
 }
 
@@ -155,16 +156,17 @@ export function clampDragPosition(
   vw: number,
   vh: number,
 ) {
-  const { bottomBar } = getViewportBounds(vw);
+  const { bottomBar, topBar } = getViewportBounds(vw);
   const visibleFraction = 0.5;
   const minX = -(windowWidth * visibleFraction);
   const maxX = vw - windowWidth * visibleFraction;
   return {
     x: Math.max(minX, Math.min(x, maxX)),
-    // Zone-frame floor matching clampWindowPosition: dragged windows may park
-    // at the zone top (paintedY = topBar). The max keeps its pre-existing
-    // store-frame drag UX (painted top can rest just past the dock edge).
-    y: Math.max(0, Math.min(y, vh - bottomBar)),
+    // Zone frame: dragged windows may park with their painted top at the dock
+    // top (store y ≤ zoneHeight), the same allowance the painted-frame clamp
+    // had before the zone shift (painted top ≤ vh − bottomBar). Painted top
+    // is topBar + y, so the faithful translate keeps the −topBar here.
+    y: Math.max(0, Math.min(y, vh - topBar - bottomBar)),
   };
 }
 
