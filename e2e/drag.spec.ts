@@ -49,28 +49,6 @@ test.describe("Drag behavior", () => {
     await gotoApp(page);
   });
 
-  test("window header drag moves the window and persists after reload", async ({ page }) => {
-    await page.getByTitle("Open About Me").dblclick();
-    const win = page.locator(".os-window-enter");
-    await expect(win).toBeVisible();
-    const before = (await win.boundingBox())!;
-    const header = (await win.locator(".os-drag-handle").boundingBox())!;
-
-    await dragHeader(page, header.x + 60, header.y + header.height / 2, 120, 80);
-
-    const after = (await win.boundingBox())!;
-    expect(after.x).toBeGreaterThan(before.x + 120 - TOLERANCE);
-    expect(after.x).toBeLessThan(before.x + 120 + TOLERANCE);
-    expect(after.y).toBeGreaterThan(before.y + 80 - TOLERANCE);
-    expect(after.y).toBeLessThan(before.y + 80 + TOLERANCE);
-
-    await page.reload();
-    await waitBoot(page);
-    const persisted = (await page.locator(".os-window-enter").boundingBox())!;
-    expect(Math.abs(persisted.x - after.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(persisted.y - after.y)).toBeLessThanOrEqual(1);
-  });
-
   test("widget header drag moves the widget and persists after reload", async ({ page }) => {
     const widget = weatherWidget(page);
     await expect(widget).toBeVisible();
@@ -213,6 +191,44 @@ test.describe("Drag behavior", () => {
     const after = (await widget.boundingBox())!;
     expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+  });
+});
+
+test.describe("Desktop drag behavior — design-resolution viewport", () => {
+  /**
+   * Exact vertical persistence needs real zone slack: About's content-fit
+   * height (620) clamps to the FULL zone height at the 720 Playwright default,
+   * leaving zero y-slack — a committed +80 drag clips back to the zone top on
+   * reload (documented deferral: oversized remembered rects re-derive ≤ slack).
+   * The 1440×900 design resolution leaves genuine unpacked drag room, so the
+   * 1:1 drag persistence contract (spec §7) is pinned here.
+   */
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test.beforeEach(async ({ page }) => {
+    await gotoApp(page);
+  });
+
+  test("window header drag moves the window and persists after reload", async ({ page }) => {
+    await page.getByTitle("Open About Me").dblclick();
+    const win = page.locator(".os-window-enter");
+    await expect(win).toBeVisible();
+    const before = (await win.boundingBox())!;
+    const header = (await win.locator(".os-drag-handle").boundingBox())!;
+
+    await dragHeader(page, header.x + 60, header.y + header.height / 2, 120, 80);
+
+    const after = (await win.boundingBox())!;
+    expect(after.x).toBeGreaterThan(before.x + 120 - TOLERANCE);
+    expect(after.x).toBeLessThan(before.x + 120 + TOLERANCE);
+    expect(after.y).toBeGreaterThan(before.y + 80 - TOLERANCE);
+    expect(after.y).toBeLessThan(before.y + 80 + TOLERANCE);
+
+    await page.reload();
+    await waitBoot(page);
+    const persisted = (await page.locator(".os-window-enter").boundingBox())!;
+    expect(Math.abs(persisted.x - after.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(persisted.y - after.y)).toBeLessThanOrEqual(1);
   });
 });
 

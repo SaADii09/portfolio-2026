@@ -64,9 +64,24 @@ test.describe("Global keyboard shortcuts", () => {
     const win = page.locator(".os-window-enter");
     await expect(win).toBeVisible();
 
-    // Empty desktop area: away from icons, windows, and widgets.
-    await page.mouse.click(640, 450, { button: "right" });
-    const menuItem = page.getByRole("button", { name: "About DevOS" });
+    // Empty desktop area: just right of the About window (per-app slot puts it
+    // flush against the zone's left edge, x 0..~560), away from icons,
+    // widgets, and the paint area of both. Point derived from the live box so
+    // it stays valid at any default-viewport shift.
+    const aboutBox = (await win.boundingBox())!;
+    // Settle before the right-click: the desktop context-menu listener mounts
+    // in a post-hydration effect, and a right-click fired within the same
+    // couple of frames as the About window's first paint landed on a DOM with
+    // no listener (menu silently never opened — matrix run reproduced this
+    // deterministically on all three engines).
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    await page.mouse.click(Math.min(aboutBox.x + aboutBox.width + 80, 1100), 450, {
+      button: "right",
+    });
+    // ContextMenu items render as <button role="menuitem"> — the explicit ARIA
+    // role overrides the implicit button role, so the lookup must use menuitem
+    // (stale since the Phase 12.1 focus-traversal hardening).
+    const menuItem = page.getByRole("menuitem", { name: "About DevOS" });
     await expect(menuItem).toBeVisible();
 
     await page.keyboard.press("Escape");
@@ -85,9 +100,10 @@ test.describe("Global keyboard shortcuts", () => {
 
     // Mirror the hook (useKeyboardShortcuts) instead of re-deriving its maths:
     // geometry comes from the live viewport plus the shared safe-zone bounds.
-    // Windows are laid out inside the content safe zone, which is itself offset
-    // `topBar` below the viewport top (Desktop.tsx), so the painted top edge of a
-    // window parked at the hook's snap `y = topBar` lands at `zoneTop + topBar`.
+    // The snap writes store y = 0 (zone top), and the window paints inside a
+    // container offset topBar below the viewport top (Desktop.tsx) — so the
+    // painted top edge is exactly the zone container's top. zoneTop already
+    // includes topBar; adding it again would double-count (+36px).
     const { vw, vh, zoneTop } = await page.evaluate(() => {
       const el = document.querySelector(".os-window-enter");
       return {
@@ -99,7 +115,7 @@ test.describe("Global keyboard shortcuts", () => {
     const { topBar, bottomBar } = getViewportBounds(vw);
     const expectedWidth = Math.max(MIN_WINDOW_WIDTH, Math.round(vw / 2));
     const expectedHeight = vh - topBar - bottomBar;
-    const expectedY = zoneTop + topBar;
+    const expectedY = zoneTop;
 
     await page.keyboard.press("Alt+ArrowRight");
 
