@@ -133,6 +133,15 @@ describe("task-3 review fixes", () => {
     expect(sanitizeReadmeHtml("<img/onerror=x>after")).not.toMatch(/onerror/i);
   });
 
+  it("re-review: an unterminated tag with 60 quote chars sanitizes in bounded time", () => {
+    const input = `<a ${'" '.repeat(60)}no-close`;
+    const started = performance.now();
+    const out = sanitizeReadmeHtml(input);
+    const elapsed = performance.now() - started;
+    expect(out).toContain("no-close");
+    expect(elapsed).toBeLessThan(1000);
+  });
+
   it("finding 2: quote-aware scan strips the handler after a quoted >", () => {
     const out = sanitizeReadmeHtml('<img alt="x>" onerror=y>hello');
     expect(out).not.toMatch(/onerror/i);

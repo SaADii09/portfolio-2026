@@ -50,12 +50,16 @@ const REL_ATTRIBUTE = new RegExp(String.raw`\srel\s*=\s*` + ATTRIBUTE_VALUE, "gi
 
 /**
  * Quote-aware tag body: inside a tag, a `>` only closes the tag when no
- * quoted attribute value is open, so quoted spans (`"…"`, `'…'`) are
- * consumed whole and every other character (including stray quotes) is
- * skipped until the first unquoted `>`. Mutually exclusive alternatives make
- * this safe from catastrophic backtracking.
+ * quoted attribute value is open. The three alternatives are exclusive on
+ * their FIRST character (`"` / `'` / neither) and quote interiors allow all
+ * characters except their own delimiter — `>` may occur inside a quoted
+ * value, which is what keeps the quoted-`>` pin correct. Because every
+ * character position has exactly one viable alternative, and a quote span's
+ * interior length is pinned by the position of its closing delimiter, there
+ * is no ambiguous decomposition — matching stays linear even on inputs that
+ * never find a closing `>` (pinned by the bounded-time test).
  */
-const QUOTE_AWARE_TAIL = String.raw`(?:"[^"]*"|'[^']*'|[^>])*`;
+const QUOTE_AWARE_TAIL = String.raw`(?:"[^"]*"|'[^']*'|[^"'>])*`;
 
 /** Tags only: `<p ...>`, `<br/>`, `<A HREF>` — not comments or closers. */
 const OPEN_TAG = new RegExp(String.raw`<[a-zA-Z]` + QUOTE_AWARE_TAIL + `>`, "g");
