@@ -44,6 +44,10 @@ interface Spec {
   slot: SlotSpec;
 }
 
+/** DevOS Browser content-fit size + first-open anchor slot (browser spec §7). */
+export const BROWSER_SIZE: SizeSpec = { width: 960, height: 660 };
+export const BROWSER_SLOT: SlotSpec = { leftFrac: 0.5, topFrac: 0.1 };
+
 /** Locked per-app content-fit sizes — measured content footprints (spec §4.4). */
 const APP_SIZES: Record<string, SizeSpec> = {
   about: { width: 560, height: 620 },
@@ -52,6 +56,8 @@ const APP_SIZES: Record<string, SizeSpec> = {
   resume: { width: 700, height: 760 },
   terminal: { width: 640, height: 420 },
   contact: { width: 480, height: 520 },
+  // Browser exact-key row (browser spec §7) — resolved like any app key.
+  browser: BROWSER_SIZE,
 };
 
 /** Locked first-open anchor slots in leftover safe-zone space (spec §4.4). */
@@ -62,6 +68,7 @@ const APP_SLOTS: Record<string, SlotSpec> = {
   resume: { leftFrac: 0.5, topFrac: 0.06 },
   terminal: { leftFrac: 0, topFrac: 0.9 },
   contact: { leftFrac: 0.72, topFrac: 0.25 },
+  browser: BROWSER_SLOT,
 };
 
 const WEBVIEW_SIZE: SizeSpec = { width: 800, height: 560 };

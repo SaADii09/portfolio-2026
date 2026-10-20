@@ -24,6 +24,44 @@ export function openApp(id: AppId): void {
   store.openWindow({ title: def.title, type: "app", component: def.component });
 }
 
+/**
+ * Singleton launcher for the DevOS Browser (spec §7): exactly one `browser`
+ * window exists, many tabs inside it.
+ *
+ * Slug wiring per case:
+ * - Fresh window → `pendingSlug` (the slice has no setter by design; the
+ *   launcher writes the launch payload through the store and the BrowserApp
+ *   consumes it exactly once via `consumePendingSlug` on mount).
+ * - Relaunch on an existing window → `openProjectTab` directly: the app is
+ *   already mounted, so the slug has to land in state straight away instead
+ *   of waiting for a consume that may never re-run.
+ */
+// Note (Task 11 builder-check): `openApp("projects")` will delegate here.
+export function openBrowser(projectSlug?: string): void {
+  const store = useStore.getState();
+  const existing = store.windows.find((w) => w.type === "browser");
+  if (!existing) {
+    launchBrowser(projectSlug);
+    return;
+  }
+  if (existing.isMinimized) store.restoreWindow(existing.id);
+  store.focusWindow(existing.id);
+  if (projectSlug) store.openProjectTab(existing.id, projectSlug);
+}
+
+/** First launch: open the window, then wire the slug payload if any. */
+function launchBrowser(projectSlug?: string): void {
+  const store = useStore.getState();
+  const windowId = store.openWindow({ title: "Browser", type: "browser", component: "browser" });
+  if (projectSlug) {
+    // Launch payload — written through the store because the slice
+    // deliberately exposes `consumePendingSlug` but no setter (Task 6).
+    useStore.setState({ pendingSlug: projectSlug });
+  }
+  // Idempotent: only seeds the home tab when the record is missing/empty.
+  store.openBrowserWindow(windowId);
+}
+
 type StoreState = ReturnType<typeof useStore.getState>;
 
 /** Remove an existing widget of the type, or add one at the right edge of the content zone. */

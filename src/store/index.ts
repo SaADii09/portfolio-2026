@@ -6,8 +6,15 @@ import { WidgetSlice, createWidgetSlice } from "./widgetSlice";
 import { ChatSlice, createChatSlice } from "./chatSlice";
 import { MusicSlice, createMusicSlice } from "./musicSlice";
 import { UiSlice, createUiSlice } from "./uiSlice";
+import { BrowserSlice, createBrowserSlice } from "./browserSlice";
 
-export type AppStore = WindowSlice & ThemeSlice & WidgetSlice & ChatSlice & MusicSlice & UiSlice;
+export type AppStore = WindowSlice &
+  ThemeSlice &
+  WidgetSlice &
+  ChatSlice &
+  MusicSlice &
+  UiSlice &
+  BrowserSlice;
 
 /**
  * The slice of `AppStore` written to localStorage.
@@ -17,6 +24,11 @@ export type AppStore = WindowSlice & ThemeSlice & WidgetSlice & ChatSlice & Musi
  * `currentTrack` (the names the music slice declares) rather than nested under a
  * synthetic `music` key, which rehydrated as a stray key and silently dropped the
  * user's volume and current track.
+ *
+ * The browser slice's state (`browserWindows`, `readmeLru`, `metaLru`,
+ * `pendingSlug`, `sidePanelOpen`) is deliberately NOT persisted — browser
+ * sessions are ephemeral per spec §7, and the migrator below drops any stray
+ * browser keys an old localStorage blob might carry.
  */
 export type PersistedAppState = Pick<
   AppStore,
@@ -101,6 +113,7 @@ export const useStore = create<AppStore>()(
       ...createChatSlice(...a),
       ...createMusicSlice(...a),
       ...createUiSlice(...a),
+      ...createBrowserSlice(...a),
     }),
     {
       name: "devos-store",

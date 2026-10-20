@@ -1,4 +1,4 @@
-export type WindowType = "app" | "iframe" | "terminal";
+export type WindowType = "app" | "iframe" | "terminal" | "browser";
 
 export interface WindowInstance {
   id: string;

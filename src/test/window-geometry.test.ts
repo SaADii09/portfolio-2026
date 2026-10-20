@@ -28,6 +28,7 @@ const TABLE: Record<string, [number, number]> = {
   resume: [700, 760],
   terminal: [640, 420],
   contact: [480, 520],
+  browser: [960, 660],
   [`${WEBVIEW_GEOMETRY_KEY}https://example.com`]: [800, 560],
 };
 
@@ -105,6 +106,15 @@ describe("getAppWindowGeometry — desktop anchor slots @ 1440×900", () => {
     expect(
       Math.abs(painted(geo).y - Math.round(0.4 * (VH - 560 - BOTTOM_BAR))),
     ).toBeLessThanOrEqual(1);
+  });
+
+  it("browser opens 960×660 from its (0.5, 0.1) anchor", () => {
+    const geo = getAppWindowGeometry("browser", VW, VH, 0);
+    expect([geo.width, geo.height]).toEqual(TABLE.browser);
+    expect(Math.abs(painted(geo).x - Math.round(0.5 * (VW - 960)))).toBeLessThanOrEqual(1);
+    // Raw anchor 0.1 × 164 = 16.4 sits above the top bar, so the clamp parks
+    // the painted top edge at the top bar itself.
+    expect(painted(geo).y).toBe(TOP_BAR);
   });
 
   it("unknown components fall back to the legacy defaults (400×320 @ 80,60)", () => {
