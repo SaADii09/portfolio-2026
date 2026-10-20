@@ -179,11 +179,6 @@ export function WebView({ url }: WebViewProps) {
     // supersede, not overwrite, the pending probe — otherwise the first
     // timer's id is lost: it leaks past cleanup/unmount and can fire during
     // the gap, reading a mid-navigation document and mis-failing the frame.
-    // WebKit fires TWO load events per mount (initial readable-blank
-    // about:blank commit, then the real document). The second load must
-    // supersede, not overwrite, the pending probe — otherwise the first
-    // timer's id is lost: it leaks past cleanup/unmount and can fire during
-    // the gap, reading a mid-navigation document and mis-failing the frame.
     cancelProbe();
     probeTimerRef.current = setTimeout(() => {
       const signal = probeFrame();

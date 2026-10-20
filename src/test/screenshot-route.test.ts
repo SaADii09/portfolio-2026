@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GET, isAllowedUrl } from "@/app/api/screenshot/route";
+import sharp from "sharp";
+import { GET, isAllowedUrl, resetScreenshotCache } from "@/app/api/screenshot/route";
 
-// Interfaces pinned by Task 10 (WebView fallback):
+// Interfaces pinned by Task 10 (WebView fallback), extended by the Phase 15
+// preview work (route shrinks captures server-side):
 //   GET /api/screenshot?url=<https-absolute>
-//     → 200 image bytes (content-type: image/*, Cache-Control: public, max-age=86400)
+//     → 200 jpeg bytes (sharp-resized from the capture's PNG), Cache-Control: public, max-age=86400
 //     → 400 (non-https / unknown origin)
 //     → 502 (Microlink failure) with body {"error":"screenshot unavailable"}
 
@@ -16,6 +18,7 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   fetchMock.mockClear();
+  resetScreenshotCache(); // module-scope cache would bleed bytes across tests
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -25,10 +28,17 @@ afterEach(() => {
 
 /**
  * Two-step simulated Microlink flow: first outbound fetch resolves the
- * screenshot URL from JSON, second fetches the actual image bytes.
+ * screenshot URL from JSON, second fetches the actual image bytes. The mock
+ * carries a REAL 4×4 PNG — the route runs sharp over the bytes, and sharp
+ * rejects malformed images.
  */
+const TINY_PNG = await sharp({
+  create: { width: 4, height: 4, channels: 3, background: "#d8b913" },
+})
+  .png()
+  .toBuffer();
+
 function mockScreenshotFlow(screenshotUrl = "https://cdn.microlink.io/shot.png") {
-  const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]); // PNG magic
   fetchMock
     .mockResolvedValueOnce({
       ok: true,
@@ -38,7 +48,7 @@ function mockScreenshotFlow(screenshotUrl = "https://cdn.microlink.io/shot.png")
     .mockResolvedValueOnce({
       ok: true,
       status: 200,
-      body: new Response(bytes).body,
+      body: new Response(TINY_PNG).body,
       headers: {
         get: (name: string) => (name.toLowerCase() === "content-type" ? "image/png" : null),
       },
@@ -98,17 +108,18 @@ describe("GET route", () => {
     expect(text).not.toContain("secret-page");
   });
 
-  it("proxies the resolved screenshot bytes with image content-type and cache headers", async () => {
+  it("serves the capture as a route-resized jpeg with cache headers", async () => {
     mockScreenshotFlow();
 
     const res = await GET(makeRequest("?url=https://github.com/SaADii09/devos"));
 
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("content-type")).toBe("image/jpeg");
     expect(res.headers.get("cache-control")).toBe("public, max-age=86400");
-    await expect(res.arrayBuffer()).resolves.toEqual(
-      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]).buffer,
-    );
+    // The served bytes are real JPEG (SOI marker), not the capture's PNG body.
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(bytes[0]).toBe(0xff);
+    expect(bytes[1]).toBe(0xd8);
     expect(bytesFetchUrl()).toBe("https://cdn.microlink.io/shot.png");
   });
 
@@ -129,6 +140,19 @@ describe("GET route", () => {
 
     expect(res.status).toBe(502);
     await expect(res.json()).resolves.toEqual({ error: "screenshot unavailable" });
+  });
+
+  it("serves a repeat request from the in-memory cache without a second Microlink round-trip", async () => {
+    mockScreenshotFlow();
+
+    const first = await GET(makeRequest("?url=https://github.com/SaADii09/devos"));
+    expect(first.status).toBe(200);
+
+    const second = await GET(makeRequest("?url=https://github.com/SaADii09/devos"));
+    expect(second.status).toBe(200);
+    expect(second.headers.get("content-type")).toBe("image/jpeg");
+    // Only the initial capture (2 fetches) ran; the repeat must hit the cache.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns 502 when Microlink resolves no screenshot url", async () => {
