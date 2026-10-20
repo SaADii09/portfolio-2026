@@ -346,6 +346,79 @@ describe("review I-2 — element blocklist and URL scheme validation", () => {
   });
 });
 
+describe("review I-1 round 2 — packed attributes and unparseable tags", () => {
+  /** The number of attributes with this name on the parsed element. */
+  function attributeCount(el: Element | null, name: string): number {
+    if (!el) return 0;
+    return Array.from(el.attributes).filter((attr) => attr.name === name).length;
+  }
+
+  it("strips a quoted handler that is packed against the previous attribute", () => {
+    const host = parseHtml(sanitizeReadmeHtml('<img onerror="x"onload="alert(1)">'));
+    const img = host.querySelector("img");
+    expect(img?.hasAttribute("onerror") ?? false).toBe(false);
+    expect(img?.hasAttribute("onload") ?? false).toBe(false);
+  });
+
+  it("strips a packed style attribute instead of leaving paint on the element", () => {
+    const host = parseHtml(
+      sanitizeReadmeHtml('<p style="color:red"style="background:url(x)">t</p>'),
+    );
+    const p = host.querySelector("p");
+    expect(p).not.toBeNull();
+    expect(p?.hasAttribute("style") ?? false).toBe(false);
+  });
+
+  it("keeps exactly one forced target and rel when the tag packs duplicates", () => {
+    const host = parseHtml(sanitizeReadmeHtml('<a target="_self"target="_x"href="u">go</a>'));
+    const a = host.querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute("target")).toBe("_blank");
+    expect(a?.getAttribute("rel")).toContain("noopener");
+    expect(attributeCount(a, "target")).toBe(1);
+    expect(attributeCount(a, "rel")).toBe(1);
+  });
+
+  it("keeps exactly one forced rel when the tag packs duplicate rels", () => {
+    const host = parseHtml(sanitizeReadmeHtml('<a rel="nofollow"rel="opener"href="u">go</a>'));
+    const a = host.querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(attributeCount(a, "rel")).toBe(1);
+  });
+
+  it("scheme-checks every packed href", () => {
+    const host = parseHtml(
+      sanitizeReadmeHtml('<a href="javascript:alert(1)"href="javascript:alert(2)">go</a>'),
+    );
+    const a = host.querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.hasAttribute("href") ?? false).toBe(false);
+    expect(attributeCount(a, "href")).toBe(0);
+  });
+
+  it("fails closed on a tag the quote-aware scanner cannot close", () => {
+    const payloads = [
+      '<img "x onerror=alert(1)>',
+      "<img 'x onerror=alert(1)>",
+      '<img x"y onerror=alert(1)>',
+      '<div "x onclick=alert(1)>',
+    ];
+    for (const payload of payloads) {
+      const host = parseHtml(sanitizeReadmeHtml(payload));
+      expect(host.querySelectorAll("[onerror]").length).toBe(0);
+      expect(host.querySelectorAll("[onclick]").length).toBe(0);
+    }
+  });
+
+  it("keeps the text around a malformed tag", () => {
+    const host = parseHtml(sanitizeReadmeHtml('before<div "x onclick=alert(1)>after'));
+    expect(host.textContent).toContain("before");
+    expect(host.textContent).toContain("after");
+    expect(host.querySelectorAll("[onclick]").length).toBe(0);
+  });
+});
+
 describe("blocked style declaration helpers", () => {
   it("classifies color and background families as blocked", () => {
     expect(isBlockedStyleDeclaration("color:#fff")).toBe(true);
