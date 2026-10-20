@@ -7,6 +7,9 @@ export function useMediaQuery(query: string): boolean {
 
   const getMql = useCallback(() => {
     if (typeof window === "undefined") return null;
+    // Some DOM implementations (jsdom) ship no media-query engine at all —
+    // treat that as "no match" instead of throwing on every render.
+    if (typeof window.matchMedia !== "function") return null;
     if (!mqlRef.current) {
       mqlRef.current = window.matchMedia(query);
     }
