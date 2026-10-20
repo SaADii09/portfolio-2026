@@ -8,8 +8,11 @@ import type { WidgetType } from "@/types/widget";
  * (launchers, terminal, command palette) via `useStore.getState()`.
  */
 
-/** Focus an existing window whose component matches; restore if minimized, else open it. */
-export function openApp(id: AppId): void {
+/**
+ * Registry launch — focus the existing window for this app, restore it when
+ * minimized, else open a fresh one.
+ */
+function openRegistryApp(id: AppId): void {
   const def = APP_DEFS.find((a) => a.id === id);
   if (!def) return;
 
@@ -22,6 +25,32 @@ export function openApp(id: AppId): void {
   }
 
   store.openWindow({ title: def.title, type: "app", component: def.component });
+}
+
+/**
+ * The launch table — one row per `AppId`, so the app union and the launchers
+ * cannot drift: adding an id to `AppId` is a COMPILE error until its launcher
+ * is chosen here (no new app can silently skip the browser row).
+ *
+ * "projects" is the DevOS Browser: the plain launcher opens the singleton
+ * Browser window. The launch WITH a slug is `openBrowser(slug)` (the project
+ * cards) — never a second browser window.
+ */
+const APP_LAUNCHERS: Record<AppId, (id: AppId) => void> = {
+  about: openRegistryApp,
+  projects: () => openBrowser(),
+  "control-panel": openRegistryApp,
+  resume: openRegistryApp,
+  terminal: openRegistryApp,
+  contact: openRegistryApp,
+};
+
+/**
+ * Launch an app by id — the single choke point every launcher funnels
+ * through (desktop icons, Start menu, palette rows, terminal `open`).
+ */
+export function openApp(id: AppId): void {
+  APP_LAUNCHERS[id](id);
 }
 
 /**
@@ -38,7 +67,7 @@ export function openApp(id: AppId): void {
  *   land in state straight away instead of waiting for a consume that may
  *   never re-run.
  */
-// Note (Task 11 builder-check): `openApp("projects")` will delegate here.
+// Note (Task 11): `openApp("projects")` delegates here — see APP_LAUNCHERS.
 export function openBrowser(projectSlug?: string): void {
   const store = useStore.getState();
   const existing = store.windows.find((w) => w.type === "browser");

@@ -5,8 +5,8 @@ import { AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useLongPress } from "@/hooks/useLongPress";
 import { Monitor, Home, Maximize2, Minimize2, X, Target } from "lucide-react";
-import type { AppId } from "@/lib/apps";
-import { APP_ICONS } from "@/components/os/appIcons";
+import type { WindowType } from "@/types/window";
+import { WINDOW_ICONS, windowIconKeyFor } from "@/components/os/appIcons";
 import { StartMenu } from "./StartMenu";
 import { ContextMenu } from "./ContextMenu";
 
@@ -128,12 +128,18 @@ function MobileTaskbarButton({
   onClick,
   onLongPress,
 }: {
-  window: { id: string; component?: string; title: string; isMinimized: boolean };
+  window: {
+    id: string;
+    type?: WindowType;
+    component?: string;
+    title: string;
+    isMinimized: boolean;
+  };
   onClick: () => void;
   onLongPress: (e: React.PointerEvent) => void;
 }) {
   const longPress = useLongPress({ onLongPress });
-  const Icon = w.component ? (APP_ICONS[w.component as AppId] ?? Monitor) : Monitor;
+  const Icon = WINDOW_ICONS[windowIconKeyFor(w)] ?? Monitor;
 
   return (
     <button

@@ -324,15 +324,16 @@ describe("TerminalApp wiring (jsdom)", () => {
 
   it("open focuses instead of duplicating, and music next reports fresh state", () => {
     render(createElement(TerminalApp));
-    const projectsWindows = () =>
-      useStore.getState().windows.filter((w) => w.component === "projects");
+    // `open projects` funnels through `openApp`, which routes into the
+    // DevOS Browser singleton — the window it opens is the browser window.
+    const launchedWindows = () => useStore.getState().windows.filter((w) => w.type === "browser");
 
     submitCommand("open projects");
     expect(screen.getByText("Opening Projects")).toBeInTheDocument();
-    expect(projectsWindows()).toHaveLength(1);
+    expect(launchedWindows()).toHaveLength(1);
 
     submitCommand("open projects");
-    expect(projectsWindows()).toHaveLength(1);
+    expect(launchedWindows()).toHaveLength(1);
     expect(screen.getAllByText("Opening Projects")).toHaveLength(2);
 
     useStore.setState({ currentTrack: useStore.getState().queue[0] });

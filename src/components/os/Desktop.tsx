@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { AnimatePresence, MotionConfig } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
@@ -26,35 +26,47 @@ import { ControlPanelApp } from "@/components/apps/ControlPanelApp";
 import { TerminalApp } from "@/components/apps/TerminalApp";
 import { ContactApp } from "@/components/apps/ContactApp";
 import { ResumeApp } from "@/components/apps/ResumeApp";
+import { BrowserApp } from "@/components/apps/BrowserApp";
 import { ContextMenu } from "@/components/os/ContextMenu";
 import { CommandPalette } from "@/components/os/CommandPalette";
 import { APP_ICONS } from "@/components/os/appIcons";
 import { APP_DEFS, type AppDef, type AppId } from "@/lib/apps";
 import { openApp } from "@/lib/os-actions";
+import type { WindowInstance } from "@/types/window";
 import { RefreshCw, Monitor, Info, LayoutGrid } from "lucide-react";
 
-function renderAppContent(component?: string, url?: string) {
-  switch (component) {
-    case "about":
-      return <AboutApp />;
-    case "projects":
-      return <ProjectsApp />;
-    case "control-panel":
-      return <ControlPanelApp />;
-    case "terminal":
-      return <TerminalApp />;
-    case "contact":
-      return <ContactApp />;
-    case "resume":
-      return <ResumeApp />;
-    default:
-      if (url) return <WebView url={url} />;
-      return (
-        <div className="flex items-center justify-center h-full opacity-50 font-body text-os-muted">
-          {component ? `${component} — coming soon` : "Select an app from the Start menu"}
-        </div>
-      );
-  }
+/** One renderer per known component — the browser row needs the window id. */
+const APP_RENDERERS: Record<string, (w: WindowInstance) => ReactNode> = {
+  about: () => <AboutApp />,
+  projects: () => <ProjectsApp />,
+  "control-panel": () => <ControlPanelApp />,
+  terminal: () => <TerminalApp />,
+  contact: () => <ContactApp />,
+  resume: () => <ResumeApp />,
+  browser: (w) => <BrowserApp windowId={w.id} />,
+};
+
+/**
+ * The body of a window, per its component.
+ *
+ * The browser branch mounts the DevOS Browser bound to THIS window's id (the
+ * browser slice state is keyed per window). The `projects` branch stays for
+ * windows persisted by an older build — new ones are launched as the Browser.
+ */
+export function renderAppContent(w: WindowInstance) {
+  const renderer = w.component === undefined ? undefined : APP_RENDERERS[w.component];
+  if (renderer !== undefined) return renderer(w);
+  return renderFallbackContent(w);
+}
+
+/** The body of a window with no known component: its url, else a hint. */
+function renderFallbackContent(w: WindowInstance) {
+  if (w.url) return <WebView url={w.url} />;
+  return (
+    <div className="flex items-center justify-center h-full opacity-50 font-body text-os-muted">
+      {w.component ? `${w.component} — coming soon` : "Select an app from the Start menu"}
+    </div>
+  );
 }
 
 function renderWidgetContent(type: string, widgetId: string) {
@@ -235,11 +247,7 @@ export function Desktop() {
                 .filter((w) => !w.isMinimized)
                 .map((w) => (
                   <Window key={w.id} id={w.id}>
-                    {w.type === "iframe" && w.url ? (
-                      <WebView url={w.url} />
-                    ) : (
-                      renderAppContent(w.component)
-                    )}
+                    {w.type === "iframe" && w.url ? <WebView url={w.url} /> : renderAppContent(w)}
                   </Window>
                 ))}
             </AnimatePresence>
@@ -318,11 +326,7 @@ export function Desktop() {
               .filter((w) => !w.isMinimized)
               .map((w) => (
                 <Window key={w.id} id={w.id}>
-                  {w.type === "iframe" && w.url ? (
-                    <WebView url={w.url} />
-                  ) : (
-                    renderAppContent(w.component)
-                  )}
+                  {w.type === "iframe" && w.url ? <WebView url={w.url} /> : renderAppContent(w)}
                 </Window>
               ))}
           </AnimatePresence>

@@ -4,8 +4,8 @@ import { useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/store";
 import { Maximize2, Minimize2, Monitor, X, Target } from "lucide-react";
-import type { AppId } from "@/lib/apps";
-import { APP_ICONS } from "@/components/os/appIcons";
+import type { WindowType } from "@/types/window";
+import { WINDOW_ICONS, windowIconKeyFor } from "@/components/os/appIcons";
 import { ContextMenu } from "./ContextMenu";
 
 export function Dock() {
@@ -124,6 +124,7 @@ function DockIcon({
 }: {
   window: {
     id: string;
+    type?: WindowType;
     component?: string;
     title: string;
     isMinimized: boolean;
@@ -134,7 +135,7 @@ function DockIcon({
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const Icon = w.component ? (APP_ICONS[w.component as AppId] ?? Monitor) : Monitor;
+  const Icon = WINDOW_ICONS[windowIconKeyFor(w)] ?? Monitor;
 
   return (
     <div className="relative flex flex-col items-center">

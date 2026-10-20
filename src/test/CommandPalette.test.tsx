@@ -120,13 +120,15 @@ describe("CommandPalette", () => {
     expect(wrapped[wrapped.length - 1]).toHaveAttribute("aria-selected", "true");
   });
 
-  it("Enter on the second item opens the Projects window", () => {
+  it("Enter on the second item opens the Browser (the Projects launcher)", () => {
     const input = openPaletteInDom();
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(useStore.getState().windows.map((w) => w.title)).toContain("Projects");
+    // The palette's "Open Projects" row funnels through `openApp`, which now
+    // routes into the DevOS Browser singleton.
+    expect(useStore.getState().windows.map((w) => w.title)).toContain("Browser");
     expect(useStore.getState().isPaletteOpen).toBe(false);
   });
 
