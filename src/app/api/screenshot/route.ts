@@ -1,26 +1,11 @@
-import { PROJECTS } from "@/lib/portfolio-data";
+import { isScreenshotAllowed } from "@/lib/screenshot-allowlist";
 import sharp from "sharp";
 
-// Allow-list derives from the projects data (PROJECTS[].repoUrl) at module
-// scope, so editing portfolio links updates this route without touching it here.
-export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set(
-  PROJECTS.flatMap((project) => {
-    try {
-      return [new URL(project.repoUrl).origin];
-    } catch {
-      return [];
-    }
-  }),
-);
-
-// Two-clause pure check: https protocol + allow-listed origin.
+// The two-clause gate lives in src/lib/screenshot-allowlist.ts (github.com
+// stays eligible; demo and future tile origins feed it); the route keeps its
+// historical export name so existing callers and tests stay stable.
 export function isAllowedUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && ALLOWED_ORIGINS.has(parsed.origin);
-  } catch {
-    return false;
-  }
+  return isScreenshotAllowed(url);
 }
 
 /**
@@ -38,12 +23,16 @@ const SLICE_HEIGHT = 720;
 const SLICE_QUALITY = 70;
 const screenshotCache = new Map<string, { bytes: ArrayBuffer; contentType: string; at: number }>();
 
-function cachePut(url: string, entry: { bytes: ArrayBuffer; contentType: string }): void {
-  // Bound the map: drop expired entries first, then oldest (insertion order)
-  // until the new entry fits under the cap.
+/** Expired entries go first (value sweep, same pass as before). */
+function evictExpiredEntries(): void {
   for (const [key, value] of screenshotCache) {
     if (Date.now() - value.at > CACHE_TTL_MS) screenshotCache.delete(key);
   }
+}
+
+function cachePut(url: string, entry: { bytes: ArrayBuffer; contentType: string }): void {
+  evictExpiredEntries();
+  // Bound the map: drop oldest (insertion order) until the new entry fits.
   while (screenshotCache.size >= CACHE_MAX) {
     const oldest = screenshotCache.keys().next().value;
     if (oldest === undefined) break;
@@ -52,9 +41,57 @@ function cachePut(url: string, entry: { bytes: ArrayBuffer; contentType: string 
   screenshotCache.set(url, { ...entry, at: Date.now() });
 }
 
-/** Test plumbing: vitest shares the module instance across a file's tests. */
+/**
+ * Test plumbing: vitest shares the module instance across a file's tests.
+ * @expected-unused -- reset consumed only by test files (cache isolation)
+ */
 export function resetScreenshotCache(): void {
   screenshotCache.clear();
+}
+
+/** 200 response shape shared by the cache hit and the fresh capture path. */
+function jpegResponse(bytes: ArrayBuffer, contentType: string): Response {
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=86400",
+    },
+  });
+}
+
+function cachedResponse(url: string): Response | undefined {
+  const cached = screenshotCache.get(url);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return jpegResponse(cached.bytes, cached.contentType);
+  }
+  return undefined;
+}
+
+/**
+ * Outbound Microlink capture: resolve the serve URL from JSON, fetch the
+ * image bytes, and throw on every failure shape so GET's catch renders 502.
+ */
+async function captureMicrolink(url: string): Promise<Buffer> {
+  const res = await fetch(
+    `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false`,
+  );
+  if (!res.ok) throw new Error("Screenshot failed");
+
+  // json() is runtime-untyped; the typeof guard below is the sole validator —
+  // a payload missing any level degrades to `undefined` and rejects via 502.
+  const { data: { screenshot: { url: screenshotUrl } = {} } = {} } = (await res.json()) as {
+    data?: { screenshot?: { url?: unknown } };
+  };
+  if (typeof screenshotUrl !== "string") throw new Error("No screenshot url");
+
+  const image = await fetch(screenshotUrl);
+  if (!image.ok) throw new Error("Screenshot bytes fetch failed");
+
+  // Read the bytes once, resize, and cache the compressed result. Reading
+  // through Response(stream) keeps plain {ok, body}-shaped mock responses —
+  // as the unit tests build — on the same path.
+  return Buffer.from(await new Response(image.body).arrayBuffer());
 }
 
 export async function GET(request: Request) {
@@ -65,16 +102,8 @@ export async function GET(request: Request) {
     return Response.json({ error: "Invalid url" }, { status: 400 });
   }
 
-  const cached = screenshotCache.get(url);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return new Response(cached.bytes, {
-      status: 200,
-      headers: {
-        "Content-Type": cached.contentType,
-        "Cache-Control": "public, max-age=86400",
-      },
-    });
-  }
+  const cached = cachedResponse(url);
+  if (cached) return cached;
 
   try {
     // Microlink's free tier serves only its default capture (advanced capture
@@ -82,38 +111,14 @@ export async function GET(request: Request) {
     // here: the fallback panel displays this at a fraction of desktop width,
     // and the raw capture is a ~550KB 2560×1600 PNG — ~10× heavier than the
     // card view needs.
-    const res = await fetch(
-      `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false`,
-    );
-
-    if (!res.ok) throw new Error("Screenshot failed");
-
-    const data = await res.json();
-    const screenshotUrl: unknown = data?.data?.screenshot?.url;
-    if (typeof screenshotUrl !== "string") throw new Error("No screenshot url");
-
-    const image = await fetch(screenshotUrl);
-    if (!image.ok) throw new Error("Screenshot bytes fetch failed");
-
-    // Read the bytes once, resize, and cache the compressed result. Reading
-    // through Response(stream) keeps plain {ok, body}-shaped mock responses —
-    // as the unit tests build — on the same path.
-    const raw = Buffer.from(await new Response(image.body).arrayBuffer());
+    const raw = await captureMicrolink(url);
     const jpeg = await sharp(raw)
       .resize(SLICE_WIDTH, SLICE_HEIGHT, { fit: "inside" })
       .jpeg({ quality: SLICE_QUALITY })
       .toBuffer();
     const bytes = new Uint8Array(jpeg).buffer;
-    const contentType = "image/jpeg";
-    cachePut(url, { bytes, contentType });
-
-    return new Response(bytes, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Cache-Control": "public, max-age=86400",
-      },
-    });
+    cachePut(url, { bytes, contentType: "image/jpeg" });
+    return jpegResponse(bytes, "image/jpeg");
   } catch {
     // Error bodies never echo internal state (requested url, upstream URLs).
     return Response.json({ error: "screenshot unavailable" }, { status: 502 });

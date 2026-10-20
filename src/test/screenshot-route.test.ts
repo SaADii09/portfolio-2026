@@ -48,7 +48,7 @@ function mockScreenshotFlow(screenshotUrl = "https://cdn.microlink.io/shot.png")
     .mockResolvedValueOnce({
       ok: true,
       status: 200,
-      body: new Response(TINY_PNG).body,
+      body: new Response(new Uint8Array(TINY_PNG)).body,
       headers: {
         get: (name: string) => (name.toLowerCase() === "content-type" ? "image/png" : null),
       },
@@ -63,6 +63,16 @@ describe("isAllowedUrl", () => {
   it("allows urls on origins derived from PROJECTS", () => {
     expect(isAllowedUrl("https://github.com/SaADii09/devos")).toBe(true);
     expect(isAllowedUrl("https://github.com")).toBe(true);
+  });
+
+  it("delegates the exact github.com eligibility pinned by the module", () => {
+    // github.com stays eligible (Review Focus 5): the route name is kept while
+    // the decision moves to src/lib/screenshot-allowlist.ts.
+    expect(isAllowedUrl("https://github.com/SaADii09")).toBe(true);
+  });
+
+  it("allows a deployed demo origin derived from PROJECTS", () => {
+    expect(isAllowedUrl("https://portfolio-2026-sp9k.vercel.app")).toBe(true);
   });
 
   it("rejects non-https urls even on an allow-listed origin", () => {
@@ -131,6 +141,15 @@ describe("GET route", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "https://api.microlink.io/?url=https%3A%2F%2Fgithub.com%2FSaADii09%2Fdevos%20&screenshot=true&meta=false",
     );
+  });
+
+  it("serves a github.com-profile capture — github.com stays a 400-bypass origin", async () => {
+    mockScreenshotFlow();
+
+    const res = await GET(makeRequest("?url=https://github.com/SaADii09"));
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns 502 with the fixed body when Microlink fails", async () => {
