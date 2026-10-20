@@ -298,13 +298,18 @@ export const EXPERIENCE: ExperienceEntry[] = [
 
 // ─── Projects ────────────────────────────────────────────────────────────────
 
-export type ProjectEntry = {
+export interface ProjectEntry {
   title: string;
   description: string;
   tech: string[];
-  url: string;
   category: string;
-};
+  /** URL-safe identity: ^[a-z0-9-]+$, unique across PROJECTS. */
+  slug: string;
+  /** Project source repository: https://github.com/SaADii09/<repo>. */
+  repoUrl: string;
+  /** Deployed homepage (Vercel), when the project has one. */
+  demoUrl?: string;
+}
 
 export const PROJECTS: ProjectEntry[] = [
   {
@@ -312,34 +317,46 @@ export const PROJECTS: ProjectEntry[] = [
     description:
       "Interactive Web OS portfolio with window management, themes, widgets, and AI chat assistant.",
     tech: ["Next.js", "TypeScript", "Framer Motion", "Zustand"],
-    url: "https://github.com/SaADii09",
     category: "Personal",
+    slug: "devos",
+    repoUrl: "https://github.com/SaADii09/portfolio-2026",
+    demoUrl: "https://portfolio-2026-sp9k.vercel.app",
   },
   {
     title: "AI Job Portal",
     description:
       "Full-stack AI-powered job platform with resume analyzer, chatbot, and career intelligence.",
     tech: ["Next.js", "Node.js", "PostgreSQL", "LangChain", "OpenAI"],
-    url: "https://github.com/SaADii09",
     category: "AI / SaaS",
+    slug: "ai-job-portal",
+    repoUrl: "https://github.com/SaADii09/Auth-kit-FE",
+    demoUrl: "https://auth-kit-fe.vercel.app",
   },
   {
     title: "SaaS CRM Platform",
     description:
       "Scalable CRM with AI features, real-time video/audio chat, and automated workflows.",
     tech: ["Next.js", "Convex", "WebRTC", "Redis", "MongoDB"],
-    url: "https://github.com/SaADii09",
     category: "SaaS",
+    slug: "saas-crm",
+    repoUrl: "https://github.com/SaADii09/venuze-dashboard",
+    demoUrl: "https://venuze-dashboard.vercel.app",
   },
   {
     title: "API Automation Toolkit",
     description:
       "Workflow automation platform with n8n integration and multi-step pipeline builder.",
     tech: ["Node.js", "n8n", "Redis", "PostgreSQL"],
-    url: "https://github.com/SaADii09",
     category: "Automation",
+    slug: "api-automation",
+    repoUrl: "https://github.com/SaADii09/MCP-OpsBridge",
   },
-] as const;
+];
+
+/** Look up a project by its URL-safe slug. */
+export function projectBySlug(slug: string): ProjectEntry | undefined {
+  return PROJECTS.find((p) => p.slug === slug);
+}
 
 // ─── Education ───────────────────────────────────────────────────────────────
 

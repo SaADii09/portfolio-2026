@@ -8,7 +8,7 @@ export function ProjectsApp() {
   const windows = useStore((s) => s.windows);
 
   const handleProjectClick = (p: (typeof PROJECTS)[number]) => {
-    const existing = windows.find((w) => w.type === "iframe" && w.url === p.url);
+    const existing = windows.find((w) => w.type === "iframe" && w.url === p.repoUrl);
     if (existing) {
       if (existing.isMinimized) useStore.getState().restoreWindow(existing.id);
       useStore.getState().focusWindow(existing.id);
@@ -17,7 +17,7 @@ export function ProjectsApp() {
     openWindow({
       title: p.title,
       type: "iframe",
-      url: p.url,
+      url: p.repoUrl,
     });
   };
 

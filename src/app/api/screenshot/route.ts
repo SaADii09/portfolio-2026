@@ -1,12 +1,12 @@
 import { PROJECTS } from "@/lib/portfolio-data";
 import sharp from "sharp";
 
-// Allow-list derives from the projects data (PROJECTS[].url) at module scope,
-// so editing portfolio links updates this route without touching it here.
+// Allow-list derives from the projects data (PROJECTS[].repoUrl) at module
+// scope, so editing portfolio links updates this route without touching it here.
 export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set(
   PROJECTS.flatMap((project) => {
     try {
-      return [new URL(project.url).origin];
+      return [new URL(project.repoUrl).origin];
     } catch {
       return [];
     }
