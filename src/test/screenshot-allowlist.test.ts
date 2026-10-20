@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { BROWSER_TILES } from "@/lib/browser-apps";
 import { PROJECTS } from "@/lib/portfolio-data";
 import { isScreenshotAllowed, SCREENSHOT_ALLOWED_ORIGINS } from "@/lib/screenshot-allowlist";
 
@@ -7,6 +8,7 @@ import { isScreenshotAllowed, SCREENSHOT_ALLOWED_ORIGINS } from "@/lib/screensho
 //   SCREENSHOT_ALLOWED_ORIGINS — PROJECTS repo/demo origins + "https://github.com"
 //   isScreenshotAllowed(url) — https: protocol + origin in the set
 // github.com stays eligible (Review Focus 5): repo pages are a capture target.
+// Task 5 unions BROWSER_TILES origins into the set.
 
 describe("SCREENSHOT_ALLOWED_ORIGINS", () => {
   it("contains the github.com origin", () => {
@@ -28,6 +30,20 @@ describe("SCREENSHOT_ALLOWED_ORIGINS", () => {
 });
 
 describe("isScreenshotAllowed", () => {
+  it("allows every BROWSER_TILES origin (Task 5 union)", () => {
+    for (const tile of BROWSER_TILES) {
+      expect(isScreenshotAllowed(tile.url), tile.name).toBe(true);
+    }
+  });
+
+  it("allows the vercel app-tile origin with a path", () => {
+    expect(isScreenshotAllowed("https://auth-kit-fe.vercel.app/some/path")).toBe(true);
+  });
+
+  it("allows google.com even though the tile renders blocked-fallback", () => {
+    expect(isScreenshotAllowed("https://www.google.com/search?q=x")).toBe(true);
+  });
+
   it("allows github.com profile and repo urls", () => {
     expect(isScreenshotAllowed("https://github.com/SaADii09")).toBe(true);
     expect(isScreenshotAllowed("https://github.com/SaADii09/devos")).toBe(true);

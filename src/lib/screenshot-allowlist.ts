@@ -1,3 +1,4 @@
+import { BROWSER_TILES } from "@/lib/browser-apps";
 import { PROJECTS } from "@/lib/portfolio-data";
 
 /**
@@ -5,8 +6,7 @@ import { PROJECTS } from "@/lib/portfolio-data";
  * truth: a union of project repo/demo origins and the github.com origin
  * (repo pages are a first-class capture target — Review Focus 5).
  *
- * Task 5 (browser tabs) feeds tile origins here; the TILE_ORIGINS slot
- * below is the one-line edit point for that extension.
+ * Task 5 (browser tabs) unions BROWSER_TILES origins here via TILE_ORIGINS.
  */
 const GITHUB_ORIGIN = "https://github.com";
 
@@ -26,8 +26,7 @@ const PROJECT_ORIGINS: readonly string[] = PROJECTS.flatMap((project) =>
   ),
 );
 
-/** Tile origins (BROWSER_TILES) are appended here in Task 5. */
-const TILE_ORIGINS: readonly string[] = [];
+const TILE_ORIGINS: readonly string[] = BROWSER_TILES.map((tile) => new URL(tile.url).origin);
 
 export const SCREENSHOT_ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
   ...PROJECT_ORIGINS,
