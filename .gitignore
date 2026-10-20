@@ -57,6 +57,7 @@ yarn-error.log*
 # testing
 /test-results/
 /visual-pass/
+/visual-check/
 /playwright-report/
 /playwright/.cache/
 

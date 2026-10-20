@@ -10,7 +10,8 @@ Interactive Web OS portfolio — a fully functional desktop environment in the b
 - **Window management** — drag, 8-edge resize, minimize, maximize, restore, close, snap-to-half, cascading placement, z-index focus
 - **Command palette** — `Ctrl/Cmd+K` fuzzy-searches every app, widget, and command with arrow-key navigation
 - **Global shortcuts** — `Esc` ownership chain, `Alt+Arrow` snap-to-half, `Ctrl/Cmd+W` closes the focused window
-- **6 functional apps** — About, Projects (sandboxed iframe previews), Terminal, Contact, Resume, Control Panel
+- **6 functional apps** — About, Projects, Terminal, Contact, Resume, Control Panel
+- **DevOS Browser** — one browser window with a tab strip: project tabs render each repo's sanitized GitHub README, web tabs run the sandboxed iframe pipeline (screenshot fallback), and the home tab carries the project grid plus 8 curated app tiles — with a warm-tab cache and a project side panel (about, tech, timeline, links)
 - **4 live widgets** — CPU monitor, Weather (Open-Meteo API), Music player (Web Audio synth), Sticky notes
 - **Terminal ↔ OS bridge** — `theme`, `open <app>`, `music <action>`, and `apps` drive real OS state
 - **AI chat assistant** — Anthropic streaming API with BM25 RAG over a local knowledge base
@@ -82,13 +83,13 @@ NEXT_PUBLIC_SITE_URL=https://saadahmad.dev
 ```
 src/
 ├── app/                    # Next.js App Router + API routes
-│   └── api/                # /chat, /screenshot, /weather
+│   └── api/                # /chat, /screenshot, /project-meta, /weather
 ├── components/
 │   ├── os/                 # Window, Desktop, Dock, TopBar, Taskbar, ChatPanel, CommandPalette
-│   ├── apps/               # AboutApp, ProjectsApp, TerminalApp, ContactApp, ResumeApp, ControlPanelApp
+│   ├── apps/               # AboutApp, BrowserApp, ProjectGrid, ProjectSidePanel, ReadmeView, TerminalApp, ContactApp, ResumeApp, ControlPanelApp
 │   ├── widgets/            # CPU, Weather, Music, Notes (+ WidgetWrapper)
 │   └── theme/              # ThemeProvider
-├── store/                  # Zustand slices (window, theme, widget, chat, music, ui)
+├── store/                  # Zustand slices (window, theme, widget, chat, music, ui, browser)
 ├── hooks/                  # Drag, glass glare, keyboard shortcuts, palette, long-press, viewport clamp
 ├── types/                  # TypeScript interfaces
 └── lib/                    # App registry, shortcuts, palette data/DOM, terminal commands, RAG
@@ -106,7 +107,7 @@ Theming tokens live in `src/app/globals.css` via `@theme inline`; glass behaviou
 
 ## Testing
 
-- **Unit/component tests** (Vitest) — all six Zustand slices, fuzzy scoring, shortcuts, terminal commands, drag boundaries, palette, Window, Taskbar, ControlPanel, sliders, selectors
+- **Unit/component tests** (Vitest) — all seven Zustand slices, fuzzy scoring, shortcuts, terminal commands, drag boundaries, palette, Window, Taskbar, ControlPanel, sliders, selectors
 - **E2E tests** (Playwright) on chromium, firefox, and webkit — window lifecycle, theme switching, mobile layout and the 768px boundary, persistence, drag, shortcuts, command palette, terminal, and metadata
 - `npm run validate:all` is the gate: lint + format + typecheck + unit tests + `fallow audit`
 
@@ -117,7 +118,7 @@ npm run build
 npm start
 ```
 
-Deploy to Vercel, Netlify, or any Node.js host. Everything is prerendered except the three API routes (`/api/chat`, `/api/screenshot`, `/api/weather`). Set `ANTHROPIC_API_KEY` and `NEXT_PUBLIC_SITE_URL` in the host's environment.
+Deploy to Vercel, Netlify, or any Node.js host. Everything is prerendered except the four API routes (`/api/chat`, `/api/screenshot`, `/api/project-meta`, `/api/weather`). Set `ANTHROPIC_API_KEY` and `NEXT_PUBLIC_SITE_URL` in the host's environment.
 
 ## License
 
