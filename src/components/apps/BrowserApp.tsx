@@ -6,6 +6,8 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
   type ReactNode,
   type UIEvent,
 } from "react";
@@ -65,6 +67,7 @@ const selectSidePanelOpen = (s: AppStore) => s.sidePanelOpen;
 const selectOpenBrowserWindow = (s: AppStore) => s.openBrowserWindow;
 const selectOpenProjectTab = (s: AppStore) => s.openProjectTab;
 const selectOpenHomeTab = (s: AppStore) => s.openHomeTab;
+const selectOpenWebTab = (s: AppStore) => s.openWebTab;
 const selectActivateTab = (s: AppStore) => s.activateTab;
 const selectCloseTab = (s: AppStore) => s.closeTab;
 const selectNavigateActive = (s: AppStore) => s.navigateActive;
@@ -111,7 +114,14 @@ const WARM_RESULT: MetaResult = { ok: true, error: null };
  * same promise, so a cold slug costs exactly ONE request — and that response
  * feeds BOTH slice caches (N3).
  */
-const metaRequests = new Map<string, Promise<MetaResult>>();
+interface MetaRequest {
+  /** Monotonic id — a late settle never frees a newer slot. */
+  id: number;
+  promise: Promise<MetaResult>;
+}
+
+const metaRequests = new Map<string, MetaRequest>();
+let requestSeq = 0;
 
 /** N3: one fetch feeds BOTH slice caches (meta + README HTML when present). */
 function storeMeta(slug: string, meta: ProjectMeta): void {
@@ -134,24 +144,33 @@ async function fetchProjectMeta(slug: string, repoUrl: string): Promise<MetaResu
   }
 }
 
-/** Warm caches cost zero network (F2 — the network-free wake). */
+/**
+ * Warm caches cost zero network (F2 — the network-free wake).
+ *
+ * A DEGRADED meta is a legitimate 200 answer (Task 4 pins it), not a failure:
+ * demanding the README HTML as well would re-request a degraded project on
+ * every wake, for a README the upstream never had.
+ */
 function cachesWarm(slug: string): boolean {
   const { readmeLru, metaLru } = useStore.getState();
-  return readmeLru[slug] !== undefined && metaLru[slug] !== undefined;
+  const meta = metaLru[slug];
+  if (meta === undefined) return false;
+  if (meta.degraded) return true;
+  return readmeLru[slug] !== undefined;
 }
 
 /** The request already registered for a slug (in flight, or failed). */
-function sharedRequest(slug: string, force: boolean): Promise<MetaResult> | undefined {
+function sharedRequest(slug: string, force: boolean): MetaRequest | undefined {
   if (force) return undefined;
   return metaRequests.get(slug);
 }
 
-/** A success hands over to the slice caches, so the registry entry goes. */
-function releaseOnSuccess(slug: string): (result: MetaResult) => MetaResult {
-  return (result) => {
-    if (result.ok) metaRequests.delete(slug);
-    return result;
-  };
+/** Frees the registry slot of a settled request (the caches own the result). */
+function releaseSlot(slug: string, id: number): void {
+  const entry = metaRequests.get(slug);
+  if (entry === undefined) return;
+  if (entry.id !== id) return;
+  metaRequests.delete(slug);
 }
 
 /**
@@ -163,11 +182,15 @@ function releaseOnSuccess(slug: string): (result: MetaResult) => MetaResult {
  */
 function requestProjectMeta(slug: string, repoUrl: string, force: boolean): Promise<MetaResult> {
   const shared = sharedRequest(slug, force);
-  if (shared !== undefined) return shared;
+  if (shared !== undefined) return shared.promise;
   if (!force && cachesWarm(slug)) return Promise.resolve(WARM_RESULT);
-  const request = fetchProjectMeta(slug, repoUrl).then(releaseOnSuccess(slug));
-  metaRequests.set(slug, request);
-  return request;
+  const id = ++requestSeq;
+  const promise = fetchProjectMeta(slug, repoUrl).then((result) => {
+    if (result.ok) releaseSlot(slug, id);
+    return result;
+  });
+  metaRequests.set(slug, { id, promise });
+  return promise;
 }
 
 interface ProjectMetaState {
@@ -209,29 +232,47 @@ function isMetaLoading(
   return error === null;
 }
 
+/** The request key of one (slug, revalidation) pair. */
+function requestKeyOf(slug: string, revalidate: number): string {
+  return `${slug}#${revalidate}`;
+}
+
+/** Delivers a settled request to its consumer (unless it detached). */
+function deliverResult(
+  cancelled: { current: boolean },
+  onResult: (slug: string, result: MetaResult) => void,
+  slug: string,
+  result: MetaResult,
+): void {
+  if (cancelled.current) return;
+  onResult(slug, result);
+}
+
 /**
  * Starts (or joins) the request for one slug. The request key is per
- * (slug, mode), so a re-render never fires a second request while a slug
- * switch re-arms it. Returns the cleanup that detaches a late result.
+ * (slug, revalidation), so a re-render never fires a second request while a
+ * reload re-arms it. The request is never FORCED here — a forced request is a
+ * one-shot event (the toolbar reload, the panel's retry), so a woken tab
+ * re-joins the shared request instead of re-fetching (F2).
+ * Returns the cleanup that detaches a late result.
  */
 function startMetaRequest(
   slug: string | null,
   repoUrl: string | null,
-  force: boolean,
+  revalidate: number,
   requestKeyRef: { current: string | null },
   onResult: (slug: string, result: MetaResult) => void,
 ): (() => void) | undefined {
   if (slug === null || repoUrl === null) return undefined;
-  const key = `${slug}#${force}`;
+  const key = requestKeyOf(slug, revalidate);
   if (requestKeyRef.current === key) return undefined;
   requestKeyRef.current = key;
-  let cancelled = false;
-  void requestProjectMeta(slug, repoUrl, force).then((result) => {
-    if (cancelled) return;
-    onResult(slug, result);
+  const cancelled = { current: false };
+  void requestProjectMeta(slug, repoUrl, false).then((result) => {
+    deliverResult(cancelled, onResult, slug, result);
   });
   return () => {
-    cancelled = true;
+    cancelled.current = true;
   };
 }
 
@@ -240,11 +281,14 @@ function startMetaRequest(
  * cache costs zero network), one shared request per miss, and a retry that
  * re-requests and re-stores. Failures are remembered per slug, so switching
  * tabs never shows a stale error for the newly active project.
+ *
+ * `revalidate` is the owning tab's reload counter: it re-arms the request
+ * when the user hits Reload, so the consumer re-joins the forced request.
  */
 function useProjectMeta(
   slug: string | null,
   repoUrl: string | null,
-  force: boolean,
+  revalidate: number,
 ): ProjectMetaState {
   const meta = useStore((s) => (slug === null ? null : (s.metaLru[slug] ?? null)));
   const [failures, setFailures] = useState<Record<string, string | null>>({});
@@ -252,10 +296,10 @@ function useProjectMeta(
 
   useEffect(
     () =>
-      startMetaRequest(slug, repoUrl, force, requestKeyRef, (theSlug, result) =>
+      startMetaRequest(slug, repoUrl, revalidate, requestKeyRef, (theSlug, result) =>
         setFailures((prev) => withFailure(prev, theSlug, failureOfResult(result))),
       ),
-    [slug, repoUrl, force],
+    [slug, repoUrl, revalidate],
   );
 
   const retry = useCallback(() => {
@@ -266,7 +310,9 @@ function useProjectMeta(
     });
   }, [slug, repoUrl]);
 
-  const error = failureOf(failures, slug);
+  // A cached meta proves the last request SUCCEEDED — a failure recorded
+  // before it must not outlive the recovered content.
+  const error = meta === null ? failureOf(failures, slug) : null;
   const loading = isMetaLoading(slug, repoUrl, meta, error);
   return { meta, error, loading, retry };
 }
@@ -322,7 +368,8 @@ function displayUrlFor(tab: BrowserTab, cursor: number): string {
 }
 
 function activeTabOf(windowState: BrowserWindowState | undefined): BrowserTab | undefined {
-  return windowState?.tabs.find((tab) => tab.id === windowState.activeTabId);
+  if (windowState === undefined) return undefined;
+  return tabById(windowState.tabs, windowState.activeTabId);
 }
 
 function webCursorOf(cursors: Record<string, number>, tab: BrowserTab | undefined): number {
@@ -336,7 +383,8 @@ function activeUrlOf(tab: BrowserTab | undefined, cursor: number): string {
 }
 
 /** Warm-tail membership for display: tabs ordered along the computeWarmSet. */
-function warmTabsOf(windowState: BrowserWindowState): BrowserTab[] {
+function warmTabsOf(windowState: BrowserWindowState | undefined): BrowserTab[] {
+  if (windowState === undefined) return [];
   const warmIds = computeWarmSet(windowState.recency, windowState.activeTabId);
   return windowState.tabs.filter((tab) => warmIds.includes(tab.id));
 }
@@ -393,10 +441,49 @@ function reloadKeyBumped(prev: Record<string, number>, tabId: string): Record<st
   return { ...prev, [tabId]: (prev[tabId] ?? 0) + 1 };
 }
 
-/** Parsed address target for the active tab; null when the tab can't navigate. */
-function addressTargetUrl(raw: string, tab: BrowserTab): string | null {
-  if (tab.kind !== "web") return null;
-  return normalizeUrl(raw);
+/**
+ * Address-bar target for a typed entry; null when the entry is blank.
+ * The bar accepts any URL from ANY tab kind (spec §6/G3) — a blank entry
+ * never navigates (it would push "https://" into the local history).
+ */
+export function addressTargetUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  return normalizeUrl(trimmed);
+}
+
+/** The tab title for a typed URL — its hostname, or the raw entry. */
+export function titleForUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Applies a typed address: a web tab navigates in place, any other tab kind
+ * (home, project) opens a NEW web tab — one rule for both, so the address
+ * bar is never inert.
+ */
+function applyAddress(
+  raw: string,
+  tab: BrowserTab,
+  actions: { navigate: (url: string) => void; openWeb: (url: string) => void },
+): void {
+  const url = addressTargetUrl(raw);
+  if (url === null) return;
+  if (tab.kind === "web") {
+    actions.navigate(url);
+    return;
+  }
+  actions.openWeb(url);
+}
+
+/** Revalidates a project tab: one forced request that feeds both caches. */
+function revalidateProject(slug: string | null, repoUrl: string | null): void {
+  if (slug === null || repoUrl === null) return;
+  void requestProjectMeta(slug, repoUrl, true);
 }
 
 /** Tile favicon glyph — resolves to Globe when the tile lookup misses. */
@@ -417,7 +504,7 @@ function TileButton({ tile, onOpen }: { tile: BrowserTile; onOpen: () => void })
   return (
     <button
       onClick={onOpen}
-      className="flex items-center gap-2 px-3 py-2 rounded-os glass glass-pos glass-border font-body text-xs text-os-text transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
+      className="flex items-center gap-2 px-3 py-2 min-h-[44px] md:min-h-0 rounded-os glass glass-pos glass-border font-body text-xs text-os-text transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
     >
       <Icon size={14} className="text-os-accent shrink-0" />
       {tile.name}
@@ -473,7 +560,7 @@ function ReadmeBody({ slug, reloadKey }: { slug: string; reloadKey: number }) {
   const readme = useStore((s) => s.readmeLru[slug]);
   const meta = useStore((s) => s.metaLru[slug]);
   const entry = projectBySlug(slug);
-  const { error } = useProjectMeta(slug, repoUrlOf(entry), reloadKey > 0);
+  const { error } = useProjectMeta(slug, repoUrlOf(entry), reloadKey);
 
   if (entry === undefined) return <UnknownProjectNotice />;
   const degraded = readmeDegraded(readme, error !== null, meta);
@@ -562,6 +649,9 @@ function TabPanel({
   return (
     <div
       ref={panelRef}
+      id={panelDomId(tab.id)}
+      role="tabpanel"
+      aria-labelledby={tabDomId(tab.id)}
       data-tab-id={tab.id}
       hidden={!active}
       className="browser-tab-panel absolute inset-0 overflow-y-auto"
@@ -633,7 +723,7 @@ function ToolButton({
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
-      className={`flex items-center justify-center w-7 h-7 shrink-0 rounded-os glass glass-pos transition-all hover:scale-110 active:scale-95 disabled:opacity-40 disabled:hover:scale-100 cursor-pointer ${tone}`}
+      className={`flex items-center justify-center w-11 h-11 md:w-7 md:h-7 shrink-0 rounded-os glass glass-pos transition-all hover:scale-110 active:scale-95 disabled:opacity-40 disabled:hover:scale-100 cursor-pointer ${tone}`}
     >
       {children}
     </button>
@@ -645,7 +735,7 @@ function Toolbar({
   tab,
   currentUrl,
   caps,
-  sidePanelOpen,
+  panelOpen,
   onAddressSubmit,
   onBack,
   onForward,
@@ -655,7 +745,8 @@ function Toolbar({
   tab: BrowserTab;
   currentUrl: string;
   caps: { canBack: boolean; canForward: boolean; canReload: boolean };
-  sidePanelOpen: boolean;
+  /** The EFFECTIVE panel state — false when there is no panel to show. */
+  panelOpen: boolean;
   onAddressSubmit: (raw: string) => void;
   onBack: () => void;
   onForward: () => void;
@@ -678,18 +769,20 @@ function Toolbar({
         state, and any location change (tab switch, navigate, back/forward)
         remounts the input showing the new url — no store→state sync effect
         (react-hooks/set-state-in-effect) needed.
+
+        The bar is live on EVERY tab kind (spec §6/G3): a web tab navigates in
+        place, the home and project tabs open a NEW web tab.
       */}
       <input
         key={`${tab.id}:${currentUrl}`}
         type="text"
         aria-label="Address bar"
         defaultValue={currentUrl}
-        disabled={tab.kind !== "web"}
         placeholder={addressPlaceholder(tab.kind)}
         onKeyDown={(event) => {
           if (event.key === "Enter") onAddressSubmit(event.currentTarget.value);
         }}
-        className="flex-1 min-w-0 px-2 py-1 text-xs font-body rounded-os glass glass-pos glass-border bg-os-surface-alt text-os-text placeholder:text-os-muted focus:outline-none focus:glow-sm disabled:opacity-50"
+        className="flex-1 min-w-0 px-2 py-1 min-h-[44px] md:min-h-0 text-xs font-body rounded-os glass glass-pos glass-border bg-os-surface-alt text-os-text placeholder:text-os-muted focus:outline-none focus:glow-sm"
       />
       {currentUrl !== "" && (
         <a
@@ -697,15 +790,15 @@ function Toolbar({
           target="_blank"
           rel="noopener noreferrer"
           aria-label="Open external"
-          className="flex items-center justify-center w-7 h-7 shrink-0 rounded-os text-os-muted transition-all hover:scale-110 hover:text-os-accent cursor-pointer"
+          className="flex items-center justify-center w-11 h-11 md:w-7 md:h-7 shrink-0 rounded-os text-os-muted transition-all hover:scale-110 hover:text-os-accent cursor-pointer"
         >
           <ExternalLink size={14} />
         </a>
       )}
       <ToolButton
         label="Toggle side panel"
-        pressed={sidePanelOpen}
-        active={sidePanelOpen}
+        pressed={panelOpen}
+        active={panelOpen}
         onClick={onToggleSidePanel}
       >
         <PanelRight size={14} />
@@ -725,11 +818,159 @@ function tabChipTone(active: boolean): string {
   return "glass-border text-os-muted hover:text-os-text";
 }
 
-/** Chrome-like geometry row 2: tab chips + the new-tab button. */
+/** The DOM id of a tab button. */
+function tabDomId(tabId: string): string {
+  return `browser-tab-${tabId}`;
+}
+
+/** The DOM id of a tab's content panel. */
+function panelDomId(tabId: string): string {
+  return `browser-panel-${tabId}`;
+}
+
+/** The panel a tab controls (undefined while the tab sleeps). */
+function controlsFor(tabId: string, warmIds: string[]): string | undefined {
+  if (!warmIds.includes(tabId)) return undefined;
+  return panelDomId(tabId);
+}
+
+/** The tab with the given id (undefined when it is not in the list). */
+function tabById(tabs: BrowserTab[], tabId: string | null): BrowserTab | undefined {
+  if (tabId === null) return undefined;
+  return tabs.find((tab) => tab.id === tabId);
+}
+
+/** The id of a tab (empty when there is no tab). */
+function tabIdOf(tab: BrowserTab | undefined): string {
+  if (tab === undefined) return "";
+  return tab.id;
+}
+
+/** The index of the active tab (0 when it is not in the list). */
+function tabIndexOf(tabs: BrowserTab[], activeTabId: string | null): number {
+  const index = tabs.findIndex((tab) => tab.id === activeTabId);
+  if (index < 0) return 0;
+  return index;
+}
+
+/** The target index of a relative move (the arrow keys, wrapping around). */
+function relativeTabIndex(key: string, index: number, length: number): number | null {
+  if (key === "ArrowRight") return (index + 1) % length;
+  if (key === "ArrowLeft") return (index - 1 + length) % length;
+  return null;
+}
+
+/** The target index of an absolute move (Home, End). */
+function absoluteTabIndex(key: string, length: number): number | null {
+  if (key === "Home") return 0;
+  if (key === "End") return length - 1;
+  return null;
+}
+
+/** The id of the tab at an index (null when the index is out of range). */
+function tabIdAt(tabs: BrowserTab[], index: number): string | null {
+  const tab = tabs[index];
+  if (tab === undefined) return null;
+  return tab.id;
+}
+
+/** The tab a key press moves to (null when the key is not a tab key). */
+function tabStep(key: string, tabs: BrowserTab[], activeTabId: string | null): string | null {
+  if (tabs.length === 0) return null;
+  const index = tabIndexOf(tabs, activeTabId);
+  const target = relativeTabIndex(key, index, tabs.length) ?? absoluteTabIndex(key, tabs.length);
+  if (target === null) return null;
+  return tabIdAt(tabs, target);
+}
+
+/** Whether a key press closes the active tab. */
+function isCloseKey(key: string): boolean {
+  return key === "Delete" || key === "Backspace";
+}
+
+/** The outcome of a tab-strip key press. */
+interface TabKeyResult {
+  /** The tab to focus right after the press (null when there is none). */
+  focusId: string | null;
+  /** Whether the press was handled (the caller prevents the default). */
+  handled: boolean;
+}
+
+/**
+ * Applies a tab-strip key press: closes the active tab, or moves to another
+ * one (Chrome-style — the move activates the target).
+ */
+function applyTabKey(
+  key: string,
+  tabs: BrowserTab[],
+  activeTabId: string | null,
+  actions: { activate: (tabId: string) => void; close: (tabId: string) => void },
+): TabKeyResult {
+  if (isCloseKey(key)) {
+    if (activeTabId !== null) actions.close(activeTabId);
+    // The focus is re-homed on the new active tab once the close lands.
+    return { focusId: null, handled: true };
+  }
+  const target = tabStep(key, tabs, activeTabId);
+  if (target === null) return { focusId: null, handled: false };
+  actions.activate(target);
+  return { focusId: target, handled: true };
+}
+
+/** Keeps the tab buttons addressable by id (for the roving focus). */
+function tabRefSetter(
+  refs: MutableRefObject<Map<string, HTMLButtonElement>>,
+  tabId: string,
+): (el: HTMLButtonElement | null) => void {
+  return (el) => {
+    if (el === null) {
+      refs.current.delete(tabId);
+      return;
+    }
+    refs.current.set(tabId, el);
+  };
+}
+
+/** Focuses a tab button by id (no-op when it is gone). */
+function focusTab(refs: MutableRefObject<Map<string, HTMLButtonElement>>, tabId: string): void {
+  const el = refs.current.get(tabId);
+  if (el === undefined) return;
+  el.focus();
+}
+
+/**
+ * The tab the strip should focus after a keyboard press: the pending move
+ * target, or — when the focused tab was closed and the focus fell back to
+ * the body — the new active tab.
+ */
+function stripFocusTarget(
+  pending: MutableRefObject<string | null>,
+  focused: MutableRefObject<string | null>,
+  activeTabId: string | null,
+): string | null {
+  const target = pending.current;
+  if (target !== null) {
+    pending.current = null;
+    return target;
+  }
+  if (focused.current === null) return null;
+  if (document.activeElement !== document.body) return null;
+  return activeTabId;
+}
+
+/**
+ * Chrome-like geometry row 2: the tab chips + the controls beside them.
+ *
+ * ARIA (G8): the tablist holds ONLY tabs — the close and new-tab controls
+ * live in a sibling container, so the tablist's children are all `role=tab`.
+ * The strip is a roving-tabindex widget: ←/→/Home/End move AND activate,
+ * Delete/Backspace closes the active tab.
+ */
 function TabStrip({
   windowId,
   tabs,
   activeTabId,
+  warmIds,
   activate,
   close,
   openHome,
@@ -737,43 +978,83 @@ function TabStrip({
   windowId: string;
   tabs: BrowserTab[];
   activeTabId: string | null;
+  /** The ids of the mounted (warm) tabs — the rest have no panel yet. */
+  warmIds: string[];
   activate: (windowId: string, tabId: string) => void;
   close: (windowId: string, tabId: string) => void;
   openHome: (windowId: string) => void;
 }) {
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingFocusRef = useRef<string | null>(null);
+  const focusedRef = useRef<string | null>(null);
+
+  // A keyboard move activates the next tab; the focus follows it once the
+  // strip re-renders with the new active tab (and a closed tab hands its
+  // focus to the tab that takes over).
+  useEffect(() => {
+    const target = stripFocusTarget(pendingFocusRef, focusedRef, activeTabId);
+    if (target !== null) focusTab(tabRefs, target);
+  }, [activeTabId]);
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const result = applyTabKey(event.key, tabs, activeTabId, {
+      activate: (tabId) => activate(windowId, tabId),
+      close: (tabId) => close(windowId, tabId),
+    });
+    if (!result.handled) return;
+    event.preventDefault();
+    if (result.focusId !== null) pendingFocusRef.current = result.focusId;
+  };
+
+  const activeTab = tabById(tabs, activeTabId);
+
   return (
-    <div
-      role="tablist"
-      aria-label="Browser tabs"
-      className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0"
-    >
-      {tabs.map((tab) => (
-        <div key={tab.id} className="flex items-center shrink-0">
+    <div className="flex items-center gap-1 shrink-0">
+      <div
+        role="tablist"
+        aria-label="Browser tabs"
+        onKeyDown={handleKeyDown}
+        className="flex items-center gap-1 overflow-x-auto pb-1"
+      >
+        {tabs.map((tab) => (
           <button
+            key={tab.id}
+            ref={tabRefSetter(tabRefs, tab.id)}
             role="tab"
+            id={tabDomId(tab.id)}
             aria-selected={tab.id === activeTabId}
+            aria-controls={controlsFor(tab.id, warmIds)}
+            tabIndex={tab.id === activeTabId ? 0 : -1}
             onClick={() => activate(windowId, tab.id)}
-            className={`flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 rounded-os glass glass-pos font-body text-xs transition-all cursor-pointer ${tabChipTone(tab.id === activeTabId)}`}
+            onFocus={() => {
+              focusedRef.current = tab.id;
+            }}
+            className={`flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 min-h-[44px] md:min-h-0 rounded-os glass glass-pos font-body text-xs transition-all cursor-pointer ${tabChipTone(tab.id === activeTabId)}`}
           >
             <TabIcon tab={tab} />
             <span className="truncate max-w-[140px]">{tab.title}</span>
           </button>
+        ))}
+      </div>
+      {/* Beside the tablist — a tablist's children are tabs, nothing else. */}
+      <div className="flex items-center gap-1 shrink-0">
+        {activeTab !== undefined && (
           <button
-            aria-label={`Close ${tab.title}`}
-            onClick={() => close(windowId, tab.id)}
-            className="flex items-center justify-center w-5 h-5 rounded-os text-os-muted transition-all hover:scale-110 hover:text-os-text cursor-pointer"
+            aria-label={`Close ${activeTab.title}`}
+            onClick={() => close(windowId, activeTab.id)}
+            className="flex items-center justify-center w-11 h-11 md:w-5 md:h-5 rounded-os text-os-muted transition-all hover:scale-110 hover:text-os-text cursor-pointer"
           >
             <X size={11} />
           </button>
-        </div>
-      ))}
-      <button
-        aria-label="New tab"
-        onClick={() => openHome(windowId)}
-        className="flex items-center justify-center w-7 h-7 shrink-0 rounded-os glass glass-pos glass-border text-os-muted transition-all hover:scale-110 hover:text-os-accent cursor-pointer"
-      >
-        <Plus size={14} />
-      </button>
+        )}
+        <button
+          aria-label="New tab"
+          onClick={() => openHome(windowId)}
+          className="flex items-center justify-center w-11 h-11 md:w-7 md:h-7 shrink-0 rounded-os glass glass-pos glass-border text-os-muted transition-all hover:scale-110 hover:text-os-accent cursor-pointer"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -860,14 +1141,15 @@ function useBrowserActions() {
   const activateTab = useStore(selectActivateTab);
   const closeTab = useStore(selectCloseTab);
   const openHomeTab = useStore(selectOpenHomeTab);
-  return { navigateActive, toggleSidePanel, activateTab, closeTab, openHomeTab };
+  const openWebTab = useStore(selectOpenWebTab);
+  return { navigateActive, toggleSidePanel, activateTab, closeTab, openHomeTab, openWebTab };
 }
 
 export function BrowserApp({ windowId }: BrowserAppProps) {
   const windowState = useStore(selectWindowState(windowId));
   const sidePanelOpen = useStore(selectSidePanelOpen);
   const isMobile = useIsMobile();
-  const { navigateActive, toggleSidePanel, activateTab, closeTab, openHomeTab } =
+  const { navigateActive, toggleSidePanel, activateTab, closeTab, openHomeTab, openWebTab } =
     useBrowserActions();
 
   useBrowserBootstrap(windowId);
@@ -885,17 +1167,30 @@ export function BrowserApp({ windowId }: BrowserAppProps) {
   // other tab leaves the panel unmounted.
   const projectSlug = projectSlugOf(activeTab);
   const projectEntry = projectEntryOf(projectSlug);
-  const projectMeta = useProjectMeta(projectSlug, repoUrlOf(projectEntry), false);
+  const warmTabs = warmTabsOf(windowState);
+  const reloadKey = reloadIndexOf(reloadKeys, tabIdOf(activeTab));
+  // The panel re-joins the request when the active tab is reloaded.
+  const projectMeta = useProjectMeta(projectSlug, repoUrlOf(projectEntry), reloadKey);
+  // The toggle must not claim "pressed" when there is no panel to show.
+  const panelOpen = sidePanelOpen && projectSlug !== null;
 
   if (windowState === undefined || activeTab === undefined) {
     return <div className="h-full" />;
   }
 
   const handleAddressSubmit = (raw: string) => {
-    const url = addressTargetUrl(raw, activeTab);
-    if (url === null) return;
-    navigateActive(windowId, url);
-    setNavCursors(navCursorAfterNavigate(navCursors, activeTab));
+    applyAddress(raw, activeTab, {
+      navigate: (url) => {
+        navigateActive(windowId, url);
+        setNavCursors(navCursorAfterNavigate(navCursors, activeTab));
+      },
+      openWeb: (url) => openWebTab(windowId, url, titleForUrl(url)),
+    });
+  };
+
+  const handleReload = () => {
+    setReloadKeys((prev) => reloadKeyBumped(prev, activeTab.id));
+    revalidateProject(projectSlug, repoUrlOf(projectEntry));
   };
 
   return (
@@ -904,17 +1199,18 @@ export function BrowserApp({ windowId }: BrowserAppProps) {
         tab={activeTab}
         currentUrl={currentUrl}
         caps={navCaps(activeTab, cursor)}
-        sidePanelOpen={sidePanelOpen}
+        panelOpen={panelOpen}
         onAddressSubmit={handleAddressSubmit}
         onBack={() => setNavCursors(navCursorAfterBack(navCursors, activeTab, cursor))}
         onForward={() => setNavCursors(navCursorAfterForward(navCursors, activeTab, cursor))}
-        onReload={() => setReloadKeys((prev) => reloadKeyBumped(prev, activeTab.id))}
+        onReload={handleReload}
         onToggleSidePanel={toggleSidePanel}
       />
       <TabStrip
         windowId={windowId}
         tabs={windowState.tabs}
         activeTabId={windowState.activeTabId}
+        warmIds={warmTabs.map((tab) => tab.id)}
         activate={activateTab}
         close={closeTab}
         openHome={openHomeTab}
@@ -928,7 +1224,7 @@ export function BrowserApp({ windowId }: BrowserAppProps) {
       <div className={`flex flex-1 min-h-0 ${contentZoneClass(isMobile)}`}>
         <TabPanels
           windowId={windowId}
-          warmTabs={warmTabsOf(windowState)}
+          warmTabs={warmTabs}
           activeTabId={windowState.activeTabId}
           navCursors={navCursors}
           reloadKeys={reloadKeys}
