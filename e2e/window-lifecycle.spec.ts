@@ -11,9 +11,24 @@ test.describe("Window lifecycle", () => {
     await expect(page.getByRole("heading", { name: "About Me" })).toBeVisible();
   });
 
-  test("opens Projects app from desktop icon", async ({ page }) => {
+  test("opens the Browser from the Projects desktop icon", async ({ page }) => {
     await page.getByTitle("Open Projects").dblclick();
-    await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+    // The "Projects" launcher routes into the DevOS Browser singleton, so the
+    // window that opens is titled "Browser" and carries the browser shell.
+    // (The home tab's own "Projects" heading is NOT the proof — it lives
+    // INSIDE that window, so a heading assertion there passes vacuously.)
+    await expect(
+      page
+        .locator(".os-window-enter")
+        .filter({ has: page.locator("span.font-display", { hasText: /^Browser$/ }) }),
+    ).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+    // The legacy Projects list window must not be what opened.
+    await expect(
+      page
+        .locator(".os-window-enter")
+        .filter({ has: page.locator("h2", { hasText: /^Projects$/ }) }),
+    ).toHaveCount(0);
   });
 
   test("opens About app from desktop icon via keyboard", async ({ page }) => {
@@ -39,7 +54,11 @@ test.describe("Window lifecycle", () => {
     await expect(page.getByLabel("About Me")).not.toBeVisible();
 
     await page.getByTitle("Open Projects").dblclick();
-    await expect(page.getByLabel("Projects")).toBeVisible();
+    // The dock icon carries the OPEN WINDOW's title — "Browser" for the
+    // browser singleton. (A bare getByLabel("Projects") would match the home
+    // tab's <section aria-label="Projects"> inside the window instead of the
+    // dock icon, so the old assertion proved nothing about the dock.)
+    await expect(page.getByLabel("Browser", { exact: true })).toBeVisible();
   });
 
   test("window close button removes window and dock icon", async ({ page }) => {
@@ -86,6 +105,19 @@ test.describe("WebView embed refusal fallback", () => {
   const PNG_1X1_BASE64 =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
+  /** The fixed ProjectMeta the mocked /api/project-meta route answers with. */
+  const PROJECT_META = {
+    slug: "devos",
+    readmeHtml: "<h1>Mocked README</h1><p>Mocked readme body for the lifecycle pin.</p>",
+    degraded: false,
+    timeline: [{ label: "Created", period: "Jan 2024" }],
+    language: "TypeScript",
+    stars: 42,
+    homepage: "https://portfolio-2026-sp9k.vercel.app",
+    createdAt: "2024-01-01T00:00:00Z",
+    pushedAt: "2024-03-01T00:00:00Z",
+  };
+
   test.beforeEach(async ({ page }) => {
     // The suite must never touch Microlink: /api/screenshot answers with a
     // 1×1 png (this covers Task 5's image contract the <img> consumes).
@@ -98,7 +130,35 @@ test.describe("WebView embed refusal fallback", () => {
     );
   });
 
-  test("github-refused frame shows the screenshot fallback within watchdog window", async ({
+  test("a project card opens a project tab with the project content (no iframe window)", async ({
+    page,
+  }) => {
+    // The project-meta route is mocked so the README body never depends on
+    // GitHub's rate limits.
+    await page.route("**/api/project-meta*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(PROJECT_META),
+      }),
+    );
+    await gotoApp(page);
+
+    await page.getByTitle("Open Projects").dblclick();
+    await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+    await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
+
+    // The card opens a project TAB inside the browser window…
+    await expect(page.getByRole("tab", { name: "devos" })).toBeVisible();
+    // …showing the project content…
+    await expect(page.getByText("Mocked readme body for the lifecycle pin.")).toBeVisible();
+    // …and NOT a second OS window holding an iframe (the legacy
+    // iframe-window producer is gone).
+    await expect(page.locator(".os-window-enter")).toHaveCount(1);
+    await expect(page.locator('iframe[title="Website preview"]')).toHaveCount(0);
+  });
+
+  test("a refusing web tab shows the screenshot fallback within watchdog window", async ({
     page,
   }) => {
     await page.route("https://github.com/**", (route) =>
@@ -111,8 +171,13 @@ test.describe("WebView embed refusal fallback", () => {
     await gotoApp(page);
 
     await page.getByTitle("Open Projects").dblclick();
-    await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
-    await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
+    await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+
+    // A repo URL is not one of the BLOCKED tiles, so the tab goes through the
+    // WebView embed pipeline — and github refuses to be framed.
+    const address = page.getByLabel("Address bar");
+    await address.fill("https://github.com/SaADii09/portfolio-2026");
+    await address.press("Enter");
 
     // Watchdog is 3500ms and the refused frame fires load well before that;
     // 6500ms = watchdog + probe + buffer, and this frame must beat it.
@@ -121,7 +186,7 @@ test.describe("WebView embed refusal fallback", () => {
     await expect(shot).toBeVisible();
     await expect(shot).toHaveAttribute(
       "src",
-      `/api/screenshot?url=${encodeURIComponent("https://github.com/SaADii09")}`,
+      `/api/screenshot?url=${encodeURIComponent("https://github.com/SaADii09/portfolio-2026")}`,
     );
   });
 

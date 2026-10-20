@@ -107,6 +107,80 @@ test.describe("Visual pass — themes × viewports", () => {
   }
 });
 
+test.describe("Visual pass — DevOS Browser", () => {
+  // Chromium only: this block writes a per-theme artifact, and pinning the
+  // engine keeps that artifact written exactly once (the blocks above run on
+  // every engine and overwrite each other's files — pre-existing behavior).
+  test.skip(({ browserName }) => browserName !== "chromium", "chromium only");
+
+  /** The fixed ProjectMeta the mocked /api/project-meta route answers with. */
+  const PROJECT_META = {
+    slug: "devos",
+    readmeHtml: "<h1>Mocked README</h1><p>Mocked readme body for the visual pass.</p>",
+    degraded: false,
+    timeline: [
+      { label: "Created", period: "Jan 2024" },
+      { label: "Updated", period: "Mar 2024" },
+    ],
+    language: "TypeScript",
+    stars: 42,
+    homepage: "https://portfolio-2026-sp9k.vercel.app",
+    createdAt: "2024-01-01T00:00:00Z",
+    pushedAt: "2024-03-01T00:00:00Z",
+  };
+
+  for (const theme of THEMES) {
+    test(`${theme} @ 1440x900 — Browser window with tabs and the project side panel`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await gotoApp(page);
+
+      // The theme is seeded through the persisted store (same pattern as the
+      // blocks above) so the shot is deterministic.
+      await page.addInitScript(
+        ({ t }) => {
+          const store = JSON.parse(localStorage.getItem("devos-store") || "{}");
+          store.state = { ...(store.state ?? {}), theme: t };
+          localStorage.setItem("devos-store", JSON.stringify(store));
+        },
+        { t: theme },
+      );
+
+      // The project-meta route is mocked so the side panel always has
+      // content (no GitHub round trip, no rate limit, no empty rail).
+      await page.route("**/api/project-meta*", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(PROJECT_META),
+        }),
+      );
+
+      await page.reload();
+      await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 30_000 });
+
+      // Open the Browser through the "Projects" desktop icon, then open two
+      // project tabs from its home tab.
+      await page.getByTitle("Open Projects").dblclick();
+      await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+      await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
+      await page.getByRole("tab", { name: "Home" }).click();
+      await page.getByRole("button", { name: /AI Job Portal/ }).click();
+      await expect(page.getByRole("tab", { name: "ai-job-portal" })).toBeVisible();
+
+      // The side panel is closed by default — the toolbar toggle opens it.
+      await page.getByRole("button", { name: "Toggle side panel" }).click();
+      await expect(page.getByLabel("Project details")).toBeVisible();
+      await expect(page.getByLabel("Timeline").getByText("Created")).toBeVisible();
+
+      // Let entrance/wallpaper/spring animations settle before the shot.
+      await page.waitForTimeout(1_500);
+      await page.screenshot({ path: `visual-pass/browser-${theme}-1440x900.png` });
+    });
+  }
+});
+
 test.describe("Visual pass — low-Tint floor leg", () => {
   const tints = THEMES;
   for (const theme of tints) {

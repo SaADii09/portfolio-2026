@@ -13,24 +13,31 @@ import { gotoApp } from "./utils";
  *   implementation drifts from the locked table, this spec fails).
  */
 
-type Key = "about" | "projects" | "control-panel" | "resume" | "terminal" | "contact";
+type Key = "about" | "browser" | "control-panel" | "resume" | "terminal" | "contact";
 
-const APP_KEYS: Key[] = ["about", "projects", "control-panel", "resume", "terminal", "contact"];
+const APP_KEYS: Key[] = ["about", "browser", "control-panel", "resume", "terminal", "contact"];
 
-/** Desktop icon titles (control-panel's desktop label is "Settings"). */
+/**
+ * Desktop icon titles (control-panel's desktop label is "Settings"). The
+ * "Projects" icon now LAUNCHES the DevOS Browser singleton (spec §7), so the
+ * browser's geometry is measured through that icon.
+ */
 const ICON_TITLES: Record<Key, string> = {
   about: "Open About Me",
-  projects: "Open Projects",
+  browser: "Open Projects",
   "control-panel": "Open Settings",
   resume: "Open Resume",
   terminal: "Open Terminal",
   contact: "Open Contact",
 };
 
-/** Locked per-app content-fit sizes (spec §4.4, measured content footprints). */
+/**
+ * Locked per-app content-fit sizes (spec §4.4, measured content footprints).
+ * The browser row mirrors BROWSER_SIZE in src/lib/window-geometry.ts.
+ */
 const TABLE: Record<Key, [number, number]> = {
   about: [560, 620],
-  projects: [720, 640],
+  browser: [960, 660],
   "control-panel": [460, 640],
   resume: [700, 760],
   terminal: [640, 420],
@@ -41,12 +48,13 @@ const TABLE: Record<Key, [number, number]> = {
 const NO_SCROLL_APPS: Key[] = ["about", "control-panel", "contact"];
 
 /** Apps pinned to ≥ 90% of their table height (AC 8's big-window rule). */
-const BIG_WINDOW_APPS: Key[] = ["projects", "resume"];
+const BIG_WINDOW_APPS: Key[] = ["browser", "resume"];
 
-/** Leftover-space anchor fractions (spec §4.4). */
+/** Leftover-space anchor fractions (spec §4.4). The browser row mirrors
+ *  BROWSER_SLOT in src/lib/window-geometry.ts. */
 const FRACS: Record<Key, [number, number]> = {
   about: [0, 0.18],
-  projects: [0.55, 0.25],
+  browser: [0.5, 0.1],
   "control-panel": [0.5, 0.5],
   resume: [0.5, 0.06],
   terminal: [0, 0.9],
@@ -167,7 +175,7 @@ for (const [vw, vh] of [
 
       expectInSafeZone(measured, vw, vh);
 
-      // AC 8's big-window rule: Projects/Resume open ≥ 90% of their table
+      // AC 8's big-window rule: Browser/Resume open ≥ 90% of their table
       // height (which opens as min(table, safe-zone height) exactly).
       if (BIG_WINDOW_APPS.includes(app)) {
         expect(measured.height, `${app} ≥ 90% of its table height`).toBeGreaterThanOrEqual(
@@ -242,56 +250,72 @@ test.describe("zone-frame clamp holds on viewport resize (no painted-frame telep
   });
 });
 
-test.describe("webview window geometry", () => {
-  // The locked webview row (800×560 via the `webview:<url>` key) is reachable
-  // from the UI: ProjectsApp opens project previews with no explicit geometry,
-  // so the table row resolves (Task 4 removed the hardcoded 520×400 open).
-  // Asserted at browser level with the same UI path as the safe-zone case
-  // below; the table row itself is also pinned at the unit level
-  // (src/test/window-geometry.test.ts).
-  test("webview opens at the locked 800×560 default @ 1440×900", async ({ page }) => {
-    await page.route("**/embeddable-ok", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "text/html; charset=utf-8",
-        body: "<html><body><h1>Embeddable preview</h1></body></html>",
-      }),
-    );
+test.describe("browser-hosted webview geometry", () => {
+  // The DevOS Browser is now the webview's HOST: a web page opens as a TAB
+  // inside the browser window instead of a separate `webview:<url>` OS window
+  // (the legacy iframe-window producer is gone — project cards open browser
+  // tabs). The locked `webview:<url>` row stays pinned at the unit level
+  // (src/test/window-geometry.test.ts); what the browser level must prove is
+  // that the host window keeps its locked browser size and that no second OS
+  // window is spawned for the embed.
+  test("the browser window hosts the webview at its locked 960×660 default @ 1440×900", async ({
+    page,
+  }) => {
+    // The embed target is stalled (never fulfilled) so the suite never
+    // reaches an external site and the frame stays mounted.
+    await page.route(/^https:\/\/en\.wikipedia\.org\/?$/, () => {
+      /* deliberately stalled — see the comment above */
+    });
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoApp(page);
 
-    await openApp(page, "projects", false);
-    await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
-    await expect(page.locator('iframe[title="Website preview"]')).toBeVisible({ timeout: 20000 });
+    await openApp(page, "browser", false);
 
-    // The webview surface (not the Projects list window) via the iframe it
-    // contains; measured with the file's bounding-box pattern.
+    // The webview surface — the browser window that hosts the embed.
     const webview = page
       .locator(".os-window-surface")
-      .filter({ has: page.locator('iframe[title="Website preview"]') });
+      .filter({ has: page.getByRole("tablist", { name: "Browser tabs" }) });
     await expect(webview).toHaveCount(1);
     const box = await webview.boundingBox();
-    expect(box, "webview window paints").not.toBeNull();
-    expect(Math.abs(box!.width - 800), "webview width = locked 800").toBeLessThanOrEqual(2);
-    expect(Math.abs(box!.height - 560), "webview height = locked 560").toBeLessThanOrEqual(2);
+    expect(box, "browser window paints").not.toBeNull();
+    expect(Math.abs(box!.width - 960), "browser width = locked 960").toBeLessThanOrEqual(2);
+    expect(Math.abs(box!.height - 660), "browser height = locked 660").toBeLessThanOrEqual(2);
     expectInSafeZone(box!, 1440, 900);
+
+    // A web tile opens a TAB inside that window — never a second OS window.
+    await page.getByRole("button", { name: "Wikipedia", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "Wikipedia" })).toBeVisible();
+    await expect(page.locator(".os-window-enter")).toHaveCount(1);
   });
 
-  test("project preview window opens inside the safe zone @ 1440×900", async ({ page }) => {
-    await page.route("**/embeddable-ok", (route) =>
+  test("a project card opens a project tab inside the browser window @ 1440×900", async ({
+    page,
+  }) => {
+    await page.route("**/api/project-meta*", (route) =>
       route.fulfill({
         status: 200,
-        contentType: "text/html; charset=utf-8",
-        body: "<html><body><h1>Embeddable preview</h1></body></html>",
+        contentType: "application/json",
+        body: JSON.stringify({
+          slug: "devos",
+          readmeHtml: "<h1>Mocked README</h1>",
+          degraded: false,
+          timeline: [{ label: "Created", period: "Jan 2024" }],
+          language: "TypeScript",
+          stars: 42,
+          homepage: null,
+          createdAt: "2024-01-01T00:00:00Z",
+          pushedAt: "2024-03-01T00:00:00Z",
+        }),
       }),
     );
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoApp(page);
 
-    await openApp(page, "projects", false);
+    await openApp(page, "browser", false);
     await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
-    await expect(page.locator('iframe[title="Website preview"]')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole("tab", { name: "devos" })).toBeVisible();
 
+    // ONE window is open (the browser) and it must sit in the zone.
     const windows = await page.evaluate(() => {
       const nodes = document.querySelectorAll<HTMLElement>(".os-window-enter");
       return [...nodes].map((el) => {
@@ -299,7 +323,7 @@ test.describe("webview window geometry", () => {
         return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
       });
     });
-    // Two windows are open (Projects list + preview); both must sit in the zone.
+    expect(windows, "the project card must not spawn a second OS window").toHaveLength(1);
     for (const win of windows) expectInSafeZone(win, 1440, 900);
   });
 });

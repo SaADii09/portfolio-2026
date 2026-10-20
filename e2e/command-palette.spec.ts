@@ -77,7 +77,7 @@ test.describe("Command palette", () => {
     ).toBeVisible();
   });
 
-  test("typing 'projects' and pressing Enter opens the Projects window", async ({ page }) => {
+  test("typing 'projects' and pressing Enter opens the Browser window", async ({ page }) => {
     await page.keyboard.press("ControlOrMeta+k");
     const input = page.getByRole("combobox");
 
@@ -87,11 +87,14 @@ test.describe("Command palette", () => {
     await page.keyboard.press("Enter");
 
     await expect(page.getByRole("dialog", { name: "Command palette" })).not.toBeVisible();
+    // The "Projects" launcher routes into the DevOS Browser singleton: the
+    // window that opens is titled "Browser" and carries the browser shell.
     await expect(
       page
         .locator(".os-window-enter")
-        .filter({ has: page.locator("span.font-display", { hasText: /^Projects$/ }) }),
+        .filter({ has: page.locator("span.font-display", { hasText: /^Browser$/ }) }),
     ).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
   });
 
   test("Tab and Shift+Tab keep focus inside the palette", async ({ page }) => {
