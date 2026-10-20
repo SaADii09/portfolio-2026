@@ -105,6 +105,25 @@ describe("browser window plumbing @ 1440×900", () => {
       expect(record.activeTabId).toBe(projectTab!.id);
     });
 
+    it("relaunch on a cold record seeds before opening the slug tab", () => {
+      openBrowser("devos");
+      const first = findBrowserWindow()!;
+      // Simulate a reload: the window instance persists (persisted `windows`),
+      // but the browser slice state is not persisted — the record is gone.
+      useStore.setState({ browserWindows: {} });
+      openBrowser("projects");
+      const state = useStore.getState();
+      expect(state.windows).toHaveLength(1);
+      expect(state.activeWindowId).toBe(first.id);
+      const record = state.browserWindows[first.id]!;
+      // Cold record re-seeded with its home tab, then the slug tab appended.
+      expect(record.tabs).toHaveLength(2);
+      expect(record.tabs[0]!.kind).toBe("home");
+      const projectTab = record.tabs.find((tab) => tab.kind === "project");
+      expect(projectTab?.slug).toBe("projects");
+      expect(record.activeTabId).toBe(projectTab!.id);
+    });
+
     it("restores a minimized browser window and focuses it", () => {
       openBrowser("devos");
       const id = findBrowserWindow()!.id;

@@ -32,9 +32,11 @@ export function openApp(id: AppId): void {
  * - Fresh window → `pendingSlug` (the slice has no setter by design; the
  *   launcher writes the launch payload through the store and the BrowserApp
  *   consumes it exactly once via `consumePendingSlug` on mount).
- * - Relaunch on an existing window → `openProjectTab` directly: the app is
- *   already mounted, so the slug has to land in state straight away instead
- *   of waiting for a consume that may never re-run.
+ * - Relaunch on an existing window → seed the record if cold (rehydration
+ *   drops slice state while the window instance persists) and then
+ *   `openProjectTab` directly: the app is already mounted, so the slug has to
+ *   land in state straight away instead of waiting for a consume that may
+ *   never re-run.
  */
 // Note (Task 11 builder-check): `openApp("projects")` will delegate here.
 export function openBrowser(projectSlug?: string): void {
@@ -46,7 +48,13 @@ export function openBrowser(projectSlug?: string): void {
   }
   if (existing.isMinimized) store.restoreWindow(existing.id);
   store.focusWindow(existing.id);
-  if (projectSlug) store.openProjectTab(existing.id, projectSlug);
+  if (projectSlug) {
+    // Seed before routing: a rehydrated window can carry a cold (missing)
+    // slice record, and `openProjectTab` no-ops on one — the slug would
+    // silently drop. Seeding is idempotent, so a warm record is untouched.
+    store.openBrowserWindow(existing.id);
+    store.openProjectTab(existing.id, projectSlug);
+  }
 }
 
 /** First launch: open the window, then wire the slug payload if any. */
