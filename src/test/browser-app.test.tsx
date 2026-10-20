@@ -494,3 +494,121 @@ describe("BrowserApp — address bar, touch targets, panel toggle", () => {
     expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 });
+
+/**
+ * Scroll persistence (I-4): a scroll burst must never write to the global
+ * store per event. The live position lives in a ref; the store learns it
+ * once the burst ends (debounced) or when the tab is left (flushed).
+ */
+describe("BrowserApp — scroll persistence", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useStore.setState({
+      windows: [],
+      activeWindowId: null,
+      lastGeometry: {},
+      browserWindows: {},
+      pendingSlug: null,
+      readmeLru: {},
+      metaLru: {},
+      sidePanelOpen: false,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => makeMeta("devos"),
+      })),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** The scrollable panel of a tab (jsdom has no layout, so scrollTop is set directly). */
+  function panelOf(tabId: string): HTMLElement {
+    const panel = document.querySelector(`[data-tab-id="${tabId}"]`);
+    if (!(panel instanceof HTMLElement)) throw new Error(`no panel for ${tabId}`);
+    return panel;
+  }
+
+  /** Counts the store updates that replace the browser window record. */
+  function countBrowserWrites(): { counter: { writes: number }; stop: () => void } {
+    const counter = { writes: 0 };
+    const stop = useStore.subscribe((state, prev) => {
+      if (state.browserWindows !== prev.browserWindows) counter.writes += 1;
+    });
+    return { counter, stop };
+  }
+
+  /** The persisted scroll position of one tab. */
+  function persistedScroll(tabId: string): number | undefined {
+    return windowState("w1").tabs.find((tab) => tab.id === tabId)?.scrollTop;
+  }
+
+  /** Opens the project tab and returns its id. */
+  async function openProject(): Promise<string> {
+    render(<BrowserApp windowId="w1" />);
+    fireEvent.click(screen.getByText("DevOS Portfolio"));
+    await flush();
+    const tabId = windowState("w1").activeTabId;
+    if (tabId === null) throw new Error("no active tab");
+    return tabId;
+  }
+
+  it("collapses a burst of scroll events into a single store write", async () => {
+    const tabId = await openProject();
+    const panel = panelOf(tabId);
+    const { counter, stop } = countBrowserWrites();
+
+    for (let step = 1; step <= 20; step += 1) {
+      panel.scrollTop = step * 10;
+      fireEvent.scroll(panel);
+    }
+
+    // The burst itself never touches the store.
+    expect(counter.writes).toBe(0);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+
+    // One write when the burst ends — and the position is the last one.
+    expect(counter.writes).toBe(1);
+    expect(persistedScroll(tabId)).toBe(200);
+    stop();
+  });
+
+  it("persists the scroll position immediately when the user switches away", async () => {
+    const tabId = await openProject();
+    const panel = panelOf(tabId);
+
+    panel.scrollTop = 240;
+    fireEvent.scroll(panel);
+
+    // Switch tabs BEFORE the debounce fires — the position is flushed now.
+    fireEvent.click(screen.getByRole("tab", { name: "Home" }));
+
+    expect(persistedScroll(tabId)).toBe(240);
+  });
+
+  it("restores the persisted scroll position when the tab comes back", async () => {
+    const tabId = await openProject();
+    const panel = panelOf(tabId);
+
+    panel.scrollTop = 240;
+    fireEvent.scroll(panel);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    expect(persistedScroll(tabId)).toBe(240);
+
+    // Leave the tab (the DOM scroll state is lost) and come back.
+    fireEvent.click(screen.getByRole("tab", { name: "Home" }));
+    fireEvent.click(screen.getByRole("tab", { name: "devos" }));
+
+    expect(panelOf(tabId).scrollTop).toBe(240);
+  });
+});

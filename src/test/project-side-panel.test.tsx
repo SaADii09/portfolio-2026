@@ -82,24 +82,45 @@ describe("ProjectSidePanel", () => {
     const aside = container.querySelector("aside");
     expect(aside?.className).toContain("w-[264px]");
     expect(aside?.className).toContain("border-l");
+    // The rail is hard-capped: it can never steal more than 45% of the
+    // content width (spec §4 anti-goal), at any window width.
+    expect(aside?.className).toContain("max-w-[45%]");
   });
 
-  it("renders a bottom drawer capped at 45% height below 768px", () => {
-    // jsdom ships no media-query engine — stub the mobile query so the
-    // repo's useIsMobile hook reports the mobile layout.
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query.includes("767.98"),
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }));
-
+  it("renders a bottom drawer capped at 45% height in a narrow browser window", () => {
+    // The switch is a CSS CONTAINER query on the browser window's own
+    // content width — the viewport no longer decides it (the OS window is
+    // independently resizable). jsdom evaluates no container query, so the
+    // drawer is asserted through the variant that carries it.
     const { container } = renderPanel();
 
     const aside = container.querySelector("aside");
     expect(aside?.className).toContain("max-h-[45%]");
     expect(aside?.className).toContain("w-full");
     expect(aside?.className).toContain("border-t");
+    expect(aside?.className).toContain("@max-[560px]:max-h-[45%]");
+    expect(aside?.className).toContain("@max-[560px]:w-full");
+    expect(aside?.className).toContain("@max-[560px]:border-t");
+  });
+
+  it("keys the layout to the browser window's width, not to the viewport", () => {
+    // A mobile viewport must NOT change the panel's classes any more: the
+    // rail/drawer switch is a container query on the window's own width.
+    const desktop = renderPanel();
+    const desktopClasses = desktop.container.querySelector("aside")?.className ?? "";
+
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("767.98"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    const mobile = renderPanel();
+    const mobileClasses = mobile.container.querySelector("aside")?.className ?? "";
+
+    expect(mobileClasses).toBe(desktopClasses);
+    // The window-width switch is present in both renders.
+    expect(desktopClasses).toContain("@max-[560px]:w-full");
   });
 
   it("renders every timeline row verbatim from the meta", () => {
@@ -233,5 +254,18 @@ describe("BrowserApp — side panel wiring", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(useStore.getState().metaLru["devos"]).toBeDefined();
     expect(useStore.getState().readmeLru["devos"]).toBeDefined();
+  });
+
+  it("makes the browser window a query container and switches the content zone by width", () => {
+    render(<BrowserApp windowId="w1" />);
+
+    // The container is the BROWSER WINDOW's content area, so the rail /
+    // drawer switch follows the window (resizable) — not the viewport.
+    const shell = document.querySelector(".browser-shell");
+    expect(shell?.className).toContain("@container");
+
+    const zone = document.querySelector(".browser-content-zone");
+    expect(zone?.className).toContain("flex-row");
+    expect(zone?.className).toContain("@max-[560px]:flex-col");
   });
 });

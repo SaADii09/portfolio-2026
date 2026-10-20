@@ -33,7 +33,6 @@ import type { BrowserTab, BrowserWindowState } from "@/store/browserSlice";
 import { computeWarmSet } from "@/lib/warm-set";
 import { BROWSER_TILES, type BrowserTile } from "@/lib/browser-apps";
 import { projectBySlug, type ProjectEntry } from "@/lib/portfolio-data";
-import { useIsMobile } from "@/hooks/useMediaQuery";
 import { ProjectGrid } from "@/components/apps/ProjectGrid";
 import { ProjectSidePanel } from "@/components/apps/ProjectSidePanel";
 import { ReadmeView } from "@/components/apps/ReadmeView";
@@ -621,7 +620,60 @@ function TabContent({
  * DOM scroll state (and a sleeping tab remounts fresh), the persisted
  * `scrollTop` is restored from the slice record whenever the panel becomes
  * the visible one — before first paint, via useLayoutEffect.
+ *
+ * The scroll position itself NEVER reaches the store per event: the live
+ * position lives in a ref and the store learns it once the burst ends
+ * (debounced) or when the tab is left (flushed). A 60-120 events/s scroll
+ * would otherwise re-render the whole browser tree on every single event.
  */
+
+/** Debounce window for the scroll flush — a burst collapses into ONE write. */
+const SCROLL_FLUSH_MS = 150;
+
+/** The live scroll bookkeeping of one warm tab panel. */
+interface ScrollState {
+  /** The position the user is at (captured from the DOM on every scroll). */
+  live: number;
+  /** True while `live` differs from the persisted position. */
+  dirty: boolean;
+  /** The position this panel last persisted (null before the first write). */
+  written: number | null;
+  /** The pending flush timer (null when nothing is scheduled). */
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/** A fresh scroll tracker seeded with the persisted position. */
+function newScrollState(start: number): ScrollState {
+  return { live: start, dirty: false, written: null, timer: null };
+}
+
+/** Cancels a pending flush (no-op when nothing is scheduled). */
+function cancelFlush(state: ScrollState): void {
+  if (state.timer === null) return;
+  clearTimeout(state.timer);
+  state.timer = null;
+}
+
+/** True while the tab is still in the slice (a closed tab must not be written). */
+function tabStillOpen(windowId: string, tabId: string): boolean {
+  const record = useStore.getState().browserWindows[windowId];
+  return record !== undefined && record.tabs.some((tab) => tab.id === tabId);
+}
+
+/**
+ * Persists the live scroll position — at most ONE store write per burst.
+ * Nothing is written when the position did not move or when the tab was
+ * closed in the meantime.
+ */
+function flushScroll(state: ScrollState, windowId: string, tabId: string): void {
+  cancelFlush(state);
+  if (!state.dirty) return;
+  state.dirty = false;
+  if (!tabStillOpen(windowId, tabId)) return;
+  state.written = state.live;
+  useStore.getState().setScrollTop(windowId, tabId, state.live);
+}
+
 function TabPanel({
   windowId,
   tab,
@@ -634,16 +686,43 @@ function TabPanel({
   children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const setScrollTop = useStore((s) => s.setScrollTop);
+  const scrollRef = useRef<ScrollState>(newScrollState(tab.scrollTop));
 
+  // The persisted position is restored whenever this panel becomes the
+  // visible one: a hidden panel loses its DOM scroll state, and a sleeping
+  // tab remounts fresh. A navigation zeroes the position, so the history
+  // length joins the dependencies.
   useLayoutEffect(() => {
     if (!active) return;
     const el = panelRef.current;
     if (el !== null) el.scrollTop = tab.scrollTop;
-  }, [active, tab.id, tab.scrollTop]);
+  }, [active, tab.id, tab.scrollTop, tab.localHistory.length]);
+
+  // An EXTERNAL reset of the persisted position (a navigation zeroes it)
+  // invalidates the pending burst: adopt the new position instead of
+  // writing a stale one back. Our own writes are recognised and ignored.
+  useEffect(() => {
+    const state = scrollRef.current;
+    if (state.written === tab.scrollTop) return;
+    cancelFlush(state);
+    state.live = tab.scrollTop;
+    state.dirty = false;
+  }, [tab.scrollTop, tab.localHistory.length]);
+
+  // The tab is no longer the visible one: persist the position NOW.
+  useEffect(() => {
+    if (!active) flushScroll(scrollRef.current, windowId, tab.id);
+  }, [active, windowId, tab.id]);
+
+  // The panel unmounts (the tab sleeps or closes): persist the position.
+  useEffect(() => () => flushScroll(scrollRef.current, windowId, tab.id), [windowId, tab.id]);
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
-    setScrollTop(windowId, tab.id, event.currentTarget.scrollTop);
+    const state = scrollRef.current;
+    state.live = event.currentTarget.scrollTop;
+    state.dirty = true;
+    cancelFlush(state);
+    state.timer = setTimeout(() => flushScroll(state, windowId, tab.id), SCROLL_FLUSH_MS);
   };
 
   return (
@@ -1099,10 +1178,16 @@ function projectEntryOf(slug: string | null): ProjectEntry | null {
   return projectBySlug(slug) ?? null;
 }
 
-/** Content-zone direction: a column on mobile (bottom drawer), a row on desktop. */
-function contentZoneClass(isMobile: boolean): string {
-  return isMobile ? "flex-col" : "flex-row";
-}
+/**
+ * The content zone's direction. A ROW (rail on the right) is the default; a
+ * NARROW browser window stacks it into a COLUMN (the side panel becomes a
+ * bottom drawer). The switch is a CSS container query on the browser
+ * window's own content width — the OS window is resizable, so the viewport
+ * is the wrong yardstick (a narrow window in a wide viewport must get the
+ * drawer too).
+ */
+const CONTENT_ZONE_CLASS =
+  "browser-content-zone flex flex-1 min-h-0 flex-row @max-[560px]:flex-col";
 
 interface SidePanelRenderProps {
   sidePanelOpen: boolean;
@@ -1148,7 +1233,6 @@ function useBrowserActions() {
 export function BrowserApp({ windowId }: BrowserAppProps) {
   const windowState = useStore(selectWindowState(windowId));
   const sidePanelOpen = useStore(selectSidePanelOpen);
-  const isMobile = useIsMobile();
   const { navigateActive, toggleSidePanel, activateTab, closeTab, openHomeTab, openWebTab } =
     useBrowserActions();
 
@@ -1194,7 +1278,7 @@ export function BrowserApp({ windowId }: BrowserAppProps) {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="browser-shell @container flex flex-col h-full min-h-0">
       <Toolbar
         tab={activeTab}
         currentUrl={currentUrl}
@@ -1217,11 +1301,11 @@ export function BrowserApp({ windowId }: BrowserAppProps) {
       />
       {/*
         Content zone: the warm-tail router and the side panel share one row
-        (desktop rail on the right) / column (mobile bottom drawer). The panel
-        lives INSIDE the browser window — a viewport-fixed overlay would
-        escape the floating OS window frame.
+        (desktop rail on the right) / column (narrow window: bottom drawer).
+        The panel lives INSIDE the browser window — a viewport-fixed overlay
+        would escape the floating OS window frame.
       */}
-      <div className={`flex flex-1 min-h-0 ${contentZoneClass(isMobile)}`}>
+      <div className={CONTENT_ZONE_CLASS}>
         <TabPanels
           windowId={windowId}
           warmTabs={warmTabs}

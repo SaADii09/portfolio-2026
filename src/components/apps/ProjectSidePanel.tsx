@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { ChevronRight, ExternalLink, GitFork, Loader2, RotateCw } from "lucide-react";
 import type { ProjectMeta } from "@/app/api/project-meta/route";
 import type { ProjectEntry } from "@/lib/portfolio-data";
-import { useIsMobile } from "@/hooks/useMediaQuery";
 
 export interface ProjectSidePanelProps {
   /** The project behind the active tab; null when the slug is unknown. */
@@ -174,10 +173,26 @@ function PanelBody({
 }
 
 /**
- * The project side panel (Task 10): a 264px right rail inside the browser
- * window on desktop, a bottom drawer capped at 45% of the window height on
- * mobile (<768px). The panel is presentational — the caller owns the fetch,
- * the caches and the open/closed state.
+ * The panel's two layouts, keyed to the BROWSER WINDOW's own content width
+ * through a CSS container query (the `@container` root in BrowserApp) — never
+ * to the viewport: the OS window is independently resizable, so a narrow
+ * window inside a wide viewport must get the drawer too.
+ *
+ * - Rail: a 264px right rail, hard-capped at 45% of the content width, so
+ *   the spec's anti-goal ("a side panel that steals more than ~45% of the
+ *   content width on desktop") cannot be violated at ANY width.
+ * - Drawer: a bottom drawer capped at 45% of the height, below the 560px
+ *   container breakpoint.
+ */
+const RAIL_CLASS = "w-[264px] max-w-[45%] border-l";
+const DRAWER_CLASS =
+  "@max-[560px]:w-full @max-[560px]:max-w-none @max-[560px]:max-h-[45%] @max-[560px]:border-t @max-[560px]:border-l-0";
+
+/**
+ * The project side panel (Task 10): a right rail inside the browser window
+ * when the window is wide enough, a bottom drawer when it is not. The panel
+ * is presentational — the caller owns the fetch, the caches and the
+ * open/closed state.
  */
 export function ProjectSidePanel({
   entry,
@@ -187,10 +202,10 @@ export function ProjectSidePanel({
   onRetry,
   onCollapse,
 }: ProjectSidePanelProps) {
-  const isMobile = useIsMobile();
   const frameClass = [
     "flex flex-col min-h-0 shrink-0 overflow-hidden glass glass-pos border-os-border",
-    isMobile ? "w-full max-h-[45%] border-t" : "w-[264px] border-l",
+    RAIL_CLASS,
+    DRAWER_CLASS,
   ].join(" ");
 
   return (
