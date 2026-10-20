@@ -127,6 +127,52 @@ describe("sanitizeReadmeHtml — pass-through", () => {
   });
 });
 
+describe("task-3 review fixes", () => {
+  it("finding 1: strips onload separated by / from the tag name", () => {
+    expect(sanitizeReadmeHtml("<svg/onload=alert(1)>")).not.toMatch(/onload/i);
+    expect(sanitizeReadmeHtml("<img/onerror=x>after")).not.toMatch(/onerror/i);
+  });
+
+  it("finding 2: quote-aware scan strips the handler after a quoted >", () => {
+    const out = sanitizeReadmeHtml('<img alt="x>" onerror=y>hello');
+    expect(out).not.toMatch(/onerror/i);
+  });
+
+  it("finding 2: quoted > does not truncate an anchor into broken markup", () => {
+    expect(sanitizeReadmeHtml('<a target="x>y">go</a>')).toBe(
+      '<a target="_blank" rel="noopener noreferrer">go</a>',
+    );
+  });
+
+  it("finding 3: blocks border-color, outline-color and vendor-prefixed paint", () => {
+    expect(sanitizeReadmeHtml('<p style="border-color:#fff">t</p>')).toBe("<p>t</p>");
+    expect(sanitizeReadmeHtml('<p style="outline-color:red">t</p>')).toBe("<p>t</p>");
+    expect(sanitizeReadmeHtml('<p style="-webkit-background-image:url(x)">t</p>')).toBe("<p>t</p>");
+  });
+
+  it("finding 3: column-count stays safe with and without a vendor prefix", () => {
+    expect(sanitizeReadmeHtml('<p style="column-count:3">t</p>')).toBe(
+      '<p style="column-count:3">t</p>',
+    );
+    expect(sanitizeReadmeHtml('<p style="-webkit-column-count:3">t</p>')).toBe(
+      '<p style="-webkit-column-count:3">t</p>',
+    );
+  });
+});
+
+describe("blocked style declaration helpers (post-review)", () => {
+  it("classifies every paint family named in the review as blocked", () => {
+    expect(isBlockedStyleDeclaration("border-color:#fff")).toBe(true);
+    expect(isBlockedStyleDeclaration("outline-color:red")).toBe(true);
+    expect(isBlockedStyleDeclaration("-webkit-background-image:url(x)")).toBe(true);
+  });
+
+  it("keeps column-count safe with and without a vendor prefix", () => {
+    expect(isBlockedStyleDeclaration("column-count:3")).toBe(false);
+    expect(isBlockedStyleDeclaration("-webkit-column-count:3")).toBe(false);
+  });
+});
+
 describe("blocked style declaration helpers", () => {
   it("classifies color and background families as blocked", () => {
     expect(isBlockedStyleDeclaration("color:#fff")).toBe(true);
