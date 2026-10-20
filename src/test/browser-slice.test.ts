@@ -137,6 +137,30 @@ describe("browserSlice", () => {
     });
   });
 
+  describe("openHomeTab", () => {
+    it("appends a home tab, activates it, and prepends to recency", () => {
+      store.openBrowserWindow("w1");
+      const webId = store.openWebTab("w1", "https://example.com", "Example");
+      const id = store.openHomeTab("w1");
+      const state = win(store, "w1");
+      const tab = state.tabs.find((t) => t.id === id)!;
+      expect(tab.kind).toBe("home");
+      expect(tab.localHistory).toEqual([]);
+      expect(state.activeTabId).toBe(id);
+      expect(state.recency).toEqual([id, webId]);
+    });
+
+    it("dedupes — activates the existing home tab instead of duplicating", () => {
+      store.openBrowserWindow("w1");
+      const seeded = win(store, "w1").tabs[0]!.id;
+      const opened = store.openHomeTab("w1");
+      const state = win(store, "w1");
+      expect(opened).toBe(seeded);
+      expect(state.tabs.filter((t) => t.kind === "home")).toHaveLength(1);
+      expect(state.activeTabId).toBe(seeded);
+    });
+  });
+
   describe("closeTab", () => {
     it("closing the active tab activates the most recent remaining tab", () => {
       store.openBrowserWindow("w1");

@@ -48,6 +48,13 @@ export interface BrowserSlice {
   openBrowserWindow: (windowId: string) => void;
   openProjectTab: (windowId: string, slug: string) => string;
   openWebTab: (windowId: string, url: string, title: string) => string;
+  /**
+   * Open (or activate an existing) home tab — the tab-strip `+` button
+   * (Task 9 amendment: the brief's new-tab button needs a home-tab creator
+   * and `openBrowserWindow` only seeds empty records, so this mirrors the
+   * dedupe-activate convention of the other open actions).
+   */
+  openHomeTab: (windowId: string) => string;
   closeTab: (windowId: string, tabId: string) => void;
   activateTab: (windowId: string, tabId: string) => void;
   setActiveRefusal: (windowId: string, tabId: string, refusal: boolean) => void;
@@ -173,6 +180,25 @@ export const createBrowserSlice: StateCreator<BrowserSlice> = (set, get) => ({
     };
     set((s) => {
       const next = appendTab(s.browserWindows[windowId], tab);
+      if (!next) return s;
+      return {
+        browserWindows: { ...s.browserWindows, [windowId]: next },
+      };
+    });
+    return id;
+  },
+
+  openHomeTab: (windowId) => {
+    const state = get().browserWindows[windowId];
+    const existing = state?.tabs.find((tab) => tab.kind === "home");
+    if (existing) {
+      get().activateTab(windowId, existing.id);
+      return existing.id;
+    }
+    const id = generateTabId();
+    const home: BrowserTab = { id, kind: "home", title: "Home", localHistory: [], scrollTop: 0 };
+    set((s) => {
+      const next = appendTab(s.browserWindows[windowId], home);
       if (!next) return s;
       return {
         browserWindows: { ...s.browserWindows, [windowId]: next },
