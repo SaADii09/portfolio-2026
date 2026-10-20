@@ -5,6 +5,18 @@ import {
   sanitizeReadmeHtml,
 } from "@/lib/readme-sanitize";
 
+/**
+ * Parses HTML the way a browser would, so assertions describe the LIVE DOM.
+ * A substring check on the sanitized string is not enough: an attribute the
+ * transform misses becomes a live event handler the moment the browser
+ * re-parses the markup.
+ */
+function parseHtml(html: string): HTMLElement {
+  const host = document.createElement("div");
+  host.innerHTML = html;
+  return host;
+}
+
 describe("sanitizeReadmeHtml — blocked element removal", () => {
   it("removes <script> with its contents", () => {
     expect(sanitizeReadmeHtml('<p>hi</p><script>alert("x")</script>')).toBe("<p>hi</p>");
@@ -179,6 +191,158 @@ describe("blocked style declaration helpers (post-review)", () => {
   it("keeps column-count safe with and without a vendor prefix", () => {
     expect(isBlockedStyleDeclaration("column-count:3")).toBe(false);
     expect(isBlockedStyleDeclaration("-webkit-column-count:3")).toBe(false);
+  });
+});
+
+describe("review I-1 — attributes glued to a previous quoted value", () => {
+  it("strips an onerror attribute that follows a double-quoted value with no separator", () => {
+    const host = parseHtml(sanitizeReadmeHtml('<img alt="x"onerror=alert(1)>'));
+    const img = host.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.hasAttribute("onerror")).toBe(false);
+    expect(img?.getAttribute("alt")).toBe("x");
+  });
+
+  it("strips an onerror attribute that follows a single-quoted value with no separator", () => {
+    const host = parseHtml(sanitizeReadmeHtml("<img alt='x'onerror=alert(1)>"));
+    const img = host.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.hasAttribute("onerror")).toBe(false);
+    expect(img?.getAttribute("alt")).toBe("x");
+  });
+
+  it("leaves no live handler when handlers are packed without separators", () => {
+    const host = parseHtml(
+      sanitizeReadmeHtml('<img alt="x"onerror=alert(1)onload=alert(2)onclick=alert(3)>'),
+    );
+    const img = host.querySelector("img");
+    expect(img).not.toBeNull();
+    for (const handler of ["onerror", "onload", "onclick"]) {
+      expect(img?.hasAttribute(handler)).toBe(false);
+    }
+  });
+
+  it("drops the style attribute when it follows a quoted value with no separator", () => {
+    const host = parseHtml(
+      sanitizeReadmeHtml('<p alt="x"style="color:red;background:url(x)">keep</p>'),
+    );
+    const p = host.querySelector("p");
+    expect(p).not.toBeNull();
+    expect(p?.getAttribute("style") ?? "").not.toMatch(/color|background/i);
+    expect(p?.getAttribute("alt")).toBe("x");
+    expect(p?.textContent).toBe("keep");
+  });
+
+  it("forces target=_blank when a target follows a quoted value with no separator", () => {
+    const host = parseHtml(
+      sanitizeReadmeHtml('<a alt="x"target="_self"href="https://example.com">go</a>'),
+    );
+    const a = host.querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute("target")).toBe("_blank");
+    expect(a?.getAttribute("rel")).toContain("noopener");
+    expect(a?.getAttribute("href")).toBe("https://example.com");
+  });
+
+  it("keeps the tag name separate from the attribute that follows a removed one", () => {
+    const host = parseHtml(
+      sanitizeReadmeHtml('<a href="javascript:alert(1)"target="_self">go</a>'),
+    );
+    const a = host.querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.getAttribute("target")).toBe("_blank");
+    expect(a?.textContent).toBe("go");
+  });
+
+  it("sanitizes a long run of glued attributes in bounded time", () => {
+    const input = `<img ${'alt="x"onerror=y '.repeat(2000)}>`;
+    const started = performance.now();
+    const out = sanitizeReadmeHtml(input);
+    const elapsed = performance.now() - started;
+    expect(out).not.toMatch(/onerror/i);
+    expect(elapsed).toBeLessThan(1000);
+  });
+});
+
+describe("review I-2 — element blocklist and URL scheme validation", () => {
+  it("removes a javascript: href", () => {
+    const host = parseHtml(sanitizeReadmeHtml('<a href="javascript:alert(1)">go</a>'));
+    const a = host.querySelector("a");
+    expect(a).not.toBeNull();
+    expect(a?.hasAttribute("href")).toBe(false);
+    expect(a?.textContent).toBe("go");
+  });
+
+  it("removes every scheme a browser still resolves", () => {
+    const payloads = [
+      '<a href="JaVaScRiPt:alert(1)">x</a>',
+      '<a href=" javascript:alert(1)">x</a>',
+      '<a href="java\tscript:alert(1)">x</a>',
+      '<a href="data:text/html;base64,PHNjcmlwdD4=">x</a>',
+      '<a href="vbscript:msgbox(1)">x</a>',
+      '<a href="file:///etc/passwd">x</a>',
+      '<a href="javascript&#58;alert(1)">x</a>',
+      '<a href="java&Tab;script:alert(1)">x</a>',
+    ];
+    for (const payload of payloads) {
+      const a = parseHtml(sanitizeReadmeHtml(payload)).querySelector("a");
+      expect(a?.hasAttribute("href")).toBe(false);
+    }
+  });
+
+  it("keeps safe schemes and relative references", () => {
+    const safe = [
+      "https://example.com/x",
+      "http://example.com/x",
+      "mailto:hi@example.com",
+      "tel:+15551234",
+      "//cdn.example.com/x.png",
+      "/root/relative",
+      "#anchor",
+      "docs/readme.md",
+    ];
+    for (const url of safe) {
+      const a = parseHtml(sanitizeReadmeHtml(`<a href="${url}">x</a>`)).querySelector("a");
+      expect(a?.getAttribute("href")).toBe(url);
+    }
+  });
+
+  it("removes a <style> element with its contents", () => {
+    const host = parseHtml(sanitizeReadmeHtml("<p>keep</p><style>body{background:red}</style>"));
+    expect(host.querySelector("style")).toBeNull();
+    expect(host.textContent).toBe("keep");
+  });
+
+  it("removes a remote stylesheet <link>", () => {
+    const host = parseHtml(
+      sanitizeReadmeHtml('<link rel="stylesheet" href="https://evil.example/x.css">keep'),
+    );
+    expect(host.querySelector("link")).toBeNull();
+    expect(host.textContent).toBe("keep");
+  });
+
+  it("removes a <base> element that re-points relative URLs", () => {
+    const host = parseHtml(sanitizeReadmeHtml('<base href="https://evil.example/">keep'));
+    expect(host.querySelector("base")).toBeNull();
+  });
+
+  it("removes a <meta http-equiv=refresh> navigation hijack", () => {
+    const out = sanitizeReadmeHtml(
+      '<meta http-equiv="refresh" content="0;url=https://evil.example/">keep',
+    );
+    expect(out).not.toMatch(/<meta/i);
+    expect(out).toContain("keep");
+  });
+
+  it("strips a javascript: src and an xlink:href", () => {
+    const img = parseHtml(sanitizeReadmeHtml('<img src="javascript:alert(1)">')).querySelector(
+      "img",
+    );
+    expect(img?.hasAttribute("src")).toBe(false);
+    const use = parseHtml(
+      sanitizeReadmeHtml('<svg><use xlink:href="javascript:alert(1)"/></svg>'),
+    ).querySelector("use");
+    expect(use?.hasAttribute("xlink:href")).toBe(false);
   });
 });
 
