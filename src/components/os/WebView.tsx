@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { ExternalLink, AlertTriangle, RefreshCw } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { FallbackPanel } from "./FallbackPanel";
 
 interface WebViewProps {
   url: string;
@@ -62,66 +63,6 @@ export function decideRefusal(signals: FrameSignal[]): "ok" | "refused" {
   return "refused";
 }
 
-/** External-link escape hatch + retry, with the cached screenshot attempt. */
-function FailedEmbedPanel({
-  url,
-  screenshotFailed,
-  onScreenshotError,
-  onRetry,
-}: {
-  url: string;
-  screenshotFailed: boolean;
-  onScreenshotError: () => void;
-  onRetry: () => void;
-}) {
-  return (
-    <div
-      className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center overflow-auto"
-      style={{ color: "var(--text-secondary)" }}
-    >
-      {!screenshotFailed && (
-        // no-img-element: deliberate — the src is an internal proxy route
-        // (/api/screenshot) whose onError is the degrade path; next/image's
-        // optimizer would add a second failure mode inside a fallback panel.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`/api/screenshot?url=${encodeURIComponent(url)}`}
-          alt={`Cached screenshot of ${url}`}
-          onError={onScreenshotError}
-          className="max-h-44 max-w-full w-auto rounded-os"
-          style={{ border: "1px solid var(--border)" }}
-        />
-      )}
-      <AlertTriangle size={screenshotFailed ? 32 : 20} className="opacity-50" />
-      <p className="font-body text-sm">This site can&apos;t be embedded (X-Frame-Options).</p>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-body rounded-os transition-opacity hover:opacity-80"
-        style={{
-          background: "var(--accent-1)",
-          color: "var(--bg-primary)",
-        }}
-      >
-        <ExternalLink size={12} />
-        Open in new tab
-      </a>
-      <button
-        onClick={onRetry}
-        className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-body rounded-os transition-opacity hover:opacity-80"
-        style={{
-          background: "var(--bg-tertiary)",
-          color: "var(--text-primary)",
-        }}
-      >
-        <RefreshCw size={12} />
-        Retry
-      </button>
-    </div>
-  );
-}
-
 /** Reads the frame's document; null when the frame is gone or unreadable. */
 function readFrameDocument(frame: HTMLIFrameElement | null): Document | null {
   try {
@@ -134,7 +75,6 @@ function readFrameDocument(frame: HTMLIFrameElement | null): Document | null {
 
 export function WebView({ url }: WebViewProps) {
   const [failed, setFailed] = useState(false);
-  const [screenshotFailed, setScreenshotFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -197,7 +137,8 @@ export function WebView({ url }: WebViewProps) {
   }, [markFailed, cancelProbe]);
 
   const handleRetry = useCallback(() => {
-    setScreenshotFailed(false);
+    // Screenshot-attempt state now resets inside FallbackPanel (unmount on
+    // this transition gives the next panel a clean attempt).
     setFailed(false);
     setLoading(true);
     setReloadKey((k) => k + 1);
@@ -235,12 +176,10 @@ export function WebView({ url }: WebViewProps) {
 
   if (failed) {
     return (
-      <FailedEmbedPanel
-        url={url}
-        screenshotFailed={screenshotFailed}
-        onScreenshotError={() => setScreenshotFailed(true)}
-        onRetry={handleRetry}
-      />
+      // allowScreenshot: the iframe path always attempts the proxy — its
+      // per-origin allow-listing degrades through the img's own error inside
+      // the panel (behavior unchanged from the pre-extraction panel).
+      <FallbackPanel url={url} allowScreenshot onRetry={handleRetry} />
     );
   }
 

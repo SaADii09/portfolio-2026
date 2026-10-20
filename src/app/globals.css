@@ -529,6 +529,141 @@ select,
   text-shadow: 0 0 8px color-mix(in srgb, var(--accent-1) 50%, transparent);
 }
 
+/* ── README Prose (ReadmeView) ───────────────────────── */
+/* Token-only typography for sanitized GitHub README HTML rendered via
+   dangerouslySetInnerHTML — descendant selectors are the only way to style
+   the imported markup without touching it. */
+
+.token-prose {
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+.token-prose h1,
+.token-prose h2,
+.token-prose h3,
+.token-prose h4,
+.token-prose h5,
+.token-prose h6 {
+  font-family: var(--font-display);
+  color: var(--accent-1);
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 1.1em 0 0.4em;
+}
+
+.token-prose h1 {
+  font-size: 1.25rem;
+}
+
+.token-prose h2 {
+  font-size: 1.1rem;
+}
+
+.token-prose h3 {
+  font-size: 1rem;
+}
+
+.token-prose h4,
+.token-prose h5,
+.token-prose h6 {
+  font-size: 0.9rem;
+}
+
+.token-prose p {
+  margin: 0.6em 0;
+  font-size: 0.875rem;
+}
+
+.token-prose a {
+  color: var(--accent-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.token-prose a:hover {
+  opacity: 0.8;
+}
+
+.token-prose ul,
+.token-prose ol {
+  margin: 0.6em 0;
+  padding-left: 1.4em;
+}
+
+.token-prose ul {
+  list-style: disc;
+}
+
+.token-prose ol {
+  list-style: decimal;
+}
+
+.token-prose li {
+  margin: 0.25em 0;
+  font-size: 0.875rem;
+}
+
+.token-prose code {
+  font-size: 0.85em;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  padding: 0.1em 0.35em;
+}
+
+.token-prose pre {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  padding: 0.8em 1em;
+  margin: 0.8em 0;
+  overflow-x: auto;
+}
+
+.token-prose pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.token-prose blockquote {
+  border-left: 3px solid var(--accent-1);
+  margin: 0.8em 0;
+  padding: 0.2em 0 0.2em 1em;
+  color: var(--text-secondary);
+}
+
+.token-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  margin: 0.8em 0;
+}
+
+.token-prose table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.85rem;
+}
+
+.token-prose th,
+.token-prose td {
+  border: 1px solid var(--border);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+
+.token-prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.2em 0;
+}
+
+.token-prose strong {
+  font-weight: 700;
+}
+
 /* ── Float Animation ─────────────────────────────────── */
 
 @keyframes subtle-float {
