@@ -85,7 +85,11 @@ function evictOldestCacheEntries(): void {
   }
 }
 
-/** Test plumbing: vitest shares the module instance across a file's tests. */
+/**
+ * Test plumbing: vitest shares the module instance across a file's tests.
+ *
+ * @expected-unused -- reset consumed only by test files (cache isolation)
+ */
 export function resetProjectMetaCache(): void {
   metaCache.clear();
 }
