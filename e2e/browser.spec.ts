@@ -265,14 +265,15 @@ test.describe("DevOS Browser", () => {
     // Closing the active tab hands the baton to the most-recently-used tab.
     await page.getByRole("button", { name: "Close devos" }).click();
     await expect(page.getByRole("tab", { name: "devos" })).toHaveCount(0);
-    await expect(page.getByRole("tab", { name: "ai-job-portal" })).toHaveAttribute(
+    // The tab is named by the PROJECT TITLE (not the slug) since Lane B.
+    await expect(page.getByRole("tab", { name: "AI Job Portal" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
 
     // Closing that one lands back on the home tab, and its content is shown.
-    await page.getByRole("button", { name: "Close ai-job-portal" }).click();
-    await expect(page.getByRole("tab", { name: "ai-job-portal" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Close AI Job Portal" }).click();
+    await expect(page.getByRole("tab", { name: "AI Job Portal" })).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("button", { name: /DevOS Portfolio/ })).toBeVisible();
   });
