@@ -20,6 +20,22 @@ const VIEWPORTS = [
   { name: "375x812", width: 375, height: 812 },
 ] as const;
 
+/** The screenshot proxy is mocked — the panel must never call Microlink. */
+const SCREENSHOT_STUB =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">' +
+  '<rect width="640" height="360" fill="#1a1a2e"/>' +
+  '<text x="320" y="185" fill="#a0a0b0" font-family="monospace" font-size="22" ' +
+  'text-anchor="middle">mocked cached preview</text></svg>';
+
+/** Seed the theme through the persisted store (same pattern as above). */
+async function seedTheme(page: Page, theme: string): Promise<void> {
+  await page.addInitScript((t) => {
+    const store = JSON.parse(localStorage.getItem("devos-store") || "{}");
+    store.state = { ...(store.state ?? {}), theme: t };
+    localStorage.setItem("devos-store", JSON.stringify(store));
+  }, theme);
+}
+
 test.describe("Visual pass — themes × viewports", () => {
   for (const theme of THEMES) {
     for (const vp of VIEWPORTS) {
@@ -160,9 +176,9 @@ test.describe("Visual pass — DevOS Browser", () => {
       await page.reload();
       await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 30_000 });
 
-      // Open the Browser through the "Projects" desktop icon, then open two
-      // project tabs from its home tab.
-      await page.getByTitle("Open Projects").dblclick();
+      // Open the Browser through its own desktop icon, then open two
+      // project tabs from its start page.
+      await page.getByTitle("Open Browser").dblclick();
       await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
       await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
       await page.getByRole("tab", { name: "Home" }).click();
@@ -209,22 +225,6 @@ test.describe("Visual pass — DevOS Browser fallback surfaces", () => {
     pushedAt: "2024-03-01T00:00:00Z",
   };
 
-  /** The screenshot proxy is mocked — the panel must never call Microlink. */
-  const SCREENSHOT_STUB =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">' +
-    '<rect width="640" height="360" fill="#1a1a2e"/>' +
-    '<text x="320" y="185" fill="#a0a0b0" font-family="monospace" font-size="22" ' +
-    'text-anchor="middle">mocked cached preview</text></svg>';
-
-  /** Seed the theme through the persisted store (same pattern as above). */
-  async function seedTheme(page: Page, theme: string): Promise<void> {
-    await page.addInitScript((t) => {
-      const store = JSON.parse(localStorage.getItem("devos-store") || "{}");
-      store.state = { ...(store.state ?? {}), theme: t };
-      localStorage.setItem("devos-store", JSON.stringify(store));
-    }, theme);
-  }
-
   for (const theme of THEMES) {
     test(`${theme} @ 1440x900 — a blocked tile renders the fallback panel`, async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
@@ -244,13 +244,13 @@ test.describe("Visual pass — DevOS Browser fallback surfaces", () => {
       await page.reload();
       await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 30_000 });
 
-      await page.getByTitle("Open Projects").dblclick();
+      await page.getByTitle("Open Browser").dblclick();
       await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
 
       // "Google" is a BLOCKED tile → the fallback panel renders instantly and
       // no iframe is ever mounted.
       await page.getByRole("button", { name: /^Google$/ }).click();
-      await expect(page.getByText(/can't be embedded/i)).toBeVisible();
+      await expect(page.getByText(/blocks embedding/i)).toBeVisible();
       await expect(page.getByRole("img", { name: "Preview of www.google.com" })).toBeVisible();
       await expect(page.getByRole("link", { name: /open in new tab/i })).toBeVisible();
       await expect(page.locator("iframe")).toHaveCount(0);
@@ -276,7 +276,7 @@ test.describe("Visual pass — DevOS Browser fallback surfaces", () => {
       await page.reload();
       await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 30_000 });
 
-      await page.getByTitle("Open Projects").dblclick();
+      await page.getByTitle("Open Browser").dblclick();
       await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
 
       // The project tab opens on the degraded reader: friendly copy plus the
@@ -291,6 +291,121 @@ test.describe("Visual pass — DevOS Browser fallback surfaces", () => {
       await page.screenshot({ path: `visual-pass/degraded-readme-${theme}-1440x900.png` });
     });
   }
+});
+
+test.describe("Visual pass — Chrome-classic start page", () => {
+  // Chromium only: same reason as the browser blocks above — one artifact per
+  // theme, written exactly once.
+  test.skip(({ browserName }) => browserName !== "chromium", "chromium only");
+
+  for (const theme of THEMES) {
+    test(`${theme} @ 1440x900 — the Browser opens on the Chrome-classic home`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await gotoApp(page);
+      await seedTheme(page, theme);
+      await page.reload();
+      await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 30_000 });
+
+      // The singleton opens straight onto the Chrome-classic start page.
+      await page.getByTitle("Open Browser").dblclick();
+      await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+
+      // Shortcuts: all 8 curated tiles render as the shortcut grid.
+      const shortcuts = page.getByRole("region", { name: "Shortcuts" });
+      await expect(shortcuts).toBeVisible();
+      await expect(shortcuts.getByRole("button")).toHaveCount(8);
+
+      // The compact live-projects row carries every project with its host.
+      const projects = page.getByRole("region", { name: "Your live projects" });
+      await expect(projects).toBeVisible();
+      await expect(projects.getByRole("button", { name: /DevOS Portfolio/ })).toBeVisible();
+      await expect(projects.getByRole("button", { name: /API Automation Toolkit/ })).toBeVisible();
+
+      // Sane layout (the window-content-fit overflow/measure idiom): the
+      // start page must never spill HORIZONTALLY out of its panel. The panel
+      // is the browser's designed vertical scroll surface (READMEs and web
+      // tabs scroll in it too), so the vertical extent is pinned as a bounded
+      // scroll rather than to the NO_SCROLL apps' `<= 1` floor — the settled
+      // measure is ~50px at the locked 960×660 first-open window and is
+      // reported to the controller as a layout-tuning candidate.
+      await page.waitForTimeout(1_500);
+      const fit = await page.evaluate(() => {
+        const panel = document.querySelector<HTMLElement>(".browser-tab-panel:not([hidden])");
+        if (panel === null) return null;
+        return {
+          overflowX: panel.scrollWidth - panel.clientWidth,
+          overflowY: panel.scrollHeight - panel.clientHeight,
+          clientHeight: panel.clientHeight,
+        };
+      });
+      expect(fit).not.toBeNull();
+      expect(fit!.overflowX, "start page has no horizontal overflow").toBeLessThanOrEqual(1);
+      expect(
+        fit!.overflowY,
+        "start page's vertical scroll stays within one panel height (no layout blowup)",
+      ).toBeLessThanOrEqual(fit!.clientHeight);
+
+      await page.screenshot({ path: `visual-pass/home-${theme}-1440x900.png` });
+    });
+  }
+});
+
+test.describe("Visual pass — blocked-site preview (typed URL)", () => {
+  // Chromium only: same reason as the browser blocks above.
+  test.skip(({ browserName }) => browserName !== "chromium", "chromium only");
+
+  test("retro @ 1440x900 — a typed host-blocked URL renders the live preview", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await gotoApp(page);
+    await seedTheme(page, "retro");
+
+    // The screenshot proxy answers with a stub (no Microlink quota burned).
+    await page.route("**/api/screenshot*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "image/svg+xml",
+        body: SCREENSHOT_STUB,
+      }),
+    );
+
+    await page.reload();
+    await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 30_000 });
+
+    await page.getByTitle("Open Browser").dblclick();
+    await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+
+    // Type a host-blocked URL into the address bar: the host classification
+    // (G3) renders the preview instantly — no iframe attempt, no embed-check.
+    const address = page.getByRole("textbox", { name: "Address bar" });
+    await address.fill("https://www.youtube.com/watch?v=x");
+    await address.press("Enter");
+
+    await expect(page.getByText(/blocks embedding/i)).toBeVisible();
+    await expect(page.getByRole("link", { name: /open in new tab/i })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Preview of www.youtube.com" })).toBeVisible();
+
+    // D4: the redesigned preview is a full-width page preview, NOT the old
+    // ~176px thumbnail — its rendered width is a large fraction of the tab
+    // content area (the window-content-fit measurement idiom).
+    await page.waitForTimeout(1_500);
+    const widths = await page.evaluate(() => {
+      const img = document.querySelector<HTMLImageElement>('img[alt="Preview of www.youtube.com"]');
+      const panel = document.querySelector<HTMLElement>(".browser-tab-panel:not([hidden])");
+      if (img === null || panel === null) return null;
+      return {
+        imgWidth: img.getBoundingClientRect().width,
+        tabWidth: panel.clientWidth,
+      };
+    });
+    expect(widths).not.toBeNull();
+    expect(widths!.imgWidth, "preview is not the old ~176px thumbnail").toBeGreaterThan(300);
+    expect(
+      widths!.imgWidth / widths!.tabWidth,
+      "preview ≥ 70% of the tab content width",
+    ).toBeGreaterThanOrEqual(0.7);
+
+    await page.screenshot({ path: `visual-pass/blocked-preview-retro-1440x900.png` });
+  });
 });
 
 test.describe("Visual pass — low-Tint floor leg", () => {
