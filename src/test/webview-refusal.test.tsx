@@ -228,6 +228,23 @@ describe("WebView fallback wiring", () => {
 
   // --- the verdict flow (A2): the iframe survives the verdict ---------------
 
+  it("same-origin unreadable frame is a LOCAL refusal — no server round trip", () => {
+    // A same-origin document is always readable unless the browser refused to
+    // load it (XFO binds same-origin framing too). Local dev serves the
+    // /embed-refusal fixture over http://localhost, which the https-only
+    // embed-check route must reject — so the client owns this case itself,
+    // otherwise the frame would stay blank forever.
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    render(<WebView url="http://localhost:3000/embed-refusal" />);
+
+    fireLoadThenAdvance(300);
+    restoreDocument();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/blocks embedding/i)).toBeDefined();
+    expect(screen.queryByTitle("Website preview")).toBeNull();
+  });
+
   it("unreadable load with a BLOCKED verdict → fallback panel with screenshot img", async () => {
     const restoreDocument = OVERRIDE_UNREADABLE();
     mockEmbedCheck({ embeddable: false, reason: "x-frame-options" });

@@ -71,6 +71,24 @@ export function decideRefusal(signals: FrameSignal[]): "ok" | "refused" {
   return "refused";
 }
 
+/**
+ * A SAME-ORIGIN document is always readable unless the browser refused to
+ * load it (X-Frame-Options binds same-origin framing too, and a broken frame
+ * leaves the document unreadable). So an unreadable same-origin frame is a
+ * genuine refusal and must decide locally — no server round trip. That also
+ * keeps local/dev (`http://localhost`) truthful: the embed-check route is
+ * https-only and would answer 400, which the client would otherwise degrade
+ * to a permanently blank frame.
+ */
+function isSameOrigin(url: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return new URL(url, window.location.href).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 /** Reads the frame's document; null when the frame is gone or unreadable. */
 function readFrameDocument(frame: HTMLIFrameElement | null): Document | null {
   try {
@@ -210,13 +228,20 @@ export function WebView({ url }: WebViewProps) {
         setLoading(false);
         return;
       }
-      // Unreadable after a genuine load is NOT a refusal by itself — every
-      // cross-origin frame is unreadable (Same-Origin Policy). The server
-      // verdict owns the outcome; the frame stays mounted meanwhile (the
-      // watchdog deliberately stays armed: it defers to a pending verdict).
+      // Unreadable after a genuine SAME-ORIGIN load is a real refusal: a
+      // same-origin document the parent cannot read means the browser refused
+      // to load it (XFO binds same-origin too). Cross-origin frames are a
+      // different story — every one of them is unreadable (Same-Origin
+      // Policy), so the server verdict owns their outcome while the frame
+      // stays mounted (the watchdog deliberately stays armed: it defers to a
+      // pending verdict).
+      if (isSameOrigin(url)) {
+        markFailed();
+        return;
+      }
       requestVerdict();
     }, FRAME_PROBE_DELAY_MS);
-  }, [probeFrame, clearWatchdog, cancelProbe, requestVerdict]);
+  }, [probeFrame, clearWatchdog, cancelProbe, requestVerdict, markFailed, url]);
 
   const handleError = useCallback(() => {
     cancelProbe();
@@ -247,6 +272,12 @@ export function WebView({ url }: WebViewProps) {
       watchdogRef.current = null;
       if (verdictPendingRef.current) return;
       if (decideRefusal([probeFrame()]) === "refused") {
+        // Same-origin unreadable is a local refusal (see handleLoad) — the
+        // server cannot and need not arbitrate our own origin.
+        if (isSameOrigin(url)) {
+          markFailed();
+          return;
+        }
         requestVerdict();
         return;
       }
@@ -263,7 +294,7 @@ export function WebView({ url }: WebViewProps) {
       }
       abortVerdict();
     };
-  }, [url, reloadKey, probeFrame, requestVerdict, abortVerdict]);
+  }, [url, reloadKey, probeFrame, requestVerdict, abortVerdict, markFailed]);
 
   if (failed) {
     return (
