@@ -3,6 +3,36 @@ import { WindowInstance, WindowConfig } from "@/types/window";
 import { clampWindowSize, clampWindowPosition, getViewportBounds } from "@/lib/boundaries";
 import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, INITIAL_Z_INDEX } from "@/lib/constants";
 import { resolveOpenGeometry, WEBVIEW_GEOMETRY_KEY, WindowGeometry } from "@/lib/window-geometry";
+import type { BrowserSlice } from "./browserSlice";
+
+/**
+ * The narrow seam to the browser slice.
+ *
+ * The window slice cannot widen its own type: the browser slice is a
+ * SIBLING in the composed store, and widening would cascade into the
+ * isolated test stores that compose the window slice alone. So the browser
+ * cleanup is reached through this optional pick — a no-op when the browser
+ * slice is not composed (the isolated stores, the persist defaults).
+ */
+type BrowserSeam = Pick<BrowserSlice, "closeBrowserWindow">;
+
+/**
+ * Releases the browser slice's state for a CLOSED browser window (F2 + F4):
+ * the window's record is unreachable garbage once the window is gone (a
+ * reopened browser gets a new id), and the slice-global `pendingSlug` would
+ * otherwise leak into the next browser window as a phantom project tab.
+ *
+ * The seam is a no-op when the browser slice is not composed (the isolated
+ * test stores, the persist defaults).
+ */
+function releaseBrowserWindow(
+  get: () => WindowSlice,
+  id: string,
+  closing: WindowInstance | undefined,
+): void {
+  if (closing?.type !== "browser") return;
+  (get() as WindowSlice & BrowserSeam).closeBrowserWindow?.(id);
+}
 
 let nextId = 1;
 function generateId(): string {
@@ -122,8 +152,9 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
   },
 
   closeWindow: (id) => {
+    // The closing window is read BEFORE the set — afterwards it is gone.
+    const closing = get().windows.find((w) => w.id === id);
     set((s) => {
-      const closing = s.windows.find((w) => w.id === id);
       // Snapshot-on-close (spec §4.5): commit the window's final rect into
       // lastGeometry before filtering. Minimize/restore paths never run this.
       let lastGeometry = s.lastGeometry;
@@ -150,6 +181,11 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
             : s.activeWindowId,
       };
     });
+    // A closed browser window drops its slice record AND the pending launch
+    // payload. Every close path funnels through here, so the cleanup covers
+    // the window chrome, the dock, the taskbar and the keyboard shortcuts
+    // alike.
+    releaseBrowserWindow(get, id, closing);
   },
 
   focusWindow: (id) => {

@@ -143,6 +143,80 @@ describe("browser window plumbing @ 1440×900", () => {
     });
   });
 
+  /**
+   * Closing the browser window (F2 + F4): the window's slice record is
+   * unreachable garbage once the window is gone (a reopened browser gets a
+   * NEW id), and the slice-global `pendingSlug` must not survive into the
+   * next browser window.
+   */
+  describe("closing the browser window", () => {
+    it("drops the browser record and the pending slug", () => {
+      openBrowser("devos");
+      const id = findBrowserWindow()!.id;
+      expect(useStore.getState().browserWindows[id]).toBeDefined();
+
+      useStore.getState().closeWindow(id);
+
+      expect(useStore.getState().browserWindows[id]).toBeUndefined();
+      expect(useStore.getState().pendingSlug).toBeNull();
+    });
+
+    it("leaves the browser record alone when an APP window closes", () => {
+      openBrowser("devos");
+      const browserId = findBrowserWindow()!.id;
+      const appId = useStore.getState().openWindow({
+        title: "About",
+        type: "app",
+        component: "AboutApp",
+      });
+
+      useStore.getState().closeWindow(appId);
+
+      const state = useStore.getState();
+      expect(state.browserWindows[browserId]).toBeDefined();
+      // The browser's launch payload is none of the app window's business.
+      expect(state.pendingSlug).toBe("devos");
+    });
+
+    it("drops the record so a reopen starts from a fresh home tab", () => {
+      openBrowser("devos");
+      const first = findBrowserWindow()!;
+      useStore.getState().closeWindow(first.id);
+
+      openBrowser();
+
+      const second = findBrowserWindow()!;
+      expect(second.id).not.toBe(first.id);
+      const record = useStore.getState().browserWindows[second.id]!;
+      expect(record.tabs).toHaveLength(1);
+      expect(record.tabs[0]!.kind).toBe("home");
+    });
+
+    /**
+     * The close-while-launching race (plan Review Focus 1): the browser
+     * window closes between `openBrowser(slug)` and the app's mount, so the
+     * launch payload is never consumed. The NEXT browser window must not
+     * inherit it — no phantom project tab, no stale slug.
+     */
+    it("a close between launch and mount leaves no phantom project tab", () => {
+      openBrowser("devos");
+      const first = findBrowserWindow()!;
+      // The window closes BEFORE BrowserApp ever mounts.
+      useStore.getState().closeWindow(first.id);
+      expect(useStore.getState().pendingSlug).toBeNull();
+
+      // The next launch carries no slug.
+      openBrowser();
+
+      const second = findBrowserWindow()!;
+      const record = useStore.getState().browserWindows[second.id]!;
+      expect(record.tabs).toHaveLength(1);
+      expect(record.tabs[0]!.kind).toBe("home");
+      expect(record.tabs.some((tab) => tab.kind === "project")).toBe(false);
+      expect(useStore.getState().pendingSlug).toBeNull();
+    });
+  });
+
   describe("persist non-leak", () => {
     it("serialized persist state contains no browser slice keys or README HTML", () => {
       openBrowser("devos");
@@ -151,9 +225,12 @@ describe("browser window plumbing @ 1440×900", () => {
       for (const key of BROWSER_KEYS) {
         expect(keys).not.toContain(key);
       }
+      // The SERIALIZED substance carries none of the five browser keys — a
+      // nested/renamed field would still leak the session (T7).
       const serialized = JSON.stringify(partial);
-      expect(serialized).not.toContain("browserWindows");
-      expect(serialized).not.toContain("readmeLru");
+      for (const key of BROWSER_KEYS) {
+        expect(serialized).not.toContain(key);
+      }
     });
   });
 });

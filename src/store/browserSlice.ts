@@ -57,6 +57,14 @@ export interface BrowserSlice {
   openHomeTab: (windowId: string) => string;
   closeTab: (windowId: string, tabId: string) => void;
   activateTab: (windowId: string, tabId: string) => void;
+  /**
+   * Drops a CLOSED browser window's record and the pending launch payload
+   * (F2 + F4). A reopened browser gets a new window id, so the old record is
+   * unreachable garbage; the slice-global `pendingSlug` would otherwise leak
+   * into the next browser window as a phantom project tab. Called by the
+   * window slice's close path through a narrow seam.
+   */
+  closeBrowserWindow: (windowId: string) => void;
   setActiveRefusal: (windowId: string, tabId: string, refusal: boolean) => void;
   /** Pushes `url` into the active tab's localHistory and resets scrollTop. */
   navigateActive: (windowId: string, url: string) => void;
@@ -105,6 +113,20 @@ function dissolveTab(prev: BrowserWindowState, tabId: string): BrowserWindowStat
     recency,
     activeTabId: wasActive ? (recency[0] ?? null) : prev.activeTabId,
   };
+}
+
+/**
+ * Drops one window's record — the surviving records keep their identity (a
+ * no-op when the window never had one).
+ */
+function evictWindow(
+  records: Record<string, BrowserWindowState>,
+  windowId: string,
+): Record<string, BrowserWindowState> {
+  if (records[windowId] === undefined) return records;
+  const next = { ...records };
+  delete next[windowId];
+  return next;
 }
 
 export const createBrowserSlice: StateCreator<BrowserSlice> = (set, get) => ({
@@ -244,6 +266,15 @@ export const createBrowserSlice: StateCreator<BrowserSlice> = (set, get) => ({
         browserWindows: { ...s.browserWindows, [windowId]: { ...prev, tabs } },
       };
     });
+  },
+
+  closeBrowserWindow: (windowId) => {
+    set((s) => ({
+      browserWindows: evictWindow(s.browserWindows, windowId),
+      // The launch payload belonged to the window that just closed. A stale
+      // slug would open a phantom project tab in the NEXT browser window.
+      pendingSlug: null,
+    }));
   },
 
   navigateActive: (windowId, url) => {

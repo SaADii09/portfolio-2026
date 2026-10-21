@@ -433,6 +433,19 @@ describe("persist partialize", () => {
     expect(persisted).not.toHaveProperty("music");
   });
 
+  it("persists none of the browser slice's five keys (T7)", () => {
+    // Browser state is ephemeral per spec §7 — none of its keys may reach
+    // localStorage, not even nested under another name.
+    const BROWSER_KEYS = ["browserWindows", "readmeLru", "metaLru", "pendingSlug", "sidePanelOpen"];
+    const persisted = persistPartialize(useStore.getState());
+    const keys = Object.keys(persisted);
+    const serialized = JSON.stringify(persisted);
+    for (const key of BROWSER_KEYS) {
+      expect(keys).not.toContain(key);
+      expect(serialized).not.toContain(key);
+    }
+  });
+
   it("round-trips volume and current track through localStorage", () => {
     localStorage.clear();
     const track = { id: "t3", title: "Midnight Code", artist: "DevOS Beats" };

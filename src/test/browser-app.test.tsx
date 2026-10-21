@@ -496,6 +496,66 @@ describe("BrowserApp — address bar, touch targets, panel toggle", () => {
 });
 
 /**
+ * The close-while-launching race (F4): the browser window closes between the
+ * launch and the app's mount, so the launch payload is never consumed. The
+ * NEXT browser window must not inherit it — a phantom project tab would open
+ * a project the user never asked for.
+ */
+describe("BrowserApp — a closed browser window leaves no phantom tab", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useStore.setState({
+      windows: [],
+      activeWindowId: null,
+      lastGeometry: {},
+      browserWindows: {},
+      pendingSlug: null,
+      readmeLru: {},
+      metaLru: {},
+      sidePanelOpen: false,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => makeMeta("devos"),
+      })),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("opens the next browser window on the home tab only", async () => {
+    const closedId = useStore.getState().openWindow({
+      title: "Browser",
+      type: "browser",
+      component: "browser",
+    });
+    useStore.getState().openBrowserWindow(closedId);
+    // The launcher wrote the payload; the window closed before the mount.
+    useStore.setState({ pendingSlug: "devos" });
+    useStore.getState().closeWindow(closedId);
+    expect(useStore.getState().pendingSlug).toBeNull();
+
+    const nextId = useStore.getState().openWindow({
+      title: "Browser",
+      type: "browser",
+      component: "browser",
+    });
+    render(<BrowserApp windowId={nextId} />);
+    await flush();
+
+    const record = useStore.getState().browserWindows[nextId]!;
+    expect(record.tabs).toHaveLength(1);
+    expect(record.tabs[0]?.kind).toBe("home");
+    expect(record.tabs.some((tab) => tab.kind === "project")).toBe(false);
+  });
+});
+
+/**
  * Scroll persistence (I-4): a scroll burst must never write to the global
  * store per event. The live position lives in a ref; the store learns it
  * once the burst ends (debounced) or when the tab is left (flushed).
