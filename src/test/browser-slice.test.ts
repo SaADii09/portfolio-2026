@@ -40,6 +40,11 @@ function win(store: Slice, id: string): BrowserWindowState {
   return state;
 }
 
+/** Silent lookup — for pins that assert a record is ABSENT. */
+function lookup(store: Slice, id: string): BrowserWindowState | undefined {
+  return store.browserWindows[id];
+}
+
 describe("browserSlice", () => {
   let store: Slice;
 
@@ -53,6 +58,9 @@ describe("browserSlice", () => {
     expect(store.pendingSlug).toBeNull();
     expect(store.readmeLru).toEqual({});
     expect(store.metaLru).toEqual({});
+    // Wave 1.5 B1: the session-wide visit trail also starts empty.
+    expect(store.visitRecency).toEqual([]);
+    expect(store.visitCounts).toEqual({});
   });
 
   describe("openBrowserWindow", () => {
@@ -188,16 +196,34 @@ describe("browserSlice", () => {
       expect(state.tabs.find((t) => t.id === p2)).toBeUndefined();
     });
 
-    it("closing down to empty leaves null active state with no tabs", () => {
+    it("closing down to empty reseeds a freshly seeded home tab (never the blank shell)", () => {
+      // Wave 1.5 B1 / D8 — this pin INVERTED: it used to be
+      // `expect(state.tabs).toEqual([]); expect(state.activeTabId).toBeNull();`
+      // (the blank shell); closing the last tab now lands on a fresh Home.
+      store.openBrowserWindow("w1");
+      const originalHomeId = win(store, "w1").tabs[0]!.id;
+      const p1 = store.openProjectTab("w1", "a");
+      store.closeTab("w1", p1);
+      store.closeTab("w1", originalHomeId);
+      const state = win(store, "w1");
+      expect(state.tabs).toHaveLength(1);
+      const home = state.tabs[0]!;
+      expect(home.kind).toBe("home");
+      // The reseed is a FRESH home tab (the idempotent seeding creates a new
+      // record) — not the stale id of the closed one.
+      expect(home.id).not.toBe(originalHomeId);
+      expect(state.activeTabId).toBe(home.id);
+      expect(state.recency).toEqual([home.id]);
+    });
+
+    it("a non-last close still activates the most recent remaining tab", () => {
       store.openBrowserWindow("w1");
       const homeId = win(store, "w1").tabs[0]!.id;
       const p1 = store.openProjectTab("w1", "a");
       store.closeTab("w1", p1);
-      store.closeTab("w1", homeId);
       const state = win(store, "w1");
-      expect(state.tabs).toEqual([]);
-      expect(state.activeTabId).toBeNull();
-      expect(state.recency).toEqual([]);
+      expect(state.activeTabId).toBe(homeId);
+      expect(state.tabs).toHaveLength(1);
     });
 
     it("closing a non-active tab keeps the active tab active", () => {
@@ -314,6 +340,96 @@ describe("browserSlice", () => {
       }
       expect(Object.keys(store.metaLru)).toHaveLength(8);
       expect(Object.keys(store.readmeLru)).toHaveLength(5);
+    });
+  });
+
+  describe("visit recency (visitRecency + visitCounts — Wave 1.5 B1)", () => {
+    it("the fresh arm of openWebTab records the origin (front, count 1)", () => {
+      store.openBrowserWindow("w1");
+      store.openWebTab("w1", "https://example.com", "Example");
+      expect(store.visitRecency).toEqual(["https://example.com"]);
+      expect(store.visitCounts).toEqual({ "https://example.com": 1 });
+    });
+
+    it("the dedupe-activate arm of openWebTab records the visit too", () => {
+      store.openBrowserWindow("w1");
+      const first = store.openWebTab("w1", "https://example.com", "Example");
+      const second = store.openWebTab("w1", "https://example.com", "Example again");
+      expect(second).toBe(first); // dedupe hit, no new tab
+      expect(store.visitRecency).toEqual(["https://example.com"]);
+      expect(store.visitCounts).toEqual({ "https://example.com": 2 });
+    });
+
+    it("a revisit of an earlier origin moves it to the front and bumps its count", () => {
+      store.openBrowserWindow("w1");
+      store.openWebTab("w1", "https://a.example", "A");
+      store.openWebTab("w1", "https://b.example", "B");
+      expect(store.visitRecency).toEqual(["https://b.example", "https://a.example"]);
+      store.openWebTab("w1", "https://a.example", "A again"); // dedupe arm revisit
+      expect(store.visitRecency).toEqual(["https://a.example", "https://b.example"]);
+      expect(store.visitCounts).toEqual({ "https://a.example": 2, "https://b.example": 1 });
+    });
+
+    it("cap 8: the 9th origin evicts the oldest, and counts stay bounded to the trail", () => {
+      store.openBrowserWindow("w1");
+      for (let i = 1; i <= 9; i++) {
+        store.openWebTab("w1", `https://e${i}.example`, `E${i}`);
+      }
+      expect(store.visitRecency).toEqual([
+        "https://e9.example",
+        "https://e8.example",
+        "https://e7.example",
+        "https://e6.example",
+        "https://e5.example",
+        "https://e4.example",
+        "https://e3.example",
+        "https://e2.example",
+      ]);
+      expect(Object.keys(store.visitCounts).sort()).toEqual(store.visitRecency.slice().sort());
+      expect(store.visitCounts["https://e1.example"]).toBeUndefined();
+    });
+
+    it("home and project tabs record nothing", () => {
+      store.openBrowserWindow("w1");
+      store.openHomeTab("w1");
+      store.openProjectTab("w1", "devos");
+      expect(store.visitRecency).toEqual([]);
+      expect(store.visitCounts).toEqual({});
+    });
+
+    it("navigateActive records only web tabs", () => {
+      store.openBrowserWindow("w1");
+      const webId = store.openWebTab("w1", "https://example.com/one", "One");
+      store.navigateActive("w1", "https://example.com/two");
+      expect(store.visitRecency).toEqual(["https://example.com"]);
+      expect(store.visitCounts).toEqual({ "https://example.com": 2 });
+
+      // A project tab navigateActive must record nothing.
+      const projectId = store.openProjectTab("w1", "devos");
+      store.navigateActive("w1", "https://github.com/SaADii09/portfolio-2026");
+      expect(store.visitRecency).toEqual(["https://example.com"]);
+      expect(store.visitCounts).toEqual({ "https://example.com": 2 });
+      // The web tab's history was NOT touched by the tab switch — sanity.
+      expect(win(store, "w1").tabs.find((t) => t.id === webId)!.localHistory).toHaveLength(2);
+      expect(projectId).toBeDefined();
+    });
+
+    it("an unparsable url records nothing", () => {
+      store.openBrowserWindow("w1");
+      store.openWebTab("w1", "not-a-url", "Broken");
+      expect(store.visitRecency).toEqual([]);
+      expect(store.visitCounts).toEqual({});
+    });
+
+    it("closing the browser window clears the record and pending payload but keeps visits", () => {
+      store.openBrowserWindow("w1");
+      store.pendingSlug = "devos";
+      store.openWebTab("w1", "https://example.com", "Example");
+      store.closeBrowserWindow("w1");
+      expect(lookup(store, "w1")).toBeUndefined();
+      expect(store.pendingSlug).toBeNull();
+      expect(store.visitRecency).toEqual(["https://example.com"]);
+      expect(store.visitCounts).toEqual({ "https://example.com": 1 });
     });
   });
 
