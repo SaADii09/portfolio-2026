@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { gotoApp } from "./utils";
 
 /**
@@ -167,7 +167,10 @@ test.describe("Visual pass — DevOS Browser", () => {
       await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
       await page.getByRole("tab", { name: "Home" }).click();
       await page.getByRole("button", { name: /AI Job Portal/ }).click();
-      await expect(page.getByRole("tab", { name: "ai-job-portal" })).toBeVisible();
+      // The project tab's label is the project title (the hardening round
+      // renamed it from the slug) — accept either spelling so the leg
+      // survives both builds.
+      await expect(page.getByRole("tab", { name: /ai[- ]job[- ]portal/i })).toBeVisible();
 
       // The side panel is closed by default — the toolbar toggle opens it.
       await page.getByRole("button", { name: "Toggle side panel" }).click();
@@ -177,6 +180,115 @@ test.describe("Visual pass — DevOS Browser", () => {
       // Let entrance/wallpaper/spring animations settle before the shot.
       await page.waitForTimeout(1_500);
       await page.screenshot({ path: `visual-pass/browser-${theme}-1440x900.png` });
+    });
+  }
+});
+
+test.describe("Visual pass — DevOS Browser fallback surfaces", () => {
+  // Chromium only: same reason as the browser block above — one artifact per
+  // theme, written exactly once.
+  test.skip(({ browserName }) => browserName !== "chromium", "chromium only");
+
+  /**
+   * A degraded /api/project-meta answer: the upstream served the repo facts
+   * but no README body, so the reader renders its degraded copy + escape
+   * hatch (the surface the Phase 15 visual pass never captured).
+   */
+  const DEGRADED_META = {
+    slug: "devos",
+    readmeHtml: null,
+    degraded: true,
+    timeline: [
+      { label: "Created", period: "2024-01" },
+      { label: "Updated", period: "2024-03" },
+    ],
+    language: "TypeScript",
+    stars: 42,
+    homepage: "https://portfolio-2026-sp9k.vercel.app",
+    createdAt: "2024-01-01T00:00:00Z",
+    pushedAt: "2024-03-01T00:00:00Z",
+  };
+
+  /** The screenshot proxy is mocked — the panel must never call Microlink. */
+  const SCREENSHOT_STUB =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">' +
+    '<rect width="640" height="360" fill="#1a1a2e"/>' +
+    '<text x="320" y="185" fill="#a0a0b0" font-family="monospace" font-size="22" ' +
+    'text-anchor="middle">mocked cached preview</text></svg>';
+
+  /** Seed the theme through the persisted store (same pattern as above). */
+  async function seedTheme(page: Page, theme: string): Promise<void> {
+    await page.addInitScript((t) => {
+      const store = JSON.parse(localStorage.getItem("devos-store") || "{}");
+      store.state = { ...(store.state ?? {}), theme: t };
+      localStorage.setItem("devos-store", JSON.stringify(store));
+    }, theme);
+  }
+
+  for (const theme of THEMES) {
+    test(`${theme} @ 1440x900 — a blocked tile renders the fallback panel`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await gotoApp(page);
+      await seedTheme(page, theme);
+
+      // The screenshot proxy answers with a stub so the cached-preview card
+      // renders without burning Microlink quota.
+      await page.route("**/api/screenshot*", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "image/svg+xml",
+          body: SCREENSHOT_STUB,
+        }),
+      );
+
+      await page.reload();
+      await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 30_000 });
+
+      await page.getByTitle("Open Projects").dblclick();
+      await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+
+      // "Google" is a BLOCKED tile → the fallback panel renders instantly and
+      // no iframe is ever mounted.
+      await page.getByRole("button", { name: /^Google$/ }).click();
+      await expect(page.getByText(/can't be embedded/i)).toBeVisible();
+      await expect(page.getByRole("img", { name: "Preview of www.google.com" })).toBeVisible();
+      await expect(page.getByRole("link", { name: /open in new tab/i })).toBeVisible();
+      await expect(page.locator("iframe")).toHaveCount(0);
+
+      // Let entrance/wallpaper/spring animations settle before the shot.
+      await page.waitForTimeout(1_500);
+      await page.screenshot({ path: `visual-pass/fallback-${theme}-1440x900.png` });
+    });
+
+    test(`${theme} @ 1440x900 — a degraded meta renders the degraded README`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await gotoApp(page);
+      await seedTheme(page, theme);
+
+      await page.route("**/api/project-meta*", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(DEGRADED_META),
+        }),
+      );
+
+      await page.reload();
+      await page.locator(".boot-overlay").waitFor({ state: "detached", timeout: 30_000 });
+
+      await page.getByTitle("Open Projects").dblclick();
+      await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+
+      // The project tab opens on the degraded reader: friendly copy plus the
+      // "Open on GitHub" escape hatch (no README body in the cache).
+      await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
+      await expect(page.getByText(/upstream source may be busy/i)).toBeVisible();
+      await expect(page.getByRole("link", { name: /open on github/i })).toBeVisible();
+      await expect(page.locator(".token-prose")).toHaveCount(0);
+
+      // Let entrance/wallpaper/spring animations settle before the shot.
+      await page.waitForTimeout(1_500);
+      await page.screenshot({ path: `visual-pass/degraded-readme-${theme}-1440x900.png` });
     });
   }
 });

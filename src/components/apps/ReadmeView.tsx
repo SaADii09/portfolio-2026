@@ -28,7 +28,14 @@ export function ReadmeView({ html, degraded, slug }: ReadmeViewProps) {
   const safeHtml = useMemo(() => sanitizeReadmeHtml(html), [html]);
 
   if (degraded) {
-    const repoUrl = projectBySlug(slug)?.repoUrl ?? "https://github.com";
+    // The repo link is resolved from the slug. The only production caller
+    // (BrowserApp's ReadmeBody) renders its own "Unknown project" notice for
+    // an unknown slug, so this lookup always resolves there — and an unknown
+    // slug never fabricates a link to the wrong page (the old floor).
+    const repoUrl = projectBySlug(slug)?.repoUrl;
+    if (repoUrl === undefined) {
+      return <p className="p-4 font-body text-sm text-os-muted">Unknown project.</p>;
+    }
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center overflow-auto">
         <BookOpen size={28} className="opacity-50 text-os-muted" />
@@ -40,14 +47,10 @@ export function ReadmeView({ html, degraded, slug }: ReadmeViewProps) {
           href={repoUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-body rounded-os transition-opacity hover:opacity-80"
-          style={{
-            background: "var(--accent-1)",
-            color: "var(--bg-primary)",
-          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-body rounded-os transition-opacity hover:opacity-80 bg-os-accent text-os-bg"
         >
-          Open on GitHub
           <ExternalLink size={12} />
+          Open on GitHub
         </a>
       </div>
     );

@@ -10,6 +10,11 @@ import { ReadmeView } from "@/components/apps/ReadmeView";
  * bug can never put a live script/iframe in the window. Anchors are forced to
  * external behavior (target=_blank + noopener), and `degraded` swaps the body
  * for friendly copy plus an "Open on GitHub" escape hatch.
+ *
+ * F6 (hardening round): the escape hatch paints with THEME TOKENS — no static
+ * inline styles survive in the markup.
+ * T8: the escape hatch is resolved from the slug (no fabricated floor link)
+ * and its icon leads the label (the codebase's established button pattern).
  */
 
 const REPO_URL = "https://github.com/SaADii09/portfolio-2026"; // slug "devos"
@@ -46,5 +51,32 @@ describe("ReadmeView", () => {
     const link = screen.getByRole("link", { name: /open on github/i });
     expect(link.getAttribute("href")).toBe(REPO_URL);
     expect(link.getAttribute("rel")).toContain("noopener");
+  });
+
+  it("paints the degraded escape hatch with theme tokens", () => {
+    render(<ReadmeView html="" degraded slug="devos" />);
+    // F6: `background: var(--accent-1)` / `color: var(--bg-primary)` became
+    // the token classes — the rendered colors are unchanged.
+    const link = screen.getByRole("link", { name: /open on github/i });
+    expect(link.getAttribute("style")).toBeNull();
+    expect(link.className).toContain("bg-os-accent");
+    expect(link.className).toContain("text-os-bg");
+  });
+
+  it("leads with the icon (the established button pattern)", () => {
+    render(<ReadmeView html="" degraded slug="devos" />);
+    const link = screen.getByRole("link", { name: /open on github/i });
+    // Icon-then-label, like every other icon button in the OS.
+    expect(link.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+  });
+
+  it("fabricates no repo link for an unknown slug", () => {
+    // T8: the old `?? "https://github.com"` floor linked to the wrong page.
+    // The only production caller (BrowserApp's ReadmeBody) renders its own
+    // "Unknown project" notice for an unknown slug, so ReadmeView never
+    // fabricates a link — it says the project is unknown.
+    render(<ReadmeView html="" degraded slug="not-a-project" />);
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText(/unknown project/i)).toBeDefined();
   });
 });
