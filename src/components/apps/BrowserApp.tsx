@@ -32,8 +32,8 @@ import type { AppStore } from "@/store";
 import type { BrowserTab, BrowserWindowState } from "@/store/browserSlice";
 import { computeWarmSet } from "@/lib/warm-set";
 import { BROWSER_TILES, type BrowserTile } from "@/lib/browser-apps";
-import { projectBySlug, type ProjectEntry } from "@/lib/portfolio-data";
-import { ProjectGrid } from "@/components/apps/ProjectGrid";
+import { PROJECTS, projectBySlug, type ProjectEntry } from "@/lib/portfolio-data";
+import { isEmbedBlocked } from "@/lib/embed-rules";
 import { ProjectSidePanel } from "@/components/apps/ProjectSidePanel";
 import { ReadmeView } from "@/components/apps/ReadmeView";
 import { WebView } from "@/components/os/WebView";
@@ -73,13 +73,9 @@ const selectNavigateActive = (s: AppStore) => s.navigateActive;
 const selectToggleSidePanel = (s: AppStore) => s.toggleSidePanel;
 const selectConsumePendingSlug = (s: AppStore) => s.consumePendingSlug;
 
-/** Tile lookup by exact url — blocked tiles render FallbackPanel, no iframe. */
+/** Tile lookup by exact url — feeds the tab-strip icon glyph only. */
 function tileFor(url: string): BrowserTile | undefined {
   return BROWSER_TILES.find((tile) => tile.url === url);
-}
-
-function isBlockedUrl(url: string): boolean {
-  return tileFor(url)?.kind === "blocked";
 }
 
 /** Address-bar parse: prepend https:// when the entry carries no scheme. */
@@ -511,38 +507,156 @@ function TabIcon({ tab }: { tab: BrowserTab }) {
   return <TileGlyph tile={tileFor(tab.url ?? "")} size={12} />;
 }
 
-function TileButton({ tile, onOpen }: { tile: BrowserTile; onOpen: () => void }) {
-  const Icon = TILE_ICONS[tile.icon] ?? Globe;
+/**
+ * Chrome-classic start page (Concept A — spec D6, Wave 1.5 B2). The projects
+ * GRID left with the Projects window; the home is now a start page:
+ * a greeting row, the shortcut tile grid, "Recently visited" chips (B1's
+ * session state), and the compact "Your live projects" row. Token classes
+ * only; tiles wrap 3 columns on mobile; every control carries the 44px
+ * mobile floor.
+ */
+
+/** Time-aware greeting — subtle, one line (the TopBar owns the clock). */
+function greetingFor(hour: number): string {
+  if (hour < 5) return "Good night.";
+  if (hour < 12) return "Good morning.";
+  if (hour < 18) return "Good afternoon.";
+  return "Good evening.";
+}
+
+function greetingCopy(): string {
+  return greetingFor(new Date().getHours());
+}
+
+/** The origin's display form — its hostname, www-stripped. */
+function hostOfOrigin(origin: string): string {
+  return titleForUrl(origin);
+}
+
+/** The host a project row names: the deployed demo, else the repository. */
+function hostOfProjectRow(entry: ProjectEntry): string {
+  try {
+    return new URL(entry.demoUrl ?? entry.repoUrl).host;
+  } catch {
+    return entry.repoUrl;
+  }
+}
+
+function ShortcutTile({ tile, onOpen }: { tile: BrowserTile; onOpen: () => void }) {
   return (
     <button
       onClick={onOpen}
-      className="flex items-center gap-2 px-3 py-2 min-h-[44px] md:min-h-0 rounded-os glass glass-pos glass-border font-body text-xs text-os-text transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
+      aria-label={tile.name}
+      className="flex flex-col items-center gap-1.5 px-2 py-3 min-h-[44px] rounded-os glass glass-pos glass-border font-body text-xs text-os-text transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
     >
-      <Icon size={14} className="text-os-accent shrink-0" />
-      {tile.name}
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 items-center justify-center rounded-os bg-os-accent text-os-bg font-display text-base opacity-90"
+      >
+        {tile.name.charAt(0)}
+      </span>
+      <span className="truncate max-w-full text-center">{tile.name}</span>
     </button>
   );
 }
 
-/** New-tab page: the shared ProjectGrid plus the curated site tiles. */
+function VisitChip({
+  origin,
+  count,
+  onOpen,
+}: {
+  origin: string;
+  count: number | undefined;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-os glass glass-pos glass-border font-body text-xs text-os-text transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
+    >
+      <Globe size={12} className="text-os-muted shrink-0" aria-hidden="true" />
+      {hostOfOrigin(origin)}
+      {count !== undefined && count > 1 ? <span className="text-os-muted">{count}×</span> : null}
+    </button>
+  );
+}
+
+/** One compact project row: title + host + "yours" badge + external-open. */
+function ProjectRowCard({ entry, onOpen }: { entry: ProjectEntry; onOpen: () => void }) {
+  const externalUrl = entry.demoUrl ?? entry.repoUrl;
+  return (
+    <div className="flex items-center gap-1 rounded-os glass glass-pos glass-border transition-all hover:-translate-y-0.5">
+      <button
+        onClick={onOpen}
+        className="flex flex-1 min-w-0 items-center gap-2 px-3 py-2 min-h-[44px] rounded-os text-left font-body text-xs text-os-text transition-all cursor-pointer"
+      >
+        <BookOpen size={14} className="text-os-accent shrink-0" aria-hidden="true" />
+        <span className="truncate max-w-[160px] font-display">{entry.title}</span>
+        <span className="truncate font-body text-os-muted">{hostOfProjectRow(entry)}</span>
+        <span className="shrink-0 px-1.5 py-0.5 text-[9px] rounded-os bg-os-accent text-os-bg font-display">
+          yours
+        </span>
+      </button>
+      <a
+        href={externalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open ${entry.title} in a new tab`}
+        className="flex items-center justify-center w-11 h-11 md:w-7 md:h-7 shrink-0 rounded-os text-os-muted transition-all hover:scale-110 hover:text-os-accent cursor-pointer"
+      >
+        <ExternalLink size={14} />
+      </a>
+    </div>
+  );
+}
+
 function HomeTabBody({ windowId }: { windowId: string }) {
   const openProjectTab = useStore((s) => s.openProjectTab);
   const openWebTab = useStore((s) => s.openWebTab);
+  const visitRecency = useStore((s) => s.visitRecency);
+  const visitCounts = useStore((s) => s.visitCounts);
 
   return (
-    <div className="flex flex-col gap-5 p-4">
-      <section aria-label="Projects">
-        <h3 className="font-display text-xs text-os-accent mb-2">Projects</h3>
-        <ProjectGrid onOpen={(slug) => openProjectTab(windowId, slug)} />
-      </section>
-      <section aria-label="Open a site">
-        <h3 className="font-display text-xs text-os-accent mb-2">Open a site</h3>
-        <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-6 p-4">
+      <p className="font-body text-xs text-os-muted">{greetingCopy()}</p>
+
+      <section aria-label="Shortcuts">
+        <h3 className="font-display text-xs text-os-accent mb-2">Shortcuts</h3>
+        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
           {BROWSER_TILES.map((tile) => (
-            <TileButton
+            <ShortcutTile
               key={tile.url}
               tile={tile}
               onOpen={() => openWebTab(windowId, tile.url, tile.name)}
+            />
+          ))}
+        </div>
+      </section>
+
+      {visitRecency.length > 0 && (
+        <section aria-label="Recently visited">
+          <h3 className="font-display text-xs text-os-accent mb-2">Recently visited</h3>
+          <div className="flex flex-wrap gap-2">
+            {visitRecency.slice(0, 8).map((origin) => (
+              <VisitChip
+                key={origin}
+                origin={origin}
+                count={visitCounts[origin]}
+                onOpen={() => openWebTab(windowId, origin, hostOfOrigin(origin))}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section aria-label="Your live projects">
+        <h3 className="font-display text-xs text-os-accent mb-2">Your live projects</h3>
+        <div className="flex flex-col gap-2">
+          {PROJECTS.map((entry) => (
+            <ProjectRowCard
+              key={entry.slug}
+              entry={entry}
+              onOpen={() => openProjectTab(windowId, entry.slug)}
             />
           ))}
         </div>
@@ -587,13 +701,16 @@ function ProjectTabBody({ tab, reloadKey }: { tab: BrowserTab; reloadKey: number
 }
 
 /**
- * Web-tab content: blocked tiles render the fallback instantly (spec §6 —
- * no blank-iframe flash); everything else goes through the WebView embed
- * pipeline (probe/watchdog → screenshot fallback). The refusal verdict lives
- * INSIDE WebView — the browser slice keeps no copy of it.
+ * Web-tab content: refuser hosts are classified by HOSTNAME SUFFIX before any
+ * iframe attempt (G3 — `isEmbedBlocked`, replacing the byte-exact tile match),
+ * covering both typed URLs and tile clicks on ANY path/variant; the preview
+ * renders instantly with no iframe mount and no `/api/embed-check` request.
+ * Everything else goes through the WebView embed pipeline (probe/watchdog →
+ * screenshot fallback). The refusal verdict lives INSIDE WebView — the
+ * browser slice keeps no copy of it.
  */
 function WebTabBody({ url }: { url: string }) {
-  if (isBlockedUrl(url)) {
+  if (isEmbedBlocked(url)) {
     return <FallbackPanel url={url} allowScreenshot />;
   }
   return <WebView url={url} />;
@@ -1260,6 +1377,10 @@ export function BrowserApp({ windowId }: BrowserAppProps) {
   // The toggle must not claim "pressed" when there is no panel to show.
   const panelOpen = sidePanelOpen && projectSlug !== null;
 
+  // The tab count can never be zero (B1 reseeds Home on the last-tab close),
+  // so this branch is the TRANSIENT pre-bootstrap paint only: the window
+  // record is seeded by the mount effect below, and the very first render
+  // runs before it. It disappears after that single paint.
   if (windowState === undefined || activeTab === undefined) {
     return <div className="h-full" />;
   }

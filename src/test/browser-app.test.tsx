@@ -4,6 +4,7 @@ import { useStore } from "@/store";
 import { BrowserApp, resetMetaRequests } from "@/components/apps/BrowserApp";
 import { computeWarmSet } from "@/lib/warm-set";
 import { BROWSER_TILES } from "@/lib/browser-apps";
+import { PROJECTS } from "@/lib/portfolio-data";
 import type { ProjectMeta } from "@/app/api/project-meta/route";
 
 /**
@@ -66,6 +67,8 @@ describe("BrowserApp", () => {
       readmeLru: {},
       metaLru: {},
       sidePanelOpen: false,
+      visitRecency: [],
+      visitCounts: {},
     });
     fetchMock.mockClear();
     vi.stubGlobal("fetch", fetchMock);
@@ -95,7 +98,9 @@ describe("BrowserApp", () => {
   it("clicking a project card adds a project tab, activates it, and seeds the caches", async () => {
     render(<BrowserApp windowId="w1" />);
 
-    fireEvent.click(screen.getByText("DevOS Portfolio"));
+    // Wave 1.5 B2: the home grid left — this targets the compact
+    // "Your live projects" row (was `screen.getByText("DevOS Portfolio")`).
+    fireEvent.click(screen.getByRole("button", { name: /DevOS Portfolio/ }));
     await flush();
 
     const state = windowState("w1");
@@ -136,7 +141,10 @@ describe("BrowserApp", () => {
     expect(state.activeTabId).toBe(tab?.id);
     const panel = document.querySelector(`[data-tab-id="${tab?.id}"]`);
     expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain("can't be embedded");
+    // Wave 1.5 B2 re-point — the old byte-exact copy was
+    // `contain("can't be embedded")`; the redesigned preview (A3) names the
+    // host instead.
+    expect(panel?.textContent).toContain("blocks embedding — live preview below");
     expect(panel?.querySelector("iframe")).toBeNull();
   });
 
@@ -263,6 +271,8 @@ describe("BrowserApp — network-free wake (F2)", () => {
       readmeLru: {},
       metaLru: {},
       sidePanelOpen: false,
+      visitRecency: [],
+      visitCounts: {},
     });
     fetchMock.mockClear();
     vi.stubGlobal("fetch", fetchMock);
@@ -275,7 +285,9 @@ describe("BrowserApp — network-free wake (F2)", () => {
   it("revalidates once on Reload, then never re-requests when the tab wakes", async () => {
     render(<BrowserApp windowId="w1" />);
 
-    fireEvent.click(screen.getByText("DevOS Portfolio"));
+    // Wave 1.5 B2 re-point — this used to click the project card on the old
+    // home grid (`getByText`); the home now carries the compact row instead.
+    fireEvent.click(screen.getByRole("button", { name: /DevOS Portfolio/ }));
     await flush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -345,6 +357,8 @@ describe("BrowserApp — tab strip ARIA + keyboard (G8)", () => {
       readmeLru: {},
       metaLru: {},
       sidePanelOpen: false,
+      visitRecency: [],
+      visitCounts: {},
     });
     vi.stubGlobal(
       "fetch",
@@ -363,7 +377,8 @@ describe("BrowserApp — tab strip ARIA + keyboard (G8)", () => {
   it("links every tab to its panel (role=tabpanel, aria-controls/labelledby)", async () => {
     render(<BrowserApp windowId="w1" />);
 
-    fireEvent.click(screen.getByText("DevOS Portfolio"));
+    // Wave 1.5 B2 re-point — was the old home grid's `getByText` click.
+    fireEvent.click(screen.getByRole("button", { name: /DevOS Portfolio/ }));
     await flush();
 
     const tabId = windowState("w1").activeTabId;
@@ -455,6 +470,8 @@ describe("BrowserApp — address bar, touch targets, panel toggle", () => {
       readmeLru: {},
       metaLru: {},
       sidePanelOpen: false,
+      visitRecency: [],
+      visitCounts: {},
     });
     vi.stubGlobal(
       "fetch",
@@ -502,6 +519,12 @@ describe("BrowserApp — address bar, touch targets, panel toggle", () => {
     expect(screen.getByRole("button", { name: /new tab/i }).className).toContain("h-11");
     expect(screen.getByRole("tab", { selected: true }).className).toContain("min-h-[44px]");
     expect(screen.getByRole("textbox", { name: /address/i }).className).toContain("min-h-[44px]");
+    // Wave 1.5 B2: the start page's own controls — shortcut tiles and the
+    // compact projects row — carry the same 44px floor.
+    expect(screen.getByRole("button", { name: "Google" }).className).toContain("min-h-[44px]");
+    expect(screen.getByRole("button", { name: /DevOS Portfolio/ }).className).toContain(
+      "min-h-[44px]",
+    );
   });
 
   it("does not claim the side panel is pressed when no panel can show", () => {
@@ -534,6 +557,8 @@ describe("BrowserApp — a closed browser window leaves no phantom tab", () => {
       readmeLru: {},
       metaLru: {},
       sidePanelOpen: false,
+      visitRecency: [],
+      visitCounts: {},
     });
     vi.stubGlobal(
       "fetch",
@@ -594,6 +619,8 @@ describe("BrowserApp — scroll persistence", () => {
       readmeLru: {},
       metaLru: {},
       sidePanelOpen: false,
+      visitRecency: [],
+      visitCounts: {},
     });
     vi.stubGlobal(
       "fetch",
@@ -633,7 +660,8 @@ describe("BrowserApp — scroll persistence", () => {
   /** Opens the project tab and returns its id. */
   async function openProject(): Promise<string> {
     render(<BrowserApp windowId="w1" />);
-    fireEvent.click(screen.getByText("DevOS Portfolio"));
+    // Wave 1.5 B2 re-point — was the old home grid's `getByText` click.
+    fireEvent.click(screen.getByRole("button", { name: /DevOS Portfolio/ }));
     await flush();
     const tabId = windowState("w1").activeTabId;
     if (tabId === null) throw new Error("no active tab");
@@ -692,5 +720,121 @@ describe("BrowserApp — scroll persistence", () => {
     fireEvent.click(screen.getByRole("tab", { name: "DevOS Portfolio" }));
 
     expect(panelOf(tabId).scrollTop).toBe(240);
+  });
+});
+
+/**
+ * Wave 1.5 B2 — the chrome-classic start page and the host-aware tab path:
+ * the shortcut tile grid (Concept A), the "Recently visited" chips (B1's
+ * slice state), the compact "Your live projects" row (the grid itself left
+ * with the Projects window), and `isEmbedBlocked` replacing the byte-exact
+ * tile match in WebTabBody.
+ */
+describe("BrowserApp — chrome-classic home + host-aware tabs (Wave 1.5 B2)", () => {
+  const fetchMock = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => makeMeta("devos"),
+  }));
+
+  beforeEach(() => {
+    localStorage.clear();
+    resetMetaRequests();
+    useStore.setState({
+      windows: [],
+      activeWindowId: null,
+      lastGeometry: {},
+      browserWindows: {},
+      pendingSlug: null,
+      readmeLru: {},
+      metaLru: {},
+      sidePanelOpen: false,
+      visitRecency: [],
+      visitCounts: {},
+    });
+    fetchMock.mockClear();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a typed refuser-host variant renders the preview instantly — no iframe, no embed-check", () => {
+    render(<BrowserApp windowId="w1" />);
+
+    const address = screen.getByRole("textbox", { name: /address/i });
+    fireEvent.change(address, { target: { value: "https://www.youtube.com/watch?v=x" } });
+    fireEvent.keyDown(address, { key: "Enter" });
+
+    const tab = windowState("w1").tabs.find((t) => t.kind === "web");
+    expect(tab?.url).toBe("https://www.youtube.com/watch?v=x");
+    const panel = document.querySelector(`[data-tab-id="${tab?.id}"]`);
+    expect(panel).not.toBeNull();
+    // Host classification (G3): the iframe is never mounted and the verdict
+    // route is never consulted — the HOST alone decides.
+    expect(panel?.querySelector("iframe")).toBeNull();
+    expect(panel?.textContent).toContain("blocks embedding — live preview below");
+    const embedChecks = fetchMock.mock.calls.filter((call) =>
+      String(call.map(String).join(" ")).includes("/api/embed-check"),
+    );
+    expect(embedChecks).toHaveLength(0);
+  });
+
+  it("renders all eight shortcut tiles by name", () => {
+    render(<BrowserApp windowId="w1" />);
+    for (const tile of BROWSER_TILES) {
+      expect(screen.getByRole("button", { name: tile.name })).toBeDefined();
+    }
+  });
+
+  it("the projects row renders title + host and opens a project tab", async () => {
+    render(<BrowserApp windowId="w1" />);
+
+    expect(screen.getByText("DevOS Portfolio")).toBeDefined();
+    // The row names the DEPLOYED origin (demo url host; the repo host when
+    // there is no demo).
+    expect(screen.getByText("portfolio-2026-sp9k.vercel.app")).toBeDefined();
+    expect(screen.getByText("github.com")).toBeDefined(); // api-automation has no demo
+    expect(screen.getAllByText("yours")).toHaveLength(PROJECTS.length);
+
+    fireEvent.click(screen.getByRole("button", { name: /DevOS Portfolio/ }));
+    await flush();
+
+    const state = windowState("w1");
+    const tab = state.tabs.find((t) => t.kind === "project");
+    expect(tab?.slug).toBe("devos");
+    expect(state.activeTabId).toBe(tab?.id);
+  });
+
+  it("a recorded visit shows a chip on the home and clicking it reopens the web tab", () => {
+    render(<BrowserApp windowId="w1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Wikipedia" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Home" }));
+
+    const chip = screen.getByRole("button", { name: /en\.wikipedia\.org/ });
+    fireEvent.click(chip);
+
+    const state = windowState("w1");
+    const wiki = state.tabs.find((t) => t.kind === "web");
+    expect(wiki?.url).toBe("https://en.wikipedia.org");
+    expect(state.activeTabId).toBe(wiki?.id);
+  });
+
+  it("the home is a start page — the projects GRID left with the Projects window", () => {
+    render(<BrowserApp windowId="w1" />);
+
+    // ProjectGrid renders descriptions and category chips; the compact row
+    // must not.
+    expect(screen.queryByText(PROJECTS[0]!.description)).toBeNull();
+    expect(screen.queryByText(PROJECTS[0]!.category)).toBeNull();
+  });
+
+  it("the shortcut grid wraps 3 columns on mobile", () => {
+    render(<BrowserApp windowId="w1" />);
+
+    const grid = screen.getByLabelText("Shortcuts").querySelector(".grid");
+    expect(grid?.className).toContain("grid-cols-3");
   });
 });
