@@ -98,6 +98,20 @@ describe("browserSlice", () => {
       expect(state.recency).toEqual([id, homeId]);
     });
 
+    it("titles the tab with the PROJECT NAME, not the slug", () => {
+      store.openBrowserWindow("w1");
+      const id = store.openProjectTab("w1", "devos");
+      const tab = win(store, "w1").tabs.find((t) => t.id === id)!;
+      expect(tab.title).toBe("DevOS Portfolio");
+    });
+
+    it("falls back to the slug when the project is unknown", () => {
+      store.openBrowserWindow("w1");
+      const id = store.openProjectTab("w1", "not-a-project");
+      const tab = win(store, "w1").tabs.find((t) => t.id === id)!;
+      expect(tab.title).toBe("not-a-project");
+    });
+
     it("dedupes by slug — activates the existing tab, no new tab", () => {
       store.openBrowserWindow("w1");
       const first = store.openProjectTab("w1", "devos");
@@ -225,29 +239,6 @@ describe("browserSlice", () => {
       const next = win(store, "w1");
       // recency after activation: [home, p3, p2, p1] — p3 is MRU of the rest
       expect(computeWarmSet(next.recency, next.activeTabId)).toEqual([homeId, p3, p2]);
-    });
-  });
-
-  describe("setActiveRefusal", () => {
-    it("sets refusal on the web tab and keeps kind web", () => {
-      store.openBrowserWindow("w1");
-      const id = store.openWebTab("w1", "https://example.com", "Example");
-      store.setActiveRefusal("w1", id, true);
-      const tab = win(store, "w1").tabs.find((t) => t.id === id)!;
-      expect(tab.kind).toBe("web");
-      expect(tab.refusal).toBe(true);
-      store.setActiveRefusal("w1", id, false);
-      expect(win(store, "w1").tabs.find((t) => t.id === id)!.refusal).toBe(false);
-    });
-
-    it("updates the target tab without touching refusal of another tab", () => {
-      store.openBrowserWindow("w1");
-      const a = store.openWebTab("w1", "https://example.com", "Example");
-      const b = store.openWebTab("w1", "https://example.org", "Other org");
-      store.setActiveRefusal("w1", a, true);
-      const state = win(store, "w1");
-      expect(state.tabs.find((t) => t.id === a)!.refusal).toBe(true);
-      expect(state.tabs.find((t) => t.id === b)!.refusal).toBeUndefined();
     });
   });
 

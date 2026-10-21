@@ -575,22 +575,11 @@ function ProjectTabBody({ tab, reloadKey }: { tab: BrowserTab; reloadKey: number
 
 /**
  * Web-tab content: blocked tiles render the fallback instantly (spec §6 —
- * no blank-iframe flash); a recorded probe refusal renders the panel with a
- * retry that clears the verdict; everything else goes through the WebView
- * embed pipeline (probe/watchdog → screenshot fallback).
+ * no blank-iframe flash); everything else goes through the WebView embed
+ * pipeline (probe/watchdog → screenshot fallback). The refusal verdict lives
+ * INSIDE WebView — the browser slice keeps no copy of it.
  */
-function WebTabBody({ windowId, tab, url }: { windowId: string; tab: BrowserTab; url: string }) {
-  const setActiveRefusal = useStore((s) => s.setActiveRefusal);
-
-  if (tab.refusal === true) {
-    return (
-      <FallbackPanel
-        url={url}
-        allowScreenshot
-        onRetry={() => setActiveRefusal(windowId, tab.id, false)}
-      />
-    );
-  }
+function WebTabBody({ url }: { url: string }) {
   if (isBlockedUrl(url)) {
     return <FallbackPanel url={url} allowScreenshot />;
   }
@@ -611,7 +600,7 @@ function TabContent({
 }) {
   if (tab.kind === "home") return <HomeTabBody windowId={windowId} />;
   if (tab.kind === "project") return <ProjectTabBody tab={tab} reloadKey={reloadKey} />;
-  return <WebTabBody windowId={windowId} tab={tab} url={url} />;
+  return <WebTabBody url={url} />;
 }
 
 /**

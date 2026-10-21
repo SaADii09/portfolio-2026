@@ -1,12 +1,13 @@
 import { StateCreator } from "zustand";
 import type { ProjectMeta } from "@/app/api/project-meta/route";
 import { evictLru } from "@/lib/warm-set";
+import { projectBySlug } from "@/lib/portfolio-data";
 
 /**
  * State layer for the DevOS Browser (spec §7). Keyed per OS-window id; the
  * singleton-browser invariant lives upstream (os-actions `openBrowser`). Tab
- * records keep enough per-tab detail (localHistory, scrollTop, refusal verdict)
- * that a cold tab can be woken faithfully from this state alone, while
+ * records keep enough per-tab detail (localHistory, scrollTop) that a cold
+ * tab can be woken faithfully from this state alone, while
  * `computeWarmSet`/`evictLru` (lib/warm-set.ts) bound how much actually stays
  * mounted across all tabs.
  */
@@ -18,7 +19,6 @@ export interface BrowserTab {
   title: string;
   url?: string; // kind web
   slug?: string; // kind project
-  refusal?: boolean; // kind web — probe verdict (no kind mutation, spec §7)
   localHistory: string[];
   scrollTop: number;
 }
@@ -65,7 +65,6 @@ export interface BrowserSlice {
    * window slice's close path through a narrow seam.
    */
   closeBrowserWindow: (windowId: string) => void;
-  setActiveRefusal: (windowId: string, tabId: string, refusal: boolean) => void;
   /** Pushes `url` into the active tab's localHistory and resets scrollTop. */
   navigateActive: (windowId: string, url: string) => void;
   setScrollTop: (windowId: string, tabId: string, top: number) => void;
@@ -102,13 +101,21 @@ function appendTab(
   };
 }
 
-/** Next window state after closing a tab: drop from tabs + recency. */
+/**
+ * Next window state after closing a tab: drop it from `tabs` AND from the
+ * `recency` trail.
+ *
+ * Invariant: the ACTIVE tab is always the FRONT of `recency` — every action
+ * that changes the active tab re-arms the trail with `toFront`. So the
+ * successor of a closed active tab is `recency[0]` AFTER the filter (the most
+ * recently used tab that survives), and closing a non-active tab leaves the
+ * active tab — still the trail's front — in place.
+ */
 function dissolveTab(prev: BrowserWindowState, tabId: string): BrowserWindowState {
   const tabs = prev.tabs.filter((tab) => tab.id !== tabId);
   const recency = prev.recency.filter((id) => id !== tabId);
   const wasActive = prev.activeTabId === tabId;
   return {
-    // Hand the baton to the most recently used remaining tab.
     tabs,
     recency,
     activeTabId: wasActive ? (recency[0] ?? null) : prev.activeTabId,
@@ -167,7 +174,9 @@ export const createBrowserSlice: StateCreator<BrowserSlice> = (set, get) => ({
     const tab: BrowserTab = {
       id,
       kind: "project",
-      title: slug,
+      // The tab is named after the PROJECT ("DevOS Portfolio"), not the slug
+      // — the strip shows names, the slug stays the addressing key.
+      title: projectBySlug(slug)?.title ?? slug,
       slug,
       localHistory: [],
       scrollTop: 0,
@@ -253,17 +262,6 @@ export const createBrowserSlice: StateCreator<BrowserSlice> = (set, get) => ({
             recency: toFront(prev.recency, tabId),
           },
         },
-      };
-    });
-  },
-
-  setActiveRefusal: (windowId, tabId, refusal) => {
-    set((s) => {
-      const prev = s.browserWindows[windowId];
-      if (!prev) return s;
-      const tabs = prev.tabs.map((tab) => (tab.id === tabId ? { ...tab, refusal } : tab));
-      return {
-        browserWindows: { ...s.browserWindows, [windowId]: { ...prev, tabs } },
       };
     });
   },

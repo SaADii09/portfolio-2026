@@ -108,6 +108,20 @@ describe("BrowserApp", () => {
     expect(document.querySelector(".token-prose")).not.toBeNull();
   });
 
+  it("titles a project tab with the project name, and the slug when unknown", () => {
+    render(<BrowserApp windowId="w1" />);
+
+    act(() => {
+      useStore.getState().openProjectTab("w1", "devos");
+    });
+    expect(screen.getByRole("tab", { name: "DevOS Portfolio" })).toBeDefined();
+
+    act(() => {
+      useStore.getState().openProjectTab("w1", "not-a-project");
+    });
+    expect(screen.getByRole("tab", { name: "not-a-project" })).toBeDefined();
+  });
+
   it("blocked tile opens a web tab rendering FallbackPanel with no iframe", () => {
     render(<BrowserApp windowId="w1" />);
 
@@ -279,7 +293,7 @@ describe("BrowserApp — network-free wake (F2)", () => {
 
     // Waking it again must cost zero network, even though the tab still
     // carries its reload counter.
-    fireEvent.click(screen.getByRole("tab", { name: "devos" }));
+    fireEvent.click(screen.getByRole("tab", { name: "DevOS Portfolio" }));
     await flush();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -307,7 +321,7 @@ describe("BrowserApp — network-free wake (F2)", () => {
 
     // Waking it again still costs zero network: the degraded meta IS the
     // upstream answer, not a cache miss.
-    fireEvent.click(screen.getByRole("tab", { name: "devos" }));
+    fireEvent.click(screen.getByRole("tab", { name: "DevOS Portfolio" }));
     await flush();
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -667,7 +681,7 @@ describe("BrowserApp — scroll persistence", () => {
 
     // Leave the tab (the DOM scroll state is lost) and come back.
     fireEvent.click(screen.getByRole("tab", { name: "Home" }));
-    fireEvent.click(screen.getByRole("tab", { name: "devos" }));
+    fireEvent.click(screen.getByRole("tab", { name: "DevOS Portfolio" }));
 
     expect(panelOf(tabId).scrollTop).toBe(240);
   });
