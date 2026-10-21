@@ -7,8 +7,10 @@ import { gotoApp } from "./utils";
  * 1. RELOAD PERSISTENCE (review focus 2): a persisted `type:"browser"` window
  *    must re-hydrate into a USABLE browser shell — the tab strip renders (not
  *    the cold `<div className="h-full" />` frame) and a project tab still
- *    opens. The window is seeded through the persisted store, so the reload
- *    hydrates from the app's OWN write.
+ *    opens. The window is seeded through the persisted store; before the
+ *    reload the test proves the APP re-serialized that blob (keys the seed
+ *    never wrote appear via `persistPartialize`), so the reload hydrates
+ *    from the app's own write, not the seed's bytes.
  * 2. THE CONTAINER-QUERY FLIP (review focus 3): the side panel is a 264px
  *    RIGHT RAIL in a 960px-wide browser window and a FULL-WIDTH BOTTOM
  *    DRAWER in a 480px-wide one. The switch is a CSS container query on the
@@ -104,7 +106,13 @@ async function seedBrowserWindow(page: Page, width: number): Promise<void> {
   }, seed);
 }
 
-/** The window ids the APP persisted in localStorage (its own store write). */
+/**
+ * The window ids currently in the persisted blob. NOTE: the seed writes the
+ * SAME key (`devos-store`) with ONLY `windows`, so this alone cannot tell
+ * the app's persist write from the seed's bytes — the app-written-keys
+ * assertion below the boot is what proves the blob was re-serialized by the
+ * APP before the reload hydrates from it.
+ */
 async function persistedWindowIds(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const raw = window.localStorage.getItem("devos-store");
@@ -114,9 +122,24 @@ async function persistedWindowIds(page: Page): Promise<string[]> {
   });
 }
 
+/** The `state` keys currently in the persisted blob. */
+async function persistedStateKeys(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const raw = window.localStorage.getItem("devos-store");
+    if (raw === null) return [];
+    const parsed = JSON.parse(raw) as { state?: Record<string, unknown> };
+    return Object.keys(parsed.state ?? {});
+  });
+}
+
 /** The browser's content zone — the tab router and the side panel share it. */
 function contentZone(page: Page) {
   return page.locator(".browser-content-zone");
+}
+
+/** The ACTIVE tab's panel (the only `.browser-tab-panel` without `hidden`). */
+function activePanel(page: Page) {
+  return page.locator(".browser-tab-panel:not([hidden])");
 }
 
 /** The project side panel (the right rail in a wide window, the drawer otherwise). */
@@ -137,9 +160,19 @@ async function panelGeometry(page: Page): Promise<{
   return { zoneBox, panelBox };
 }
 
-/** Opens the DevOS Portfolio project tab from the home grid. */
+/**
+ * Opens the DevOS Portfolio project tab from the home grid.
+ *
+ * The card locator is scoped to the ACTIVE tab panel: once a DevOS tab is
+ * open, the tab strip's close button ("Close DevOS Portfolio") also matches
+ * the /DevOS Portfolio/ name, and the strip sits OUTSIDE every
+ * `.browser-tab-panel` — the panel scope keeps the locator single-match
+ * (strict mode) in every caller.
+ */
 async function openDevosProjectTab(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
+  await activePanel(page)
+    .getByRole("button", { name: /DevOS Portfolio/ })
+    .click();
   await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toBeVisible();
 }
 
@@ -166,8 +199,21 @@ test.describe("DevOS Browser — reload + container query", () => {
     await page.getByRole("button", { name: "Toggle side panel" }).click();
     await expect(sidePanel(page)).toBeVisible();
 
-    // The APP persisted the window — the reload below hydrates from THIS write
-    // (the init script does not re-seed: the sessionStorage guard is set).
+    // The APP re-serialized the persisted blob. The seed wrote ONLY
+    // `state.windows`, so the id poll below cannot by itself distinguish the
+    // app's persist write from the seed's bytes — but `persistPartialize`
+    // always emits ALL persisted keys, and these five were never in the
+    // seed. Their presence proves the store's own write landed (the boot's
+    // `openBrowserWindow` re-seed is a setState → persist setItem).
+    await expect
+      .poll(async () => persistedStateKeys(page))
+      .toEqual(
+        expect.arrayContaining(["theme", "widgets", "lastGeometry", "volume", "currentTrack"]),
+      );
+
+    // The APP persisted the window into that same blob — the reload below
+    // hydrates from THIS write (the init script does not re-seed: the
+    // sessionStorage guard is set).
     await expect.poll(async () => persistedWindowIds(page)).toContain("bw1");
 
     await page.reload();

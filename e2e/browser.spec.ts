@@ -141,10 +141,16 @@ test.describe("DevOS Browser", () => {
 
     await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
 
-    // A project tab joined the strip and took over.
-    await expect(page.getByRole("tab", { name: "devos" })).toBeVisible();
+    // A project tab joined the strip and took over. The tab is named by the
+    // PROJECT TITLE — "DevOS Portfolio" is also a substring of no other tab
+    // name, and unlike "devos" it cannot pass against the pre-15.1 slug
+    // title (Playwright's name matching is substring + case-insensitive).
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toBeVisible();
     await expect(tabs(page)).toHaveCount(2);
-    await expect(page.getByRole("tab", { name: "devos" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
 
     // The side panel is closed by default — the toolbar toggle opens it.
     await page.getByRole("button", { name: "Toggle side panel" }).click();
@@ -192,8 +198,11 @@ test.describe("DevOS Browser", () => {
     const before = calls.length;
 
     // The OLDEST tab sleeps; clicking it wakes it back up.
-    await page.getByRole("tab", { name: "devos" }).click();
-    await expect(page.getByRole("tab", { name: "devos" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "DevOS Portfolio" }).click();
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await expect(panels(page)).toHaveCount(3);
 
     // F2: the wake costs ZERO network — both slice caches were already warm.
@@ -259,13 +268,17 @@ test.describe("DevOS Browser", () => {
 
     // Re-activate the first project tab, so the most-recently-used tab
     // behind it is the second one.
-    await page.getByRole("tab", { name: "devos" }).click();
-    await expect(page.getByRole("tab", { name: "devos" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "DevOS Portfolio" }).click();
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
 
     // Closing the active tab hands the baton to the most-recently-used tab.
-    await page.getByRole("button", { name: "Close devos" }).click();
-    await expect(page.getByRole("tab", { name: "devos" })).toHaveCount(0);
-    // The tab is named by the PROJECT TITLE (not the slug) since Lane B.
+    await page.getByRole("button", { name: "Close DevOS Portfolio" }).click();
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toHaveCount(0);
+    // The tab is named by the PROJECT TITLE (not the slug) since Lane B —
+    // the close button's name is pinned the same way above.
     await expect(page.getByRole("tab", { name: "AI Job Portal" })).toHaveAttribute(
       "aria-selected",
       "true",
