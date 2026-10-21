@@ -62,6 +62,30 @@ describe("FallbackPanel", () => {
     expect(screen.getByText(/This page blocks embedding — live preview below/)).toBeDefined();
   });
 
+  it("blames the host only for a BLOCKED site (the default reason)", () => {
+    render(<FallbackPanel url={REPO_URL} allowScreenshot />);
+    expect(screen.getByText(/github\.com blocks embedding — live preview below/)).toBeDefined();
+  });
+
+  it("does not blame the host for a LOAD ERROR — honest copy, no 'blocks embedding'", () => {
+    // reason="error" is a NETWORK failure: the site never answered, so it
+    // never refused to be framed. The copy must not claim otherwise.
+    render(<FallbackPanel url={REPO_URL} allowScreenshot reason="error" />);
+
+    expect(screen.getByText(/github\.com couldn't be loaded/i)).toBeDefined();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
+    expect(screen.queryByText(/live preview below/i)).toBeNull();
+    // The escape hatches stay: the page may still be readable elsewhere.
+    expect(screen.getByRole("link", { name: /open in new tab/i })).toBeDefined();
+    expect(screen.getByRole("button", { name: /read this page/i })).toBeDefined();
+  });
+
+  it("keeps a generic error headline for an unparsable url", () => {
+    render(<FallbackPanel url="not a url" allowScreenshot reason="error" />);
+    expect(screen.getByText(/This page couldn't be loaded/i)).toBeDefined();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
+  });
+
   it("degrades silently when the screenshot img errors (neutral info turns into the error icon)", () => {
     const { container } = render(<FallbackPanel url={REPO_URL} allowScreenshot />);
     const shot = container.querySelector<HTMLImageElement>("img[src*='/api/screenshot']");
@@ -131,13 +155,33 @@ describe("FallbackPanel", () => {
 
       const reader = container.querySelector<HTMLIFrameElement>("iframe[title='Reader view']");
       expect(reader).not.toBeNull();
-      expect(reader?.getAttribute("src")).toBe(`https://r.jina.ai/${REPO_URL}`);
+      expect(reader?.getAttribute("src")).toBe(`https://r.jina.ai/${encodeURIComponent(REPO_URL)}`);
       expect(screen.getByText(/content via r\.jina\.ai/)).toBeDefined();
       // A loading state owns the frame until it settles (jsdom never fires
       // the load, so the indicator staying visible is itself the pin).
       expect(screen.getByText(/loading reader/i)).toBeDefined();
       // The preview body is gone while reading.
       expect(container.querySelector("img[src*='/api/screenshot']")).toBeNull();
+    });
+
+    it("encodes the reader target — a query with & and a #fragment survive", () => {
+      // A raw target promotes its own query/fragment to the proxy's: the "&"
+      // truncates the target (the rest becomes proxy params) and the "#"
+      // fragment is dropped outright.
+      const target = "https://example.com/a?b=1&c=2#frag";
+      const { container } = render(<FallbackPanel url={target} allowScreenshot />);
+
+      act(() => {
+        screen.getByRole("button", { name: /read this page/i }).click();
+      });
+
+      const reader = container.querySelector<HTMLIFrameElement>("iframe[title='Reader view']");
+      const src = reader?.getAttribute("src") ?? "";
+      expect(src).toBe(`https://r.jina.ai/${encodeURIComponent(target)}`);
+      expect(src).toContain("%26");
+      expect(src).toContain("%23");
+      // Nothing of the target leaks into the proxy's own query string.
+      expect(src).not.toContain("&");
     });
 
     it("clears the loading state once the reader frame loads", () => {

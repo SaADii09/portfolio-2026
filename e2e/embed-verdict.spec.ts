@@ -12,9 +12,11 @@ import { gotoApp } from "./utils";
  *    swap every unreadable cross-origin document to the fallback).
  * 3. BLOCKED VERDICT: only a positive "blocked" verdict from /api/embed-check
  *    swaps the live frame out for the preview panel.
- * 4. SAME-ORIGIN LOCAL: our own fixture (/embed-refusal) is http:// —
- *    host-classified as blocked, so the client decides alone with zero
- *    server calls.
+ * 4. NON-HTTPS (fail-closed): a non-https url is classified locally (the
+ *    scheme gate in embed-rules) — no iframe attempt, no server call. The
+ *    genuine SAME-ORIGIN branch is pinned in e2e/window-lifecycle.spec.ts
+ *    (a legacy type:"iframe" window seeded with a relative url) and in
+ *    src/test/webview-refusal.test.tsx.
  * Plus the preview's two affordances: Reader mode (r.jina.ai) and
  * "Open in new tab".
  *
@@ -198,17 +200,28 @@ test.describe("DevOS Browser — embed verdicts", () => {
     expect(checkCalls[0]).toContain(`url=${encodeURIComponent("https://embed-ok.example/")}`);
   });
 
-  test("our own same-origin fixture decides locally — zero server calls, zero iframes", async ({
+  test("a non-https url is refused locally — fail-closed, no iframe, no server call", async ({
     page,
   }) => {
     await mockScreenshot(page);
     const checkCalls = await mockEmbedCheck(page, { embeddable: true, reason: "ok" });
     await openBrowser(page);
 
-    // Non-https is host-classified as blocked (fail-closed), so the typed
-    // http:// fixture never reaches the https-only embed-check route — the
-    // verdict mock answers "embeddable" on purpose: a single round trip
-    // would prove the client leaked the local case to the server.
+    // WHAT THIS PIN PROVES: the scheme gate. `isEmbedBlocked` is https-only
+    // and fail-closed, so a non-https url never mounts an iframe and never
+    // reaches the https-only embed-check route — the verdict mock answers
+    // "embeddable" on purpose: a single round trip would prove the client
+    // leaked the local case to the server.
+    //
+    // It does NOT prove the same-origin branch: the typed url is
+    // http://localhost:3000 (non-https), so it is classified BEFORE the
+    // WebView mounts and the same-origin path never runs. The genuine
+    // same-origin branch is pinned elsewhere:
+    // - e2e/window-lifecycle.spec.ts ("a genuinely refusing frame keeps the
+    //   probe path — local decision, no server verdict") seeds a legacy
+    //   type:"iframe" window with the RELATIVE url "/embed-refusal";
+    // - src/test/webview-refusal.test.tsx ("same-origin unreadable frame is a
+    //   LOCAL refusal — no server round trip") covers it in the unit suite.
     await typeAddress(page, "http://localhost:3000/embed-refusal");
 
     // No iframe attempt happened: the tight window right after the submit
@@ -223,7 +236,7 @@ test.describe("DevOS Browser — embed verdicts", () => {
     await expect(activePanel(page).getByText(/blocks embedding/i)).toBeVisible({
       timeout: 3_000,
     });
-    expect(checkCalls.length, "the same-origin local case never calls embed-check").toBe(0);
+    expect(checkCalls.length, "a non-https url never calls embed-check").toBe(0);
   });
 
   test("reader mode swaps the preview for a r.jina.ai frame and back", async ({ page }) => {
@@ -240,15 +253,15 @@ test.describe("DevOS Browser — embed verdicts", () => {
     });
 
     // …whose "Read this page" opens the reader: a frame of the public render
-    // proxy mounts with the typed url forwarded (readerUrl is plain
-    // concatenation — no encoding).
+    // proxy mounts with the typed url forwarded (readerUrl ENCODES the target —
+    // a raw url would promote its own query/fragment to the proxy's).
     await activePanel(page).getByRole("button", { name: "Read this page" }).click();
     const reader = activePanel(page).locator('iframe[title="Reader view"]');
     await expect(reader).toHaveCount(1);
     await expect(reader).toHaveAttribute("src", /^https:\/\/r\.jina\.ai\//);
     await expect(reader).toHaveAttribute(
       "src",
-      "https://r.jina.ai/https://www.youtube.com/watch?v=x",
+      "https://r.jina.ai/https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dx",
     );
     // The proxy's document renders inside the reader frame.
     await expect(

@@ -1,15 +1,8 @@
 "use client";
 
-import {
-  useState,
-  useRef,
-  useCallback,
-  useEffect,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { ExternalLink } from "lucide-react";
-import { FallbackPanel } from "./FallbackPanel";
+import { FallbackPanel, type FallbackReason } from "./FallbackPanel";
 
 interface WebViewProps {
   url: string;
@@ -124,29 +117,40 @@ async function readBlockedSignal(res: Response): Promise<boolean> {
  * One abortable verdict request. Settles "blocked" into the fallback panel,
  * guards every settle path behind the controller's signal (an unmount or a
  * url change must never leave a state write behind), and stands the watchdog
- * down once the verdict is known so a degraded answer cannot re-fire it.
+ * down once the verdict is KNOWN — including a degraded answer (a rejected
+ * or non-ok verdict), so a degraded answer cannot re-fire the watchdog into
+ * a second verdict request for the same url.
  */
 async function settleFraming(
   controller: AbortController,
   url: string,
   clearWatchdog: () => void,
-  setFailed: Dispatch<SetStateAction<boolean>>,
+  markBlocked: () => void,
 ): Promise<void> {
+  let blocked = false;
   try {
     const res = await fetch(`/api/embed-check?url=${encodeURIComponent(url)}`, {
       signal: controller.signal,
     });
-    const blocked = await readBlockedSignal(res);
-    if (controller.signal.aborted) return;
-    clearWatchdog();
-    if (blocked) setFailed(true);
+    blocked = await readBlockedSignal(res);
   } catch {
     // Degrade-to-frame: a failed/unreachable verdict keeps the live frame.
   }
+  // An ABORTED flight (unmount / url change) writes nothing — and owns no
+  // watchdog: the effect cleanup owns the newer attempt's timer.
+  if (controller.signal.aborted) return;
+  // The verdict is KNOWN now — a real answer OR a degraded one — so the
+  // watchdog stands down either way. A degraded answer must not re-fire it
+  // into a second verdict request about the same url.
+  clearWatchdog();
+  if (blocked) markBlocked();
 }
 
 export function WebView({ url }: WebViewProps) {
-  const [failed, setFailed] = useState(false);
+  // WHY the embed failed — "blocked" (the host refused to be framed) or
+  // "error" (the frame never loaded). The panel's copy must not blame a
+  // host that never refused anything.
+  const [failure, setFailure] = useState<FallbackReason | null>(null);
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -178,6 +182,19 @@ export function WebView({ url }: WebViewProps) {
   }, []);
 
   /**
+   * Swaps the live frame out for the fallback panel. The reason travels with
+   * the failure so the panel can tell a refusal apart from a dead load.
+   */
+  const markFailed = useCallback(
+    (reason: FallbackReason) => {
+      clearWatchdog();
+      setFailure(reason);
+      setLoading(false);
+    },
+    [clearWatchdog],
+  );
+
+  /**
    * Asks the server whether the loaded-but-unreadable frame may render here.
    * The iframe STAYS MOUNTED the whole flight and the loading overlay comes
    * down — it is rendering the real site; only a "blocked" verdict swaps the
@@ -189,12 +206,18 @@ export function WebView({ url }: WebViewProps) {
     verdictAbortRef.current = controller;
     verdictPendingRef.current = true;
     setLoading(false);
-    const flight = settleFraming(controller, url, clearWatchdog, setFailed);
+    const flight = settleFraming(controller, url, clearWatchdog, () => markFailed("blocked"));
     void flight.finally(() => {
-      if (verdictAbortRef.current === controller) verdictAbortRef.current = null;
+      // IDENTITY guard: only the CURRENT flight may clear the pending flag.
+      // WebKit's two-commit mount fires `load` twice, so flight B starts while
+      // flight A is still in flight and aborts it — A's teardown must not
+      // clear B's flag (the watchdog would stop standing down, re-probe and
+      // start a third flight that discards B's verdict).
+      if (verdictAbortRef.current !== controller) return;
+      verdictAbortRef.current = null;
       verdictPendingRef.current = false;
     });
-  }, [url, abortVerdict, clearWatchdog]);
+  }, [url, abortVerdict, clearWatchdog, markFailed]);
 
   const probeFrame = useCallback((): FrameSignal => {
     const doc = readFrameDocument(iframeRef.current);
@@ -207,12 +230,6 @@ export function WebView({ url }: WebViewProps) {
     }
     return { kind: "load", contentAccessible: false };
   }, []);
-
-  const markFailed = useCallback(() => {
-    clearWatchdog();
-    setFailed(true);
-    setLoading(false);
-  }, [clearWatchdog]);
 
   const handleLoad = useCallback(() => {
     // WebKit fires TWO load events per mount (initial readable-blank
@@ -236,7 +253,7 @@ export function WebView({ url }: WebViewProps) {
       // stays mounted (the watchdog deliberately stays armed: it defers to a
       // pending verdict).
       if (isSameOrigin(url)) {
-        markFailed();
+        markFailed("blocked");
         return;
       }
       requestVerdict();
@@ -244,14 +261,17 @@ export function WebView({ url }: WebViewProps) {
   }, [probeFrame, clearWatchdog, cancelProbe, requestVerdict, markFailed, url]);
 
   const handleError = useCallback(() => {
+    // A frame `error` event is a NETWORK failure, not a refusal: the host
+    // never answered, so it never refused to be framed. The panel must not
+    // blame it for blocking.
     cancelProbe();
-    markFailed();
+    markFailed("error");
   }, [markFailed, cancelProbe]);
 
   const handleRetry = useCallback(() => {
     // Screenshot-attempt state now resets inside FallbackPanel (unmount on
     // this transition gives the next panel a clean attempt).
-    setFailed(false);
+    setFailure(null);
     setLoading(true);
     setReloadKey((k) => k + 1);
   }, []);
@@ -275,7 +295,7 @@ export function WebView({ url }: WebViewProps) {
         // Same-origin unreadable is a local refusal (see handleLoad) — the
         // server cannot and need not arbitrate our own origin.
         if (isSameOrigin(url)) {
-          markFailed();
+          markFailed("blocked");
           return;
         }
         requestVerdict();
@@ -296,12 +316,12 @@ export function WebView({ url }: WebViewProps) {
     };
   }, [url, reloadKey, probeFrame, requestVerdict, abortVerdict, markFailed]);
 
-  if (failed) {
+  if (failure !== null) {
     return (
       // allowScreenshot: the iframe path always attempts the proxy — its
       // per-origin allow-listing degrades through the img's own error inside
       // the panel (behavior unchanged from the pre-extraction panel).
-      <FallbackPanel url={url} allowScreenshot onRetry={handleRetry} />
+      <FallbackPanel url={url} allowScreenshot reason={failure} onRetry={handleRetry} />
     );
   }
 

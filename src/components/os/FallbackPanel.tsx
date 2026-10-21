@@ -17,7 +17,22 @@ export interface FallbackPanelProps {
    * has no frame to reload into, so it renders without the retry affordance.
    */
   onRetry?: () => void;
+  /**
+   * WHY the caller fell back to this panel:
+   * - "blocked" (the default): the site refused to be framed (X-Frame-Options
+   *   / CSP frame-ancestors) — the copy may say so.
+   * - "error": the frame failed to LOAD (network error / dead host). The host
+   *   never answered, so it never refused anything — the copy must not blame
+   *   it for blocking.
+   */
+  reason?: FallbackReason;
 }
+
+/**
+ * Why the embed fell back to the panel. "blocked" = the host refused to be
+ * framed; "error" = the frame never loaded (the host said nothing at all).
+ */
+export type FallbackReason = "blocked" | "error";
 
 /**
  * The host or a neutral caption — the header names the SITE, never the raw
@@ -29,6 +44,18 @@ function hostOf(url: string): string {
   } catch {
     return "This page";
   }
+}
+
+/**
+ * The panel's one-line headline. It may only name the host as a REFUSER when
+ * the host actually refused to be framed ("blocked"). A load error ("error")
+ * is a dead navigation: the host never answered, so blaming it for blocking
+ * would be a lie — and the "live preview below" phrase would promise a
+ * preview the failed embed never produced.
+ */
+function headline(url: string, reason: FallbackReason): string {
+  if (reason === "error") return `${hostOf(url)} couldn't be loaded`;
+  return `${hostOf(url)} blocks embedding — live preview below`;
 }
 
 /**
@@ -48,9 +75,14 @@ function previewAlt(url: string): string {
  * The public render proxy (no new dependency — an HTTP service, not a
  * package). Its responses carry no framing blockers, so the page's real
  * content renders in a scrollable iframe.
+ *
+ * The target is ENCODED: a raw target promotes its own query and fragment to
+ * the proxy's — "?a=1&b=2" truncates the target at the "&" (the rest becomes
+ * proxy params) and a "#fragment" is dropped outright. The proxy decodes the
+ * path, so the percent-encoded form is the honest one.
  */
 function readerUrl(url: string): string {
-  return `https://r.jina.ai/${url}`;
+  return `https://r.jina.ai/${encodeURIComponent(url)}`;
 }
 
 const PRIMARY_ACTION =
@@ -200,11 +232,13 @@ function OptionalRetry({ onRetry, onReset }: { onRetry?: () => void; onReset: ()
 function PreviewBody({
   url,
   allowScreenshot,
+  reason,
   onRetry,
   onOpenReader,
 }: {
   url: string;
   allowScreenshot: boolean;
+  reason: FallbackReason;
   onRetry?: () => void;
   onOpenReader: () => void;
 }) {
@@ -217,7 +251,7 @@ function PreviewBody({
           the preview fills whatever vertical space is left. The previous
           order put a full-width capture above them and pushed the escape
           hatch below the fold inside the fixed-height OS window. */}
-      <p className="font-body text-sm">{hostOf(url)} blocks embedding — live preview below</p>
+      <p className="font-body text-sm">{headline(url, reason)}</p>
       <div className="flex flex-wrap items-center justify-center gap-2">
         <a href={url} target="_blank" rel="noopener noreferrer" className={PRIMARY_ACTION}>
           <ExternalLink size={14} />
@@ -255,7 +289,12 @@ function PreviewBody({
   );
 }
 
-export function FallbackPanel({ url, allowScreenshot, onRetry }: FallbackPanelProps) {
+export function FallbackPanel({
+  url,
+  allowScreenshot,
+  onRetry,
+  reason = "blocked",
+}: FallbackPanelProps) {
   const [readerOpen, setReaderOpen] = useState(false);
   const openReader = useCallback(() => setReaderOpen(true), []);
   const closeReader = useCallback(() => setReaderOpen(false), []);
@@ -267,6 +306,7 @@ export function FallbackPanel({ url, allowScreenshot, onRetry }: FallbackPanelPr
     <PreviewBody
       url={url}
       allowScreenshot={allowScreenshot}
+      reason={reason}
       onRetry={onRetry}
       onOpenReader={openReader}
     />

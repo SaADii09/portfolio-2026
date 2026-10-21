@@ -128,6 +128,19 @@ describe("WebView fallback wiring", () => {
     });
   }
 
+  /**
+   * Flushes EVERY pending microtask of the verdict chain (a stale flight's
+   * rejection → its teardown → the flag write). `settle()` yields one tick,
+   * which is not always enough for a multi-link promise chain.
+   */
+  async function flush(times = 4) {
+    for (let i = 0; i < times; i++) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+  }
+
   const GITHUB = "https://github.com/SaADii09";
 
   /**
@@ -148,6 +161,27 @@ describe("WebView fallback wiring", () => {
 
   function verdictSignal(): AbortSignal {
     return (fetchMock.mock.calls[0]?.[1] as { signal: AbortSignal }).signal;
+  }
+
+  /**
+   * A verdict mock that HONOURS the abort signal (the real fetch does):
+   * every call returns a pending promise plus its resolver, and an abort
+   * rejects that promise. The pending/resolver pair is what lets a test
+   * answer ONE specific flight — the race pins need to say which verdict
+   * belongs to which flight.
+   */
+  function mockAbortableVerdicts() {
+    const resolvers: Array<(response: unknown) => void> = [];
+    fetchMock.mockImplementation((_url: string, init?: { signal?: AbortSignal }) => {
+      return new Promise((resolve, reject) => {
+        resolvers.push(resolve);
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return resolvers;
   }
 
   // --- same-origin pins (kept green UNMOCKED — the readable frame never
@@ -382,6 +416,146 @@ describe("WebView fallback wiring", () => {
 
     expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("a DEGRADED verdict stands the watchdog down — exactly one embed-check request", async () => {
+    // A rejected verdict is still a KNOWN verdict: the watchdog must not
+    // re-probe on its deadline and ask the server about the same url a
+    // second time. (The settle path's `finally` stands the watchdog down;
+    // before the fix only the success path did, so a degraded answer left
+    // the watchdog armed → a second /api/embed-check at 3500ms.)
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    fetchMock.mockRejectedValue(new Error("embed-check down"));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300); // probe → verdict in flight
+    await settle(); // …and it rejects → degraded to the live frame
+
+    // The watchdog deadline passes — a degraded verdict must not re-probe.
+    // (The unreadable-document override stays in place so the deadline probe
+    // would really re-fire the request.)
+    act(() => {
+      vi.advanceTimersByTime(3600);
+    });
+    await settle();
+    restoreDocument();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("a second load while a verdict is in flight → the newer flight's verdict decides", async () => {
+    // WebKit's two-commit mount fires `load` twice: the second commit's probe
+    // starts a SECOND flight and aborts the first. The stale flight's teardown
+    // must not clear the NEWER flight's pending flag — otherwise the watchdog
+    // stops standing down, re-probes at the deadline and starts a THIRD
+    // flight, which aborts the newer one and discards its verdict.
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    const resolvers = mockAbortableVerdicts();
+    render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300); // commit 1 → flight A in flight
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      fireEvent.load(screen.getByTitle("Website preview")); // commit 2
+    });
+    act(() => {
+      vi.advanceTimersByTime(300); // → its probe → flight B (A is aborted)
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // The stale flight's teardown (its abort rejection) must settle BEFORE
+    // the deadline — that teardown is what used to clear the newer flight's
+    // pending flag.
+    await flush();
+
+    // The watchdog deadline passes while flight B is still in flight.
+    act(() => {
+      vi.advanceTimersByTime(3600);
+    });
+    await flush();
+
+    // Exactly two verdict requests: the stale flight's teardown left the
+    // newer flight's pending flag alone, so the watchdog stood down.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // …and the newer flight's verdict still decides: "blocked" swaps the
+    // frame out (a third flight would have aborted it and dropped it).
+    resolvers[1]?.({
+      ok: true,
+      status: 200,
+      json: async () => ({ embeddable: false, reason: "x-frame-options" }),
+    });
+    await settle();
+    restoreDocument();
+
+    expect(screen.getByText(/blocks embedding/i)).toBeDefined();
+    expect(screen.queryByTitle("Website preview")).toBeNull();
+  });
+
+  it("an embeddable verdict from the newer flight keeps the frame mounted", async () => {
+    // The mirror of the race above: the newer flight answers "embeddable"
+    // and the real site must NOT be swapped to the panel (Review Focus 1).
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    const resolvers = mockAbortableVerdicts();
+    render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300); // commit 1 → flight A in flight
+    act(() => {
+      fireEvent.load(screen.getByTitle("Website preview")); // commit 2
+    });
+    act(() => {
+      vi.advanceTimersByTime(300); // → flight B (A is aborted)
+    });
+    await flush();
+    act(() => {
+      vi.advanceTimersByTime(3600); // the watchdog deadline
+    });
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    resolvers[1]?.({
+      ok: true,
+      status: 200,
+      json: async () => ({ embeddable: true, reason: "ok" }),
+    });
+    await settle();
+    restoreDocument();
+
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("the refusal path names the host as a refuser (the blocked copy set)", async () => {
+    // The REFUSAL path (an unreadable commit the verdict calls blocked) renders
+    // the blocked copy — the host IS named as a refuser, because it refused.
+    //
+    // Its sibling — the frame's own `error` event, a NETWORK failure — must
+    // render the honest "couldn't be loaded" copy instead; that copy set is
+    // pinned in fallback-panel.test.tsx.
+    //
+    // NOTE: React never dispatches an <iframe>'s `onError`. "error" is a
+    // MEDIA event, and React wires media events (like "load") only as
+    // non-delegated listeners on img/video/audio/source/link — an iframe gets
+    // "load" but never "error", and "error" does not bubble, so the delegated
+    // root listener never sees it either. The error path therefore cannot be
+    // reached from a DOM event in jsdom; the WebView still passes
+    // reason="error" there, and the panel renders the honest copy whenever
+    // that path is reached.
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    mockEmbedCheck({ embeddable: false, reason: "x-frame-options" });
+    render(<WebView url={GITHUB} />);
+
+    fireLoadThenAdvance(300);
+    await settle();
+    restoreDocument();
+
+    expect(screen.getByText(/github\.com blocks embedding — live preview below/)).toBeDefined();
+    expect(screen.queryByTitle("Website preview")).toBeNull();
   });
 
   it("a non-ok embed-check response degrades to the live frame", async () => {
