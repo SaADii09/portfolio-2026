@@ -10,14 +10,27 @@
  *
  * The active tab is ALWAYS in the returned set, even if it is absent from the
  * recency list (e.g. a very first paint before any activation was recorded) —
- * it is prepended in that case. Duplicates in `order` are ignored.
+ * it is prepended in that case.
+ *
+ * NO DEDUPE HAPPENS. The recency list is copied verbatim (minus the active
+ * id), so a repeated id INSIDE the cap window is returned TWICE — the cap
+ * truncation is the only thing that can drop a repeat, and only when the
+ * repeat falls past the cap. The recency list from the slice never holds
+ * repeats (toFront keeps one entry per activation), so this is safe in
+ * practice, but the helper does not enforce it: hand it a repeated list and
+ * you get a repeated warm set.
+ *
+ * With NO active tab (`activeTabId === null`) the result is the first `cap`
+ * ids of the recency list — the null branch never throws and never empties
+ * the set.
  */
 export function computeWarmSet(order: string[], activeTabId: string | null, cap = 3): string[] {
   const warm = activeTabId === null ? [] : [activeTabId];
-  // Dedupe against the active id; recency from the slice never holds repeats
-  // (toFront keeps one entry per activation), but stay defensive here. The
-  // membership test on `warm` was redundant — `warm` holds at most the active
-  // id, which the `id !== activeTabId` test already excludes.
+  // Drop the active id from the recency list — it is already prepended.
+  // This is NOT a dedupe: a repeat anywhere else in `order` survives, and
+  // only the cap truncation below can remove it. `warm` holds at most the
+  // active id, which the `id !== activeTabId` test already excludes, so no
+  // membership test is needed.
   const rest = order.filter((id) => id !== activeTabId);
   return [...warm, ...rest].slice(0, Math.max(cap, 0));
 }

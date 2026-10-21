@@ -36,8 +36,20 @@ describe("computeWarmSet", () => {
     expect(computeWarmSet(["t1", "t2", "t3"], "t1")).toEqual(["t1", "t2", "t3"]);
   });
 
-  it("dedupes repeated ids in the recency list", () => {
+  it("drops a repeated id only when it falls outside the cap window (no dedupe)", () => {
+    // The helper does NOT dedupe: the recency list is copied verbatim minus
+    // the active id. A repeat INSIDE the cap window is returned twice…
+    expect(computeWarmSet(["t2", "t1", "t2"], "t3", 5)).toEqual(["t3", "t2", "t1", "t2"]);
+    // …and the default cap of 3 is the only reason the repeat disappears here.
     expect(computeWarmSet(["t2", "t1", "t2"], "t3")).toEqual(["t3", "t2", "t1"]);
+  });
+
+  it("returns the first `cap` recency ids when there is no active tab", () => {
+    // No active tab → the warm set is the recency list itself, truncated to
+    // the cap. The null branch must not throw and must not empty the set.
+    expect(computeWarmSet(["t4", "t3", "t2", "t1"], null, 3)).toEqual(["t4", "t3", "t2"]);
+    expect(computeWarmSet(["t4", "t3", "t2", "t1"], null)).toEqual(["t4", "t3", "t2"]);
+    expect(computeWarmSet(["t2", "t1"], null, 3)).toEqual(["t2", "t1"]);
   });
 
   it("honors a smaller cap override and returns everything when under cap", () => {
