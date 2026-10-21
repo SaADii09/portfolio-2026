@@ -6,7 +6,7 @@ import { gotoApp } from "./utils";
  *
  * Opens every app at 1440×900, 1366×768 and 375×812 and asserts:
  * - Control Panel / About / Contact content fully visible without scrolling;
- * - Projects / Resume open ≥ 90% of their usable safe-zone height;
+ * - Browser / Resume open ≥ 90% of their usable safe-zone height;
  * - every window sits inside the safe zone (top bar → dock/status bar);
  * - per-app first-open slots and the locked size table hold at both
  *   desktop viewports (values mirrored from spec §4.4 below — if the
@@ -18,13 +18,14 @@ type Key = "about" | "browser" | "control-panel" | "resume" | "terminal" | "cont
 const APP_KEYS: Key[] = ["about", "browser", "control-panel", "resume", "terminal", "contact"];
 
 /**
- * Desktop icon titles (control-panel's desktop label is "Settings"). The
- * "Projects" icon now LAUNCHES the DevOS Browser singleton (spec §7), so the
- * browser's geometry is measured through that icon.
+ * Desktop icon titles (control-panel's desktop label is "Settings"). After
+ * the identity split each app launches via its OWN icon — the DevOS Browser
+ * singleton's geometry is measured through the dedicated "Open Browser" icon,
+ * while the "Open Projects" icon now opens the Projects registry window.
  */
 const ICON_TITLES: Record<Key, string> = {
   about: "Open About Me",
-  browser: "Open Projects",
+  browser: "Open Browser",
   "control-panel": "Open Settings",
   resume: "Open Resume",
   terminal: "Open Terminal",
@@ -313,7 +314,8 @@ test.describe("browser-hosted webview geometry", () => {
 
     await openApp(page, "browser", false);
     await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
-    await expect(page.getByRole("tab", { name: "devos" })).toBeVisible();
+    // Project tabs are titled by the PROJECT title (not the slug — Phase 15.1).
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toBeVisible();
 
     // ONE window is open (the browser) and it must sit in the zone.
     const windows = await page.evaluate(() => {

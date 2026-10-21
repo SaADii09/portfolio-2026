@@ -77,7 +77,7 @@ test.describe("Command palette", () => {
     ).toBeVisible();
   });
 
-  test("typing 'projects' and pressing Enter opens the Browser window", async ({ page }) => {
+  test("typing 'projects' and pressing Enter opens the Projects window", async ({ page }) => {
     await page.keyboard.press("ControlOrMeta+k");
     const input = page.getByRole("combobox");
 
@@ -87,8 +87,30 @@ test.describe("Command palette", () => {
     await page.keyboard.press("Enter");
 
     await expect(page.getByRole("dialog", { name: "Command palette" })).not.toBeVisible();
-    // The "Projects" launcher routes into the DevOS Browser singleton: the
-    // window that opens is titled "Browser" and carries the browser shell.
+    // The "Open Projects" row opens the Projects WINDOW again (identity split,
+    // real-web C3): its own window surface titled "Projects".
+    await expect(
+      page
+        .locator(".os-window-enter")
+        .filter({ has: page.locator("span.font-display", { hasText: /^Projects$/ }) }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
+    // The Browser singleton must NOT be what the Projects row opened.
+    await expect(page.getByRole("tablist", { name: "Browser tabs" })).toHaveCount(0);
+  });
+
+  test("typing 'browser' and pressing Enter opens the Browser window", async ({ page }) => {
+    await page.keyboard.press("ControlOrMeta+k");
+    const input = page.getByRole("combobox");
+
+    // The Browser AppId's palette row (stand-alone app, real-web C3).
+    await input.fill("browser");
+    await expect(page.getByRole("option", { name: /Open Browser/ })).toBeVisible();
+
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByRole("dialog", { name: "Command palette" })).not.toBeVisible();
+    // The Browser singleton opens: the browser shell with its tab strip.
     await expect(
       page
         .locator(".os-window-enter")

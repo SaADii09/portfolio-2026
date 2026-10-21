@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { gotoApp } from "./utils";
 
 test.describe("Window lifecycle", () => {
@@ -11,24 +11,37 @@ test.describe("Window lifecycle", () => {
     await expect(page.getByRole("heading", { name: "About Me" })).toBeVisible();
   });
 
-  test("opens the Browser from the Projects desktop icon", async ({ page }) => {
-    await page.getByTitle("Open Projects").dblclick();
-    // The "Projects" launcher routes into the DevOS Browser singleton, so the
-    // window that opens is titled "Browser" and carries the browser shell.
-    // (The home tab's own "Projects" heading is NOT the proof — it lives
-    // INSIDE that window, so a heading assertion there passes vacuously.)
+  test("opens the Browser and the Projects window from their own desktop icons", async ({
+    page,
+  }) => {
+    // Identity split (real-web round, C3): each launcher now opens its OWN
+    // window — the globe icon opens the Browser singleton, the folder icon
+    // opens the Projects window. (The pre-split reality — "Projects" routing
+    // into the browser — is gone.)
+    await page.getByTitle("Open Browser").dblclick();
+    // The globe icon opens the window titled "Browser" with the tab strip.
     await expect(
       page
         .locator(".os-window-enter")
         .filter({ has: page.locator("span.font-display", { hasText: /^Browser$/ }) }),
     ).toBeVisible();
     await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
-    // The legacy Projects list window must not be what opened.
+    // The Projects window must not be what the Browser icon opened.
     await expect(
       page
         .locator(".os-window-enter")
-        .filter({ has: page.locator("h2", { hasText: /^Projects$/ }) }),
+        .filter({ has: page.locator("span.font-display", { hasText: /^Projects$/ }) }),
     ).toHaveCount(0);
+
+    await page.getByTitle("Open Projects").dblclick();
+    // The folder icon opens the Projects registry window: its own "Projects"
+    // window surface with the project grid inside (not a browser shell).
+    await expect(
+      page
+        .locator(".os-window-enter")
+        .filter({ has: page.locator("span.font-display", { hasText: /^Projects$/ }) }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
   });
 
   test("opens About app from desktop icon via keyboard", async ({ page }) => {
@@ -54,10 +67,21 @@ test.describe("Window lifecycle", () => {
     await expect(page.getByLabel("About Me")).not.toBeVisible();
 
     await page.getByTitle("Open Projects").dblclick();
-    // The dock icon carries the OPEN WINDOW's title — "Browser" for the
-    // browser singleton. (A bare getByLabel("Projects") would match the home
-    // tab's <section aria-label="Projects"> inside the window instead of the
-    // dock icon, so the old assertion proved nothing about the dock.)
+    // The dock icon carries the OPEN WINDOW's title — the Projects launcher
+    // now opens the Projects WINDOW again (identity split), so the icon row
+    // reads "Projects". (A bare getByLabel("Projects") could also match the
+    // browser home tab's <section aria-label="Your live projects"> substring
+    // on other queries, so the exact-name match keeps this pinned to the
+    // dock icon itself; the window surfaces carry no label "Projects".)
+    await expect(page.getByLabel("Projects", { exact: true })).toBeVisible();
+
+    // Close the Projects window before opening the browser so the double-click
+    // below tracks the dock's second icon without window occlusion.
+    await page.getByLabel("Close").first().click();
+    await expect(page.getByLabel("Projects", { exact: true })).not.toBeVisible();
+
+    await page.getByTitle("Open Browser").dblclick();
+    // The dock icon for the browser singleton reads "Browser".
     await expect(page.getByLabel("Browser", { exact: true })).toBeVisible();
   });
 
@@ -95,12 +119,17 @@ test.describe("Context menu (keyboard)", () => {
   });
 });
 
-// Only embed/WebView coverage in the repo. The "refused" fixture is a
-// cross-origin frame served with X-Frame-Options: DENY (route-fulfilled, so
-// the suite never touches github.com); the "embeddable" positive control is
-// per the hardening ruling: page.route-fulfilled same-origin HTML, not a real
-// external project URL. No page-mouse drags here (Playwright 1.64.1 Firefox
-// interpolates off-viewport mouse moves) — only iframe loads and waits.
+// Embed/WebView coverage in this file. Two refusal shapes and one positive
+// control, in the post-real-web world: (1) a TYPED refuser host is
+// host-classified — the preview renders instantly with no iframe and no
+// /api/embed-check call; (2) a genuinely refused frame (the same-origin
+// /embed-refusal fixture, XFO DENY via a seeded legacy type:"iframe" window)
+// rides the WebView probe and decides LOCALLY — the panel keeps the probe
+// path's Retry and still makes zero server calls; (3) the "embeddable"
+// positive control is per the hardening ruling: page.route-fulfilled
+// same-origin HTML, not a real external project URL. No page-mouse drags
+// here (Playwright 1.64.1 Firefox interpolates off-viewport mouse moves) —
+// only iframe loads and waits.
 test.describe("WebView embed refusal fallback", () => {
   const PNG_1X1_BASE64 =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -118,6 +147,24 @@ test.describe("WebView embed refusal fallback", () => {
     pushedAt: "2024-03-01T00:00:00Z",
   };
 
+  /**
+   * Mocks /api/embed-check and records the intercepted calls — the counter is
+   * what proves a refusal was decided WITHOUT a server round trip (host
+   * classification and the same-origin local decision both skip the route).
+   */
+  async function mockEmbedCheck(page: Page): Promise<string[]> {
+    const calls: string[] = [];
+    await page.route("**/api/embed-check*", (route) => {
+      calls.push(route.request().url());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ embeddable: false, reason: "x-frame-options" }),
+      });
+    });
+    return calls;
+  }
+
   test.beforeEach(async ({ page }) => {
     // The suite must never touch Microlink: /api/screenshot answers with a
     // 1×1 png (this covers Task 5's image contract the <img> consumes).
@@ -129,6 +176,19 @@ test.describe("WebView embed refusal fallback", () => {
       }),
     );
   });
+
+  /** Open the DevOS Browser through its own desktop icon (identity split). */
+  async function openBrowserViaIcon(page: Page): Promise<void> {
+    await page.getByTitle("Open Browser").dblclick();
+    await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+  }
+
+  /** Types a url into the browser's address bar and submits it. */
+  async function typeAddress(page: Page, url: string): Promise<void> {
+    const address = page.getByLabel("Address bar");
+    await address.fill(url);
+    await address.press("Enter");
+  }
 
   test("a project card opens a project tab with the project content (no iframe window)", async ({
     page,
@@ -144,12 +204,18 @@ test.describe("WebView embed refusal fallback", () => {
     );
     await gotoApp(page);
 
-    await page.getByTitle("Open Projects").dblclick();
+    // The globe icon opens the Browser singleton (identity split); the home
+    // tab is its start page, where the compact "Your live projects" row
+    // replaced the old project grid.
+    await page.getByTitle("Open Browser").dblclick();
     await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+    // The compact row's card (title + host + badge) — not a grid card.
     await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
 
-    // The card opens a project TAB inside the browser window…
-    await expect(page.getByRole("tab", { name: "devos" })).toBeVisible();
+    // The row opens a project TAB inside the browser window…
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toBeVisible();
+    // …and one grew next to the home tab.
+    await expect(page.getByRole("tab")).toHaveCount(2);
     // …showing the project content…
     await expect(page.getByText("Mocked readme body for the lifecycle pin.")).toBeVisible();
     // …and NOT a second OS window holding an iframe (the legacy
@@ -158,36 +224,102 @@ test.describe("WebView embed refusal fallback", () => {
     await expect(page.locator('iframe[title="Website preview"]')).toHaveCount(0);
   });
 
-  test("a refusing web tab shows the screenshot fallback within watchdog window", async ({
+  test("a typed refuser host renders the preview instantly — no iframe, no server verdict", async ({
     page,
   }) => {
-    await page.route("https://github.com/**", (route) =>
-      route.fulfill({
-        status: 200,
-        headers: { "x-frame-options": "DENY", "content-type": "text/html" },
-        body: "<html><body></body></html>",
-      }),
-    );
+    // github.com is a KNOWN REFUSER HOST (EMBED_BLOCKED_HOSTS): host
+    // classification, so no iframe is ever mounted and /api/embed-check (the
+    // mock answers "blocked" on purpose — a single call would prove the
+    // client leaked the local case to the server) must stay silent.
+    const checkCalls = await mockEmbedCheck(page);
     await gotoApp(page);
+    await openBrowserViaIcon(page);
 
-    await page.getByTitle("Open Projects").dblclick();
-    await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
+    await typeAddress(page, "https://github.com/SaADii09/portfolio-2026");
 
-    // A repo URL is not one of the BLOCKED tiles, so the tab goes through the
-    // WebView embed pipeline — and github refuses to be framed.
-    const address = page.getByLabel("Address bar");
-    await address.fill("https://github.com/SaADii09/portfolio-2026");
-    await address.press("Enter");
+    // The web tab opens (titled by the host) and the preview panel appears
+    // instantly — well inside the old watchdog window's budget.
+    await expect(page.getByRole("tab", { name: "github.com" })).toBeVisible();
+    await expect(page.getByText(/blocks embedding/i)).toBeVisible({ timeout: 6500 });
 
-    // Watchdog is 3500ms and the refused frame fires load well before that;
-    // 6500ms = watchdog + probe + buffer, and this frame must beat it.
-    await expect(page.getByText(/can't be embedded/i)).toBeVisible({ timeout: 6500 });
+    // No iframe anywhere in the tab router — host-blocked tabs skip the
+    // embed pipeline entirely.
+    await expect(page.locator(".browser-tab-panel iframe")).toHaveCount(0);
+    await expect(page.locator('iframe[title="Website preview"]')).toHaveCount(0);
+
+    // The live preview card points at the EXACT typed url… (the panel never
+    // reached Microlink — the route mock answers the img request).
     const shot = page.locator("img[src*='/api/screenshot']");
     await expect(shot).toBeVisible();
     await expect(shot).toHaveAttribute(
       "src",
       `/api/screenshot?url=${encodeURIComponent("https://github.com/SaADii09/portfolio-2026")}`,
     );
+
+    // …and ZERO /api/embed-check calls: the host was classified locally.
+    expect(checkCalls.length, "no embed-check round trip for a blocked host").toBe(0);
+  });
+
+  test("a genuinely refusing frame keeps the probe path — local decision, no server verdict", async ({
+    page,
+  }) => {
+    // The refusal UI's real teeth ride the legacy persisted-iframe window
+    // (type:"iframe" still renders WebView): the /embed-refusal fixture is
+    // SAME-ORIGIN (relative url) and served with XFO DENY + frame-ancestors
+    // 'none', so the WebView probe observes an unreadable same-origin commit
+    // and decides LOCALLY — the preview must carry the probe path's Retry
+    // affordance (host-blocked tabs render the panel without one) and zero
+    // embed-check calls.
+    const checkCalls = await mockEmbedCheck(page);
+
+    // Seed a persisted legacy iframe window (addInitScript runs ahead of
+    // hydration and of the app's own persist writes — same pattern as
+    // persistence.spec.ts).
+    await page.addInitScript(() => {
+      const store = JSON.parse(localStorage.getItem("devos-store") || "{}");
+      store.state = {
+        ...(store.state ?? {}),
+        windows: [
+          {
+            id: "win-e2e-refusal",
+            title: "Refused embed",
+            type: "iframe",
+            url: "/embed-refusal",
+            x: 160,
+            y: 120,
+            width: 560,
+            height: 420,
+            zIndex: 101,
+            opacity: 1,
+            isMinimized: false,
+            isMaximized: false,
+            isPinned: false,
+          },
+        ],
+      };
+      localStorage.setItem("devos-store", JSON.stringify(store));
+    });
+    await gotoApp(page);
+
+    // The preview panel appears (the probe has a 250ms delay after the frame's
+    // load, watchdog 3500ms — this must beat headless scheduling).
+    await expect(page.getByText(/blocks embedding/i)).toBeVisible({ timeout: 6500 });
+
+    // The refused frame is unmounted — the panel replaced it.
+    await expect(page.locator('iframe[title="Website preview"]')).toHaveCount(0);
+
+    // Probe path vs host-blocked: only the WebView pipeline hands the panel
+    // an onRetry, so the Retry affordance is the discriminator.
+    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+    const shot = page.locator("img[src*='/api/screenshot']");
+    await expect(shot).toBeVisible();
+    await expect(shot).toHaveAttribute(
+      "src",
+      `/api/screenshot?url=${encodeURIComponent("/embed-refusal")}`,
+    );
+
+    // A same-origin refusal never consults the server.
+    expect(checkCalls.length, "same-origin refusal decides locally").toBe(0);
   });
 
   test("fulfill-routed embeddable frame settles as ok (no fallback)", async ({ page }) => {
@@ -236,7 +368,7 @@ test.describe("WebView embed refusal fallback", () => {
     // fresh watchdog (3500ms) + probe (250ms) + buffer, and some commits
     // resolve only at the deadline. Then assert nothing tripped the fallback.
     await page.waitForTimeout(7000);
-    await expect(page.getByText(/can't be embedded/i)).toHaveCount(0);
+    await expect(page.getByText(/blocks embedding/i)).toHaveCount(0);
     await expect(page.locator("img[src*='/api/screenshot']")).toHaveCount(0);
     await expect(page.locator('iframe[title="Website preview"]')).toBeVisible();
   });
