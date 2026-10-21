@@ -108,17 +108,19 @@ describe("BrowserApp", () => {
     expect(document.querySelector(".token-prose")).not.toBeNull();
   });
 
-  it("titles a project tab with the project name, and the slug when unknown", () => {
+  it("titles a project tab with the project name, and the slug when unknown", async () => {
     render(<BrowserApp windowId="w1" />);
 
-    act(() => {
+    await act(async () => {
       useStore.getState().openProjectTab("w1", "devos");
     });
+    await flush();
     expect(screen.getByRole("tab", { name: "DevOS Portfolio" })).toBeDefined();
 
-    act(() => {
+    await act(async () => {
       useStore.getState().openProjectTab("w1", "not-a-project");
     });
+    await flush();
     expect(screen.getByRole("tab", { name: "not-a-project" })).toBeDefined();
   });
 
