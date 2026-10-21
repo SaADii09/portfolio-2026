@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   isBlockedStyleDeclaration,
   removeBlockedStyleDeclarations,
@@ -524,5 +527,37 @@ describe("round-3 review — valueless attributes and entity-hidden paint", () =
       "img",
     );
     expect(img?.getAttribute("alt")).toBe("only one on target rel");
+  });
+});
+
+describe("sanitizeReadmeHtml — idempotence (route + render double pass)", () => {
+  // The README is sanitized TWICE in production: the route sanitizes before
+  // caching (api/project-meta) and ReadmeView sanitizes again on render.
+  // Both passes must agree exactly — a future non-idempotent normalizer
+  // (one that appends, rewrites, or re-encodes) would silently desync the
+  // rendered README from the cached one. Pinned against the captured RAW
+  // upstream body, not a hand-written excerpt (fixture pattern mirrors
+  // project-meta-route.test.ts; no ?raw loader exists in this repo).
+  const README_FIXTURE = readFileSync(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      "fixtures",
+      "github",
+      "readme-portfolio-2026.html",
+    ),
+    "utf8",
+  );
+
+  it("is idempotent on the captured raw README: sanitize(sanitize(x)) === sanitize(x)", () => {
+    const once = sanitizeReadmeHtml(README_FIXTURE);
+    expect(sanitizeReadmeHtml(once)).toBe(once);
+  });
+
+  it("is idempotent on a representative hostile excerpt", () => {
+    const excerpt =
+      '<div id="readme"><h1>Hi</h1><a href="javascript:alert(1)"target="_self">x</a>' +
+      '<img alt="q>"onerror=alert(1)onload=alert(2)><p style="color:red;column-count:2">t</p></div>';
+    const once = sanitizeReadmeHtml(excerpt);
+    expect(sanitizeReadmeHtml(once)).toBe(once);
   });
 });

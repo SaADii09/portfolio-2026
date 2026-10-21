@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { useStore } from "@/store";
-import { BrowserApp } from "@/components/apps/BrowserApp";
+import { BrowserApp, resetMetaRequests } from "@/components/apps/BrowserApp";
 import { computeWarmSet } from "@/lib/warm-set";
 import { BROWSER_TILES } from "@/lib/browser-apps";
 import type { ProjectMeta } from "@/app/api/project-meta/route";
@@ -56,6 +56,7 @@ describe("BrowserApp", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    resetMetaRequests();
     useStore.setState({
       windows: [],
       activeWindowId: null,
@@ -252,6 +253,7 @@ describe("BrowserApp — network-free wake (F2)", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    resetMetaRequests();
     useStore.setState({
       windows: [],
       activeWindowId: null,
@@ -333,6 +335,7 @@ describe("BrowserApp — network-free wake (F2)", () => {
 describe("BrowserApp — tab strip ARIA + keyboard (G8)", () => {
   beforeEach(() => {
     localStorage.clear();
+    resetMetaRequests();
     useStore.setState({
       windows: [],
       activeWindowId: null,
@@ -442,6 +445,7 @@ describe("BrowserApp — tab strip ARIA + keyboard (G8)", () => {
 describe("BrowserApp — address bar, touch targets, panel toggle", () => {
   beforeEach(() => {
     localStorage.clear();
+    resetMetaRequests();
     useStore.setState({
       windows: [],
       activeWindowId: null,
@@ -520,6 +524,7 @@ describe("BrowserApp — address bar, touch targets, panel toggle", () => {
 describe("BrowserApp — a closed browser window leaves no phantom tab", () => {
   beforeEach(() => {
     localStorage.clear();
+    resetMetaRequests();
     useStore.setState({
       windows: [],
       activeWindowId: null,
@@ -579,6 +584,7 @@ describe("BrowserApp — a closed browser window leaves no phantom tab", () => {
 describe("BrowserApp — scroll persistence", () => {
   beforeEach(() => {
     localStorage.clear();
+    resetMetaRequests();
     useStore.setState({
       windows: [],
       activeWindowId: null,

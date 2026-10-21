@@ -122,6 +122,19 @@ interface MetaRequest {
 const metaRequests = new Map<string, MetaRequest>();
 let requestSeq = 0;
 
+/**
+ * Test plumbing: vitest shares the module instance across a file's tests,
+ * and a FAILED request stays registered for the module's lifetime (the
+ * sticky-error design) — the reset keeps one case's failed slot from
+ * leaking into the next.
+ *
+ * @expected-unused -- reset consumed only by test files (registry isolation)
+ */
+export function resetMetaRequests(): void {
+  metaRequests.clear();
+  requestSeq = 0;
+}
+
 /** N3: one fetch feeds BOTH slice caches (meta + README HTML when present). */
 function storeMeta(slug: string, meta: ProjectMeta): void {
   const { pushMeta, pushReadme } = useStore.getState();

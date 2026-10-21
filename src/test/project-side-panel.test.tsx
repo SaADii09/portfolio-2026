@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { useStore } from "@/store";
-import { BrowserApp } from "@/components/apps/BrowserApp";
+import { BrowserApp, resetMetaRequests } from "@/components/apps/BrowserApp";
 import { ProjectSidePanel, type ProjectSidePanelProps } from "@/components/apps/ProjectSidePanel";
 import type { ProjectMeta } from "@/app/api/project-meta/route";
 import type { ProjectEntry } from "@/lib/portfolio-data";
@@ -188,6 +188,7 @@ describe("BrowserApp — side panel wiring", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    resetMetaRequests();
     useStore.setState({
       windows: [],
       activeWindowId: null,
