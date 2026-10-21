@@ -1,3 +1,5 @@
 {
-  "clone_groups": ["src/app/api/chat/route.ts:150-176|src/store/chatSlice.ts:104-139"]
+  "clone_groups": [
+    "src/app/api/chat/route.ts:150-176|src/store/chatSlice.ts:104-139"
+  ]
 }
