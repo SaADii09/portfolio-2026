@@ -7,9 +7,9 @@ import { deriveTimeline } from "@/lib/repo-timeline";
  * the browserSlice meta LRU (Task 6) as well as in this route's own
  * in-memory cache. `readmeHtml` is sanitized BEFORE it is cached or
  * returned; `degraded` marks a README GitHub refused to serve (403/429 rate
- * limits) — the panel keeps the repo facts either way. The `timeline` rows
- * are derived from the repo's created/pushed dates and the latest release's
- * tag + publish date.
+ * limits) or one the repo does not have (404) — the panel keeps the repo
+ * facts either way. The `timeline` rows are derived from the repo's
+ * created/pushed dates and the latest release's tag + publish date.
  */
 export interface ProjectMeta {
   slug: string;
@@ -54,10 +54,11 @@ function projectSlugFor(repo: string): string {
 
 /**
  * In-memory TTL cache for GitHub project metadata. A FULL answer lives 6h;
- * a DEGRADED one (GitHub refused the README but the repo facts are good)
- * lives 60s — a degraded answer means "try again soon", the same rationale
- * as the failure cache. Pattern mirrors the screenshot route: bounded Map,
- * expired-first + oldest eviction on insert.
+ * a DEGRADED one lives 60s — with ONE exception: a 404 README (the repo has
+ * none) is a stable answer and caches for the full 6h even though the meta
+ * is degraded, while a REFUSED README (403/429 rate limits) means "try again
+ * soon" — the same rationale as the failure cache. Pattern mirrors the
+ * screenshot route: bounded Map, expired-first + oldest eviction on insert.
  */
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — repo facts rarely move
 const DEGRADED_TTL_MS = 60 * 1000; // 60s — a refused README must recover fast
@@ -104,12 +105,16 @@ function failureCachePut(repo: string): void {
   failureCache.set(repo, { at: Date.now(), ttlMs: FAILURE_TTL_MS });
 }
 
-function metaCachePut(repo: string, meta: ProjectMeta): void {
+function metaCachePut(repo: string, meta: ProjectMeta, readmeAbsent: boolean): void {
   // Bound the map: drop expired entries first, then oldest (insertion order)
   // until the new entry fits under the cap.
   evictExpiredEntries(metaCache);
   evictOldestEntries(metaCache, CACHE_MAX);
-  const ttlMs = meta.degraded ? DEGRADED_TTL_MS : CACHE_TTL_MS;
+  // Only a REFUSED README (403/429) gets the short degraded TTL — its answer
+  // may change as the rate limit clears. A MISSING README (404) is stable:
+  // the repo has none, and re-fetching all 3 upstream calls every 60s would
+  // burn the shared 60/h per-IP quota on a permanent answer.
+  const ttlMs = meta.degraded && !readmeAbsent ? DEGRADED_TTL_MS : CACHE_TTL_MS;
   metaCache.set(repo, { meta, at: Date.now(), ttlMs });
 }
 
@@ -215,8 +220,10 @@ async function releaseOf(response: Response | null): Promise<ReleaseFacts> {
 
 interface UpstreamResponse {
   facts: RepoFacts;
-  /** Sanitized README html, or null when GitHub refused the README. */
+  /** Sanitized README html, or null when GitHub refused it or it is absent. */
   readmeHtml: string | null;
+  /** True when GitHub answered 404 — the repo has NO README (a stable answer). */
+  readmeAbsent: boolean;
   releaseRes: Response | null;
 }
 
@@ -228,15 +235,26 @@ async function repoFactsRequest(repo: string): Promise<RepoFacts | null> {
 }
 
 /**
- * Sanitized README html, or null when GitHub refused it (403/429 rate
- * limits). The body read may REJECT on a truncated stream — the rejection
- * escapes into the caller's catch, so a broken body degrades into the
- * route's contracted 502 instead of a 500 with a non-JSON body.
+ * The README's fate: sanitized html (null when GitHub refused it or the repo
+ * has none) plus whether the README is ABSENT (404). Absence is a stable
+ * answer — it caches for the full TTL; a refusal (403/429) or a failed fetch
+ * is transient and keeps the short degraded TTL. The body read may REJECT on
+ * a truncated stream — the rejection escapes into the caller's catch, so a
+ * broken body degrades into the route's contracted 502 instead of a 500
+ * with a non-JSON body.
  */
-async function readmeHtmlOf(readmeRes: Response | null): Promise<string | null> {
-  if (readmeRes === null || !readmeRes.ok) return null;
+interface ReadmeOutcome {
+  html: string | null;
+  /** GitHub answered 404 — the repo has no README (permanent, not a refusal). */
+  absent: boolean;
+}
+
+async function readmeHtmlOf(readmeRes: Response | null): Promise<ReadmeOutcome> {
+  if (readmeRes === null) return { html: null, absent: false };
+  if (readmeRes.status === 404) return { html: null, absent: true };
+  if (!readmeRes.ok) return { html: null, absent: false };
   // Sanitized BEFORE caching — the cache must never hold raw GitHub HTML.
-  return sanitizeReadmeHtml(await readmeRes.text());
+  return { html: sanitizeReadmeHtml(await readmeRes.text()), absent: false };
 }
 
 /** The 3-upstream parallel flow: repo meta (JSON), README (HTML), latest release. */
@@ -250,8 +268,8 @@ async function fetchUpstream(repo: string): Promise<UpstreamResponse | null> {
       safeFetch(`${GITHUB_API_BASE}/${repo}/releases/latest`),
     ]);
     if (facts === null) return null;
-    const readmeHtml = await readmeHtmlOf(readmeRes);
-    return { facts, readmeHtml, releaseRes };
+    const readme = await readmeHtmlOf(readmeRes);
+    return { facts, readmeHtml: readme.html, readmeAbsent: readme.absent, releaseRes };
   } catch {
     return null;
   }
@@ -260,7 +278,7 @@ async function fetchUpstream(repo: string): Promise<UpstreamResponse | null> {
 async function fetchProjectMeta(repo: string): Promise<ProjectMeta | null> {
   const upstream = await fetchUpstream(repo);
   if (upstream === null) return null;
-  const { facts, readmeHtml, releaseRes } = upstream;
+  const { facts, readmeHtml, readmeAbsent, releaseRes } = upstream;
   const release = await releaseOf(releaseRes);
   const meta: ProjectMeta = {
     slug: projectSlugFor(repo),
@@ -273,7 +291,7 @@ async function fetchProjectMeta(repo: string): Promise<ProjectMeta | null> {
     createdAt: facts.createdAt,
     pushedAt: facts.pushedAt,
   };
-  metaCachePut(repo, meta);
+  metaCachePut(repo, meta, readmeAbsent);
   return meta;
 }
 
@@ -281,9 +299,11 @@ async function fetchProjectMeta(repo: string): Promise<ProjectMeta | null> {
  * Meta for a repo, honouring the negative cache: a recent failure is served
  * from it (the upstream is not re-hit), and a fresh failure is cached so the
  * next request inside the short TTL costs no upstream call. A DEGRADED
- * answer is not a failure — it is cached in the success cache under the
- * short TTL, so a refused README is retried soon instead of staying
- * degraded for the full 6h.
+ * answer is not a failure — it is cached in the success cache: a REFUSED
+ * README (403/429) under the short TTL, so GitHub's answer is retried soon,
+ * but a MISSING README (404) under the full 6h TTL, because "this repo has
+ * no README" never changes and re-asking every minute would burn the shared
+ * 60/h per-IP quota.
  */
 async function metaFor(repo: string): Promise<ProjectMeta | null> {
   if (failureCached(repo)) return null;

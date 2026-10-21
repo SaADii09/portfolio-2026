@@ -550,6 +550,38 @@ describe("GET /api/project-meta — the degraded cache TTL", () => {
     }
   });
 
+  it("caches a MISSING README (404) for the full 6h TTL, not the degraded one", async () => {
+    vi.useFakeTimers();
+    try {
+      mockGitHubFixtures({ readmeStatus: 404 });
+
+      const first = await GET(makeRequest(`?repo=${REPO}`));
+      expect(first.status).toBe(200);
+      const firstBody = (await first.json()) as { degraded: boolean; readmeHtml: string | null };
+      // A 404 README degrades the meta — there is no README to show …
+      expect(firstBody.degraded).toBe(true);
+      expect(firstBody.readmeHtml).toBeNull();
+      const callsAfterFirst = fetchMock.mock.calls.length;
+
+      // …but the answer is STABLE (the repo has no README): still served
+      // from the cache past the 60s degraded TTL. A permanent 404 must not
+      // re-burn the shared 60/h per-IP quota every minute (3 calls × 4
+      // repos × 60 re-fetches would dwarf the quota).
+      vi.advanceTimersByTime(61_000);
+      const second = await GET(makeRequest(`?repo=${REPO}`));
+      expect(second.status).toBe(200);
+      expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+
+      // Only the full 6h TTL expires it.
+      vi.advanceTimersByTime(6 * 60 * 60 * 1000);
+      const third = await GET(makeRequest(`?repo=${REPO}`));
+      expect(third.status).toBe(200);
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps a full answer cached for the full 6h TTL", async () => {
     vi.useFakeTimers();
     try {
