@@ -8,6 +8,20 @@ const scriptSrc = `script-src 'self' 'unsafe-inline'${
   process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""
 }`;
 
+/**
+ * Anti-clickjacking: the app may only be framed by itself, plus our own
+ * production origin when NEXT_PUBLIC_SITE_URL is configured — the Browser
+ * embeds the deployed portfolio. Read at config-eval time (Next.js loads
+ * .env files before evaluating this config); when unset (local dev), 'self'
+ * alone already covers localhost. Deliberately NOT the site.ts localhost
+ * fallback: pinning `https://localhost:3000` in a production deployment
+ * would be meaningless at best.
+ */
+const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL
+  ? new URL(process.env.NEXT_PUBLIC_SITE_URL).origin
+  : null;
+const frameAncestors = siteOrigin ? `'self' ${siteOrigin}` : "'self'";
+
 const csp = [
   "default-src 'self'",
   scriptSrc,
@@ -20,7 +34,7 @@ const csp = [
   "connect-src 'self' https://va.vercel-scripts.com",
   "object-src 'none'",
   "base-uri 'self'",
-  "frame-ancestors 'none'",
+  `frame-ancestors ${frameAncestors}`,
 ].join("; ");
 
 const nextConfig: NextConfig = {
@@ -29,18 +43,25 @@ const nextConfig: NextConfig = {
     {
       source: "/(.*)",
       headers: [
-        { key: "X-Frame-Options", value: "DENY" },
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         { key: "Content-Security-Policy", value: csp },
       ],
     },
     // Explicit fixture header for the WebView refusal tests: /embed-refusal is
-    // never embeddable, even if the global rule above ever changes. Additive on
-    // purpose — the CSP block above is owned by the hardening lane (Task 13).
+    // never embeddable, even if the global rule above ever changes. BOTH
+    // headers stay: modern browsers honour a frame-ancestors CSP over
+    // X-Frame-Options, so with the global CSP now allowing 'self' framing an
+    // XFO alone would no longer block — the 'none' CSP is what keeps the
+    // fixture unembeddable. Both the global CSP ('self'+origin) and this
+    // source-level 'none' reach the response; browsers intersect multiple CSP
+    // policies, so the stricter one wins as intended.
     {
       source: "/embed-refusal",
-      headers: [{ key: "X-Frame-Options", value: "DENY" }],
+      headers: [
+        { key: "X-Frame-Options", value: "DENY" },
+        { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+      ],
     },
   ],
 };

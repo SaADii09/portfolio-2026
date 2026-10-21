@@ -129,7 +129,18 @@ test.describe("Security headers", () => {
     // Stronger directives added by the hardening lane.
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("base-uri 'self'");
-    expect(csp).toContain("frame-ancestors 'none'");
+    // Anti-clickjacking keeps 'self' and adds our own production origin when
+    // NEXT_PUBLIC_SITE_URL is configured — the Browser embeds the deployed
+    // portfolio. With the origin unset (local dev) it is 'self' alone.
+    expect(csp).toContain("frame-ancestors 'self'");
+    expect(csp).not.toMatch(/frame-ancestors 'none'/);
+    if (process.env.NEXT_PUBLIC_SITE_URL) {
+      const configured = new URL(process.env.NEXT_PUBLIC_SITE_URL).origin;
+      expect(csp).toContain(`frame-ancestors 'self' ${configured}`);
+    }
+    // The global X-Frame-Options header is gone: CSP frame-ancestors owns
+    // framing control from here on.
+    expect(response.headers()["x-frame-options"]).toBeUndefined();
     // Vercel Analytics mounts client-side beacons to this origin; a bare
     // 'self' connect-src would silently block them.
     expect(csp).toContain("va.vercel-scripts.com");
@@ -140,5 +151,20 @@ test.describe("Security headers", () => {
       expect(scriptSrc).toBeDefined();
       expect(scriptSrc).not.toContain("'unsafe-eval'");
     }
+  });
+
+  /**
+   * The /embed-refusal fixture must stay unembeddable even though the global
+   * rule now allows 'self' framing: it carries BOTH a source-level
+   * `frame-ancestors 'none'` CSP and its own X-Frame-Options: DENY. The CSP is
+   * what modern browsers honour when the two disagree — XFO alone would stop
+   * blocking once the global CSP loosens.
+   */
+  test("keeps the /embed-refusal fixture unembeddable", async ({ page }) => {
+    const response = await page.request.get("/embed-refusal");
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()["x-frame-options"]).toBe("DENY");
+    expect(response.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
   });
 });
