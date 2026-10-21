@@ -83,6 +83,21 @@ describe("isScreenshotAllowed", () => {
     expect(isScreenshotAllowed("not a url")).toBe(false);
     expect(isScreenshotAllowed("://missing-scheme")).toBe(false);
   });
+
+  it("accepts https urls whose hostname suffix-matches EMBED_BLOCKED_HOSTS (T0 ruling)", () => {
+    // The origin set is origin-EXACT (www.youtube.com ≠ youtube.com), so the
+    // host suffix-match is the widening that covers refuser-host captures —
+    // Microlink does the actual fetching.
+    expect(isScreenshotAllowed("https://youtube.com/watch?v=x")).toBe(true);
+    expect(isScreenshotAllowed("https://www.youtube.com/watch?v=x")).toBe(true);
+    expect(isScreenshotAllowed("https://api.reddit.com/r/dev")).toBe(true);
+  });
+
+  it("still rejects non-https on a widened host and unknown hosts under it", () => {
+    expect(isScreenshotAllowed("http://youtube.com/watch?v=x")).toBe(false);
+    expect(isScreenshotAllowed("https://evil.example")).toBe(false);
+    expect(isScreenshotAllowed("https://notyoutube.com")).toBe(false);
+  });
 });
 
 describe("allow-list module load", () => {

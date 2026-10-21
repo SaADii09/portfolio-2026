@@ -1,4 +1,5 @@
 import { BROWSER_TILES } from "@/lib/browser-apps";
+import { EMBED_BLOCKED_HOSTS, hostnameMatchesBlockedHost } from "@/lib/embed-rules";
 import { PROJECTS } from "@/lib/portfolio-data";
 
 /**
@@ -43,11 +44,20 @@ export const SCREENSHOT_ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
   GITHUB_ORIGIN,
 ]);
 
-/** Two-clause pure check: https protocol + allow-listed origin. */
+/**
+ * Two-clause check, widened by the T0 ruling: https protocol + (an
+ * allow-listed origin OR a hostname suffix-matching EMBED_BLOCKED_HOSTS).
+ * The refuser-host widening covers captures for the preview experience —
+ * the origin set itself stays curated/static and the actual fetching is
+ * Microlink's, so the SSRF envelope is unchanged.
+ */
 export function isScreenshotAllowed(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && SCREENSHOT_ALLOWED_ORIGINS.has(parsed.origin);
+    if (parsed.protocol !== "https:") return false;
+    return (
+      SCREENSHOT_ALLOWED_ORIGINS.has(parsed.origin) || hostnameMatchesBlockedHost(parsed.hostname)
+    );
   } catch {
     return false;
   }
