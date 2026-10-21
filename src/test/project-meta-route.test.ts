@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ALLOWED_REPOS, GET, resetProjectMetaCache } from "@/app/api/project-meta/route";
+import { PROJECTS } from "@/lib/portfolio-data";
 
 // Interface pinned by Task 4 (plan §Task 4) and consumed by Task 6 (metaLru)
 // and Task 10 (side panel):
@@ -31,6 +32,27 @@ const README_HTML = '<p>hello<script>alert(1)</script></p><p style="background:r
 function makeRequest(search: string): Request {
   return { url: `http://localhost/api/project-meta${search}` } as unknown as Request;
 }
+
+/**
+ * Owner/name of a GitHub repo URL, derived INDEPENDENTLY of the route's own
+ * `repoSlugOfUrl` — a pin must never reuse the derivation it is testing.
+ */
+function repoSlugOf(repoUrl: string): string {
+  return new URL(repoUrl).pathname.replace(/^\/+|\/+$/g, "");
+}
+
+/**
+ * The owner-confirmed allow set, written out. The route DERIVES its allow set
+ * from PROJECTS[].repoUrl at module scope, so without this literal table a
+ * partial regression (a derivation narrowed to one org or one repo) would
+ * silently shrink the public surface and the suite would stay green.
+ */
+const EXPECTED_ALLOWED_REPOS = [
+  "SaADii09/Auth-kit-FE",
+  "SaADii09/MCP-OpsBridge",
+  "SaADii09/portfolio-2026",
+  "SaADii09/venuze-dashboard",
+];
 
 const fetchMock = vi.fn();
 
@@ -238,11 +260,24 @@ describe("GET /api/project-meta", () => {
     await expect(res.json()).resolves.toEqual({ error: "unavailable" });
   });
 
-  it("maps every PROJECTS repo into the allow set", async () => {
-    // The allow set comes from the route itself (PROJECTS[].repoUrl) — the
-    // test must not re-declare the list, or it would pin a copy instead.
-    expect(ALLOWED_REPOS.size).toBeGreaterThan(0);
-    for (const repo of ALLOWED_REPOS) {
+  it("pins the allow set to exactly the owner-confirmed repos", () => {
+    // The EXACT contents of the allow set, written out — not re-derived from
+    // the route's own set (that would be a tautology) and not re-derived from
+    // PROJECTS (that would follow any regression in the derivation).
+    expect([...ALLOWED_REPOS].sort()).toEqual([...EXPECTED_ALLOWED_REPOS].sort());
+  });
+
+  it("maps every PROJECTS repo into the allow set and serves it with a 200", async () => {
+    // Owner/name comes from each project's repoUrl, derived independently of
+    // the route's derivation — this pins the PROJECTS → allow-set MAPPING.
+    for (const project of PROJECTS) {
+      const repo = repoSlugOf(project.repoUrl);
+      expect(ALLOWED_REPOS.has(repo), `allow set misses ${repo} (${project.slug})`).toBe(true);
+    }
+
+    // …and every one of those repos is actually served.
+    for (const project of PROJECTS) {
+      const repo = repoSlugOf(project.repoUrl);
       fetchMock.mockReset();
       fetchMock
         .mockResolvedValueOnce({ ok: true, status: 200, json: async () => REPO_FACTS_JSON })
@@ -254,7 +289,7 @@ describe("GET /api/project-meta", () => {
         });
 
       const res = await GET(makeRequest(`?repo=${repo}`));
-      expect(res.status).toBe(200);
+      expect(res.status, repo).toBe(200);
     }
   });
 
