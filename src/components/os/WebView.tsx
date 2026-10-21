@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { ExternalLink } from "lucide-react";
 import { FallbackPanel } from "./FallbackPanel";
 
@@ -26,12 +33,13 @@ interface WebViewProps {
  * unreadable to the parent, while a same-origin embeddable frame is readable
  * (WebKit additionally fires `load` for the initial about:blank commit when
  * the iframe mounts with its src already set — readable but blank, later
- * replaced by the real document); (3) cross-origin refusal is
- * indistinguishable from cross-origin success from the parent (both
- * unreadable). Since every project URL embedded here (github.com) refuses
- * framing by design, an unreadable document on `load` is classified as a
- * refusal so the screenshot fallback shows promptly instead of the frame
- * lingering.
+ * replaced by the real document); (3) HISTORICAL: the spike-era assumption
+ * "an unreadable document must be a refusal" held only while every embedded
+ * url was a known refuser. Cross-origin frames are ALWAYS unreadable to the
+ * parent (Same-Origin Policy) — refusals and working sites alike — so since
+ * the real-web rework an unreadable document consults the `/api/embed-check`
+ * server verdict instead of failing the frame; only a "blocked" verdict swaps
+ * to the fallback panel.
  */
 export type FrameSignal = {
   kind: "load" | "error" | "timeout";
@@ -49,11 +57,11 @@ const FRAME_WATCHDOG_MS = 3500;
  * "Accessible" is the load-or-refuse hinge: a document the parent can read is
  * a genuine same-origin commit (WebKit additionally fires `load` for the
  * initial about:blank commit when the iframe mounts with src, which presents
- * as accessible-but-blank until the real document lands), while an unreadable
- * document always matches the engine error page engines commit for refused
- * frames. Observed refusal sequences: `{ kind: "load", contentAccessible:
- * false }` (chrome/firefox error page; webkit sandbox block), `{ kind:
- * "error" }` (classic engine error), `{ kind: "timeout" }` (watchdog-hung).
+ * as accessible-but-blank until the real document lands). Observed signals:
+ * `{ kind: "load", contentAccessible: true }` → ok; `{ kind: "load",
+ * contentAccessible: false }`, `{ kind: "error" }`, `{ kind: "timeout" }` →
+ * "refused", which the API consumer now reads as "consult the server verdict"
+ * — an unreadable frame is no longer failed on this label alone.
  */
 export function decideRefusal(signals: FrameSignal[]): "ok" | "refused" {
   const last = signals[signals.length - 1];
@@ -73,6 +81,52 @@ function readFrameDocument(frame: HTMLIFrameElement | null): Document | null {
   }
 }
 
+interface EmbedVerdict {
+  embeddable?: unknown;
+}
+
+/**
+ * The verdict from one `/api/embed-check` response, collapsed to the single
+ * thing the probe needs: true when the server positively reported the frame
+ * blocked. Every other shape (non-ok status, unparsable body, network error)
+ * degrades to "keep the live frame" — only a positive "blocked" verdict swaps
+ * the fallback panel in.
+ */
+async function readBlockedSignal(res: Response): Promise<boolean> {
+  if (!res.ok) return false;
+  try {
+    const verdict = (await res.json()) as EmbedVerdict;
+    return verdict.embeddable === false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One abortable verdict request. Settles "blocked" into the fallback panel,
+ * guards every settle path behind the controller's signal (an unmount or a
+ * url change must never leave a state write behind), and stands the watchdog
+ * down once the verdict is known so a degraded answer cannot re-fire it.
+ */
+async function settleFraming(
+  controller: AbortController,
+  url: string,
+  clearWatchdog: () => void,
+  setFailed: Dispatch<SetStateAction<boolean>>,
+): Promise<void> {
+  try {
+    const res = await fetch(`/api/embed-check?url=${encodeURIComponent(url)}`, {
+      signal: controller.signal,
+    });
+    const blocked = await readBlockedSignal(res);
+    if (controller.signal.aborted) return;
+    clearWatchdog();
+    if (blocked) setFailed(true);
+  } catch {
+    // Degrade-to-frame: a failed/unreachable verdict keeps the live frame.
+  }
+}
+
 export function WebView({ url }: WebViewProps) {
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -80,6 +134,8 @@ export function WebView({ url }: WebViewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const probeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const verdictAbortRef = useRef<AbortController | null>(null);
+  const verdictPendingRef = useRef(false);
 
   const clearWatchdog = useCallback(() => {
     if (watchdogRef.current !== null) {
@@ -94,6 +150,33 @@ export function WebView({ url }: WebViewProps) {
       probeTimerRef.current = null;
     }
   }, []);
+
+  const abortVerdict = useCallback(() => {
+    if (verdictAbortRef.current !== null) {
+      verdictAbortRef.current.abort();
+      verdictAbortRef.current = null;
+    }
+    verdictPendingRef.current = false;
+  }, []);
+
+  /**
+   * Asks the server whether the loaded-but-unreadable frame may render here.
+   * The iframe STAYS MOUNTED the whole flight and the loading overlay comes
+   * down — it is rendering the real site; only a "blocked" verdict swaps the
+   * fallback panel in.
+   */
+  const requestVerdict = useCallback(() => {
+    abortVerdict();
+    const controller = new AbortController();
+    verdictAbortRef.current = controller;
+    verdictPendingRef.current = true;
+    setLoading(false);
+    const flight = settleFraming(controller, url, clearWatchdog, setFailed);
+    void flight.finally(() => {
+      if (verdictAbortRef.current === controller) verdictAbortRef.current = null;
+      verdictPendingRef.current = false;
+    });
+  }, [url, abortVerdict, clearWatchdog]);
 
   const probeFrame = useCallback((): FrameSignal => {
     const doc = readFrameDocument(iframeRef.current);
@@ -122,14 +205,18 @@ export function WebView({ url }: WebViewProps) {
     cancelProbe();
     probeTimerRef.current = setTimeout(() => {
       const signal = probeFrame();
-      if (decideRefusal([signal]) === "refused") {
-        markFailed();
+      if (decideRefusal([signal]) === "ok") {
+        clearWatchdog();
+        setLoading(false);
         return;
       }
-      clearWatchdog();
-      setLoading(false);
+      // Unreadable after a genuine load is NOT a refusal by itself — every
+      // cross-origin frame is unreadable (Same-Origin Policy). The server
+      // verdict owns the outcome; the frame stays mounted meanwhile (the
+      // watchdog deliberately stays armed: it defers to a pending verdict).
+      requestVerdict();
     }, FRAME_PROBE_DELAY_MS);
-  }, [probeFrame, markFailed, clearWatchdog, cancelProbe]);
+  }, [probeFrame, clearWatchdog, cancelProbe, requestVerdict]);
 
   const handleError = useCallback(() => {
     cancelProbe();
@@ -145,19 +232,22 @@ export function WebView({ url }: WebViewProps) {
   }, []);
 
   // Watchdog: arms one timer per (re)load attempt, cleared exactly once by
-  // this effect's cleanup on unmount or re-arm, and canceled by a genuine load
-  // (in handleLoad). At the deadline it re-probes instead of failing blindly:
-  // WebKit can commit an iframe's document without ever firing the element's
-  // load event (observed for a frame remounted mid-session — document readable
-  // with full content, no load event), and some engines deliver nothing at all
-  // when a refusal should be shown immediately. Readable content at the
-  // deadline is genuinely loaded (stays ok); unreadable/blank still fails.
+  // this effect's cleanup on unmount or re-arm, and canceled by a genuine
+  // same-origin load (in handleLoad). At the deadline it re-probes instead of
+  // failing blindly: WebKit can commit an iframe's document without ever
+  // firing the element's load event (observed for a frame remounted
+  // mid-session — document readable with full content, no load event), and
+  // some engines deliver nothing at all when a refusal should be shown
+  // immediately. While a verdict is pending the watchdog stands down — the
+  // verdict flow owns a loaded-but-unreadable frame's outcome, and a second
+  // probe would just re-fire a false refusal. A readable deadline probe is
+  // genuinely loaded (stays ok); unreadable now consults the server verdict.
   useEffect(() => {
     watchdogRef.current = setTimeout(() => {
       watchdogRef.current = null;
+      if (verdictPendingRef.current) return;
       if (decideRefusal([probeFrame()]) === "refused") {
-        setFailed(true);
-        setLoading(false);
+        requestVerdict();
         return;
       }
       setLoading(false);
@@ -171,8 +261,9 @@ export function WebView({ url }: WebViewProps) {
         clearTimeout(probeTimerRef.current);
         probeTimerRef.current = null;
       }
+      abortVerdict();
     };
-  }, [url, reloadKey, probeFrame]);
+  }, [url, reloadKey, probeFrame, requestVerdict, abortVerdict]);
 
   if (failed) {
     return (

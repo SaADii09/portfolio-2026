@@ -3,7 +3,8 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import { WebView, decideRefusal, type FrameSignal } from "@/components/os/WebView";
 
 /**
- * Unit contract for the iframe refusal classifier (Task 10).
+ * Unit contract for the iframe refusal classifier (Task 10) + the Task A2
+ * verdict-flow rework.
  *
  * Calibrated by the temporary spike (deleted before commit; findings live in
  * the constants comment above decideRefusal in WebView.tsx):
@@ -13,6 +14,12 @@ import { WebView, decideRefusal, type FrameSignal } from "@/components/os/WebVie
  *   also fires `load` for the initial about:blank commit — accessible but
  *   blank — so accessibility, not blankness, is the load-or-refuse hinge);
  * - nothing fires for hung frames — that is what the watchdog timeout is for.
+ *
+ * A2 rework: an unreadable document is NO LONGER a refusal by itself — every
+ * cross-origin frame is unreadable (Same-Origin Policy), refusals and working
+ * sites alike. Unreadable now consults `/api/embed-check`'s server verdict:
+ * the iframe stays MOUNTED through the verdict flight and only a blocked
+ * verdict swaps to the fallback panel (Review Focus 1).
  */
 
 const okLoad: FrameSignal = { kind: "load", contentAccessible: true, contentLooksBlank: false };
@@ -43,7 +50,8 @@ describe("decideRefusal", () => {
   it("classes a load with an unreadable document as refused", () => {
     // Spike: chromium/firefox XFO refusals commit an error page the parent
     // cannot read (contentDocument null or a throwing getter); webkit throws
-    // a sandbox access violation on the same read.
+    // a sandbox access violation on the same read. The label survives A2 —
+    // WebView now treats it as "consult the server verdict", not "fail".
     expect(decideRefusal([{ kind: "load", contentAccessible: false }])).toBe("refused");
   });
 
@@ -59,10 +67,12 @@ describe("WebView fallback wiring", () => {
     vi.useFakeTimers({
       toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
     });
+    fetchMock.mockReset();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   function fireLoadThenAdvance(ms: number) {
@@ -75,74 +85,88 @@ describe("WebView fallback wiring", () => {
     });
   }
 
-  let contentDocumentDescriptor: PropertyDescriptor;
-  function stubUnreadableContentDocument() {
-    contentDocumentDescriptor = Object.getOwnPropertyDescriptor(
+  /** Overwrites the jsdom contentDocument getter; returns its real descriptor restorer. */
+  function overrideContentDocument(getter: () => unknown): () => void {
+    const previous = Object.getOwnPropertyDescriptor(
       HTMLIFrameElement.prototype,
       "contentDocument",
-    ) as PropertyDescriptor;
+    );
     Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
-      get() {
-        throw new DOMException("denied", "SecurityError");
-      },
+      get: getter,
       configurable: true,
     });
+    return () => {
+      if (previous !== undefined) {
+        Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", previous);
+      }
+    };
   }
 
-  function restoreContentDocument() {
-    Object.defineProperty(
-      HTMLIFrameElement.prototype,
-      "contentDocument",
-      contentDocumentDescriptor,
-    );
-  }
-
-  it("refused load (unreadable document) → fallback panel with screenshot img", () => {
-    stubUnreadableContentDocument();
-    render(<WebView url="https://github.com/SaADii09" />);
-
-    fireLoadThenAdvance(300);
-    restoreContentDocument();
-
-    expect(screen.getByText(/can't be embedded/i)).toBeDefined();
-    const shot = document.querySelector<HTMLImageElement>("img[src*='/api/screenshot']");
-    expect(shot).not.toBeNull();
-    expect(shot?.getAttribute("src")).toBe(
-      `/api/screenshot?url=${encodeURIComponent("https://github.com/SaADii09")}`,
-    );
-  });
-
-  it("watchdog timeout with unreadable document → fallback panel", () => {
-    stubUnreadableContentDocument();
-    render(<WebView url="https://github.com/SaADii09" />);
-
-    act(() => {
-      vi.advanceTimersByTime(3600);
+  const OVERRIDE_UNREADABLE = (): (() => void) =>
+    overrideContentDocument(() => {
+      throw new DOMException("denied", "SecurityError");
     });
-    restoreContentDocument();
 
-    expect(screen.getByText(/can't be embedded/i)).toBeDefined();
-    expect(document.querySelector("img[src*='/api/screenshot']")).not.toBeNull();
-    expect(screen.queryByTitle("Website preview")).toBeNull();
-  });
+  // --- the server verdict (/api/embed-check) --------------------------------
+
+  const fetchMock = vi.fn();
+
+  /** 200 verdict stub; assert no /api/embed-check call ran with the mock itself. */
+  function mockEmbedCheck(answer: unknown, status = 200) {
+    fetchMock.mockResolvedValue({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => answer,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+  }
+
+  /** Flushes the verdict promise chain scheduled by the probe. */
+  async function settle() {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
+  const GITHUB = "https://github.com/SaADii09";
+
+  /**
+   * A pending-promise verdict: the request is in flight and honours the probe's
+   * abort signal (like the real fetch would).
+   */
+  function mockPendingVerdict() {
+    let resolve!: (response: unknown) => void;
+    fetchMock.mockReturnValue(
+      new Promise((res) => {
+        resolve = res;
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return () =>
+      resolve({ ok: true, status: 200, json: async () => ({ embeddable: true, reason: "ok" }) });
+  }
+
+  function verdictSignal(): AbortSignal {
+    return (fetchMock.mock.calls[0]?.[1] as { signal: AbortSignal }).signal;
+  }
+
+  // --- same-origin pins (kept green UNMOCKED — the readable frame never
+  // --- consults the server; a stray verdict request would fail loudly below) -
 
   it("watchdog timeout with readable, non-blank content → frame stays (webkit missing-load-event)", () => {
     // WebKit can commit an iframe's document without firing the element's load
     // event (observed for a remounted frame). The watchdog must re-probe and
     // keep a frame whose document is actually readable and populated.
-    Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
-      get() {
-        const body = { childElementCount: 2 };
-        return { body } as unknown as Document;
-      },
-      configurable: true,
+    const restoreDocument = overrideContentDocument(() => {
+      const body = { childElementCount: 2 };
+      return { body } as unknown as Document;
     });
     render(<WebView url="/embeddable-ok" />);
 
     act(() => {
       vi.advanceTimersByTime(3600);
     });
-    restoreContentDocument();
+    restoreDocument();
 
     expect(screen.queryByText(/can't be embedded/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
@@ -150,18 +174,15 @@ describe("WebView fallback wiring", () => {
 
   it("watchdog timeout with accessible-but-blank interim content → frame stays", () => {
     // About:blank at the deadline is an engine mid-commit, not a refusal.
-    Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
-      get() {
-        return { body: { childElementCount: 0 } } as unknown as Document;
-      },
-      configurable: true,
+    const restoreDocument = overrideContentDocument(() => {
+      return { body: { childElementCount: 0 } } as unknown as Document;
     });
     render(<WebView url="/embeddable-ok" />);
 
     act(() => {
       vi.advanceTimersByTime(3600);
     });
-    restoreContentDocument();
+    restoreDocument();
 
     expect(screen.queryByText(/can't be embedded/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
@@ -180,14 +201,11 @@ describe("WebView fallback wiring", () => {
     // supersede fix only the second probe runs (after the gate) → frame stays.
     // Without it the stale probe fires first (before the gate) → fallback.
     const clockStart = Date.now();
-    Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
-      get() {
-        if (Date.now() - clockStart < 400) {
-          throw new DOMException("unreadable mid-navigation", "SecurityError");
-        }
-        return { body: { childElementCount: 2 } } as unknown as Document;
-      },
-      configurable: true,
+    const restoreDocument = overrideContentDocument(() => {
+      if (Date.now() - clockStart < 400) {
+        throw new DOMException("unreadable mid-navigation", "SecurityError");
+      }
+      return { body: { childElementCount: 2 } } as unknown as Document;
     });
     render(<WebView url="/embeddable-ok" />);
 
@@ -202,20 +220,177 @@ describe("WebView fallback wiring", () => {
     act(() => {
       vi.advanceTimersByTime(320); // runs only the surviving probe (t=520 > gate)
     });
-    restoreContentDocument();
+    restoreDocument();
 
     expect(screen.queryByText(/can't be embedded/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
   });
 
-  it("screenshot img onError degrades silently to the external-link-only panel", () => {
-    stubUnreadableContentDocument();
-    render(<WebView url="https://github.com/SaADii09" />);
+  // --- the verdict flow (A2): the iframe survives the verdict ---------------
+
+  it("unreadable load with a BLOCKED verdict → fallback panel with screenshot img", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    mockEmbedCheck({ embeddable: false, reason: "x-frame-options" });
+    render(<WebView url={GITHUB} />);
 
     fireLoadThenAdvance(300);
+    await settle();
+    restoreDocument();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/embed-check?url=${encodeURIComponent(GITHUB)}`,
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(screen.getByText(/can't be embedded/i)).toBeDefined();
     const shot = document.querySelector<HTMLImageElement>("img[src*='/api/screenshot']");
     expect(shot).not.toBeNull();
-    restoreContentDocument();
+    expect(shot?.getAttribute("src")).toBe(`/api/screenshot?url=${encodeURIComponent(GITHUB)}`);
+  });
+
+  it("watchdog timeout with unreadable document → blocked verdict → fallback panel", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    mockEmbedCheck({ embeddable: false, reason: "x-frame-options" });
+    render(<WebView url={GITHUB} />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(3600);
+      await Promise.resolve();
+    });
+    restoreDocument();
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(screen.getByText(/can't be embedded/i)).toBeDefined();
+    expect(document.querySelector("img[src*='/api/screenshot']")).not.toBeNull();
+    expect(screen.queryByTitle("Website preview")).toBeNull();
+  });
+
+  it("unreadable load with an EMBEDDABLE verdict → the frame stays mounted, no fallback", async () => {
+    // THE A2 hinge (Review Focus 1): a cross-origin frame that loads must not
+    // be swapped to the fallback before a "blocked" verdict.
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    mockEmbedCheck({ embeddable: true, reason: "ok" });
+    render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300);
+    await settle();
+    restoreDocument();
+
+    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("a pending verdict keeps the frame mounted — no fallback, no spinner", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    const resolveVerdict = mockPendingVerdict();
+    render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300); // probe → verdict now in flight
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    // The frame renders the real site — no overlay may cover it while the
+    // verdict flies.
+    expect(screen.queryByText(/loading/i)).toBeNull();
+
+    resolveVerdict();
+    await settle();
+    restoreDocument();
+
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("the watchdog stands down while a verdict is pending (it must not re-fire a refusal)", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    const resolveVerdict = mockPendingVerdict();
+    render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300); // verdict in flight
+    act(() => {
+      vi.advanceTimersByTime(3300); // total 3600 — crosses the 3500ms watchdog
+    });
+
+    // The deadline hit DURING the flight: no second probe, no refusal.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+
+    resolveVerdict();
+    await settle();
+    restoreDocument();
+
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("unmount aborts the in-flight verdict request", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    mockEmbedCheck({ embeddable: false, reason: "x-frame-options" });
+    const { unmount } = render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300);
+    restoreDocument();
+
+    const signal = verdictSignal();
+    unmount();
+    expect(signal.aborted).toBe(true);
+
+    // Settling after unmount must be a guarded no-op (no setState, no throw).
+    await settle();
+  });
+
+  it("a url change aborts the in-flight verdict request", () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    mockEmbedCheck({ embeddable: false, reason: "x-frame-options" });
+    const { rerender } = render(<WebView url="https://projects.example/a" />);
+
+    fireLoadThenAdvance(300);
+    restoreDocument();
+
+    const signal = verdictSignal();
+    rerender(<WebView url="https://projects.example/b" />);
+    expect(signal.aborted).toBe(true);
+    // The new url still owns a live mounted frame.
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("a rejected verdict degrades to the live frame", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    fetchMock.mockRejectedValue(new Error("embed-check down"));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300);
+    await settle();
+    restoreDocument();
+
+    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("a non-ok embed-check response degrades to the live frame", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    fetchMock.mockResolvedValue({ ok: false, status: 502, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WebView url="https://projects.example/portfolio" />);
+
+    fireLoadThenAdvance(300);
+    await settle();
+    restoreDocument();
+
+    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.getByTitle("Website preview")).toBeDefined();
+  });
+
+  it("screenshot img onError degrades silently to the external-link-only panel", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    mockEmbedCheck({ embeddable: false, reason: "x-frame-options" });
+    render(<WebView url={GITHUB} />);
+
+    fireLoadThenAdvance(300);
+    await settle();
+    const shot = document.querySelector<HTMLImageElement>("img[src*='/api/screenshot']");
+    expect(shot).not.toBeNull();
+    restoreDocument();
     act(() => {
       fireEvent(shot as HTMLImageElement, new Event("error"));
     });
@@ -226,12 +401,16 @@ describe("WebView fallback wiring", () => {
     expect(screen.getByRole("button", { name: /retry/i })).toBeDefined();
   });
 
-  it("retry from the fallback re-arms the iframe and clears the failure", () => {
-    render(<WebView url="https://github.com/SaADii09" />);
+  it("retry from the fallback re-arms the iframe and clears the failure", async () => {
+    const restoreDocument = OVERRIDE_UNREADABLE();
+    mockEmbedCheck({ embeddable: false, reason: "x-frame-options" });
+    render(<WebView url={GITHUB} />);
 
-    act(() => {
+    await act(async () => {
       vi.advanceTimersByTime(3600);
+      await Promise.resolve();
     });
+    restoreDocument();
     expect(screen.getByText(/can't be embedded/i)).toBeDefined();
 
     act(() => {
