@@ -212,29 +212,13 @@ function PreviewBody({
   const showScreenshot = allowScreenshot && !screenshotFailed;
 
   return (
-    <div className="flex flex-col h-full gap-3 p-4 text-center overflow-auto text-os-muted">
-      {showScreenshot && (
-        // no-img-element: deliberate — the src is an internal proxy route
-        // (/api/screenshot) whose onError is the degrade path; next/image's
-        // optimizer would add a second failure mode inside a fallback panel.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`/api/screenshot?url=${encodeURIComponent(url)}`}
-          alt={previewAlt(url)}
-          onError={() => setScreenshotFailed(true)}
-          className="w-full aspect-video object-cover object-top rounded-os border border-os-border"
-        />
-      )}
-      {screenshotFailed && (
-        <AlertTriangle
-          size={28}
-          className="mx-auto opacity-70"
-          aria-hidden="true"
-          data-testid="screenshot-failed-icon"
-        />
-      )}
+    <div className="flex h-full flex-col gap-2 p-3 text-center text-os-muted">
+      {/* Header + actions come FIRST (D4): at rest they must be visible, and
+          the preview fills whatever vertical space is left. The previous
+          order put a full-width capture above them and pushed the escape
+          hatch below the fold inside the fixed-height OS window. */}
       <p className="font-body text-sm">{hostOf(url)} blocks embedding — live preview below</p>
-      <div className="flex flex-wrap items-center justify-center gap-3">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         <a href={url} target="_blank" rel="noopener noreferrer" className={PRIMARY_ACTION}>
           <ExternalLink size={14} />
           Open in new tab
@@ -245,6 +229,28 @@ function PreviewBody({
         </button>
         <OptionalRetry onRetry={onRetry} onReset={() => setScreenshotFailed(false)} />
       </div>
+      {showScreenshot && (
+        // no-img-element: deliberate — the src is an internal proxy route
+        // (/api/screenshot) whose onError is the degrade path; next/image's
+        // optimizer would add a second failure mode inside a fallback panel.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/api/screenshot?url=${encodeURIComponent(url)}`}
+          alt={previewAlt(url)}
+          onError={() => setScreenshotFailed(true)}
+          className="min-h-[120px] w-full flex-1 rounded-os border border-os-border object-cover object-top"
+        />
+      )}
+      {screenshotFailed && (
+        <div className="flex flex-1 items-center justify-center">
+          <AlertTriangle
+            size={28}
+            className="opacity-70"
+            aria-hidden="true"
+            data-testid="screenshot-failed-icon"
+          />
+        </div>
+      )}
     </div>
   );
 }

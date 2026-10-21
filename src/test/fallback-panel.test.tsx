@@ -27,14 +27,29 @@ describe("FallbackPanel", () => {
     expect(container.querySelector("img[src*='/api/screenshot']")).toBeNull();
   });
 
-  it("renders the screenshot full-width as a live page preview, not a thumbnail", () => {
+  it("renders the screenshot as a live page preview that fills the panel", () => {
     const { container } = render(<FallbackPanel url={REPO_URL} allowScreenshot />);
     const shot = container.querySelector<HTMLImageElement>("img[src*='/api/screenshot']");
     expect(shot?.className).toContain("w-full");
-    expect(shot?.className).toContain("aspect-video");
+    // The capture fills the space the header/actions leave (the old capped
+    // aspect-video stamp pushed the escape hatch below the fold).
+    expect(shot?.className).toContain("flex-1");
     expect(shot?.className).toContain("object-cover");
     expect(shot?.className).toContain("object-top");
     expect(shot?.className).not.toContain("max-h-44");
+  });
+
+  it("keeps the header and actions ABOVE the preview (they must be visible at rest)", () => {
+    const { container } = render(<FallbackPanel url={REPO_URL} allowScreenshot />);
+    const shot = container.querySelector<HTMLImageElement>("img[src*='/api/screenshot']");
+    const header = screen.getByText(/blocks embedding — live preview below/);
+    const opens = screen.getByRole("link", { name: /Open in new tab/ });
+    const preview = shot as HTMLImageElement;
+    // Node.compareDocumentPosition: FOLLOWING (0x04) means the preview comes after.
+    expect(header.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(opens.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Markup order alone isn't enough: the container must be a column flex.
+    expect(container.firstElementChild?.className).toContain("flex-col");
   });
 
   it("headers the host, not the line about X-Frame-Options", () => {

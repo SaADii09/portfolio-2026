@@ -547,11 +547,11 @@ function ShortcutTile({ tile, onOpen }: { tile: BrowserTile; onOpen: () => void 
     <button
       onClick={onOpen}
       aria-label={tile.name}
-      className="flex flex-col items-center gap-1.5 px-2 py-3 min-h-[44px] rounded-os glass glass-pos glass-border font-body text-xs text-os-text transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
+      className="flex flex-col items-center gap-1 px-2 py-2 min-h-[44px] rounded-os glass glass-pos glass-border font-body text-xs text-os-text transition-all hover:-translate-y-0.5 hover:glow-sm cursor-pointer"
     >
       <span
         aria-hidden="true"
-        className="flex h-10 w-10 items-center justify-center rounded-os bg-os-accent text-os-bg font-display text-base opacity-90"
+        className="flex h-9 w-9 items-center justify-center rounded-os bg-os-accent text-os-bg font-display text-base opacity-90"
       >
         {tile.name.charAt(0)}
       </span>
@@ -617,11 +617,11 @@ function HomeTabBody({ windowId }: { windowId: string }) {
   const visitCounts = useStore((s) => s.visitCounts);
 
   return (
-    <div className="flex flex-col gap-6 p-4">
+    <div className="flex flex-col gap-4 p-3">
       <p className="font-body text-xs text-os-muted">{greetingCopy()}</p>
 
       <section aria-label="Shortcuts">
-        <h3 className="font-display text-xs text-os-accent mb-2">Shortcuts</h3>
+        <h3 className="font-display text-xs text-os-accent mb-1.5">Shortcuts</h3>
         <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
           {BROWSER_TILES.map((tile) => (
             <ShortcutTile
@@ -635,7 +635,7 @@ function HomeTabBody({ windowId }: { windowId: string }) {
 
       {visitRecency.length > 0 && (
         <section aria-label="Recently visited">
-          <h3 className="font-display text-xs text-os-accent mb-2">Recently visited</h3>
+          <h3 className="font-display text-xs text-os-accent mb-1.5">Recently visited</h3>
           <div className="flex flex-wrap gap-2">
             {visitRecency.slice(0, 8).map((origin) => (
               <VisitChip
@@ -650,7 +650,7 @@ function HomeTabBody({ windowId }: { windowId: string }) {
       )}
 
       <section aria-label="Your live projects">
-        <h3 className="font-display text-xs text-os-accent mb-2">Your live projects</h3>
+        <h3 className="font-display text-xs text-os-accent mb-1.5">Your live projects</h3>
         <div className="flex flex-col gap-2">
           {PROJECTS.map((entry) => (
             <ProjectRowCard
