@@ -161,13 +161,17 @@ async function panelGeometry(page: Page): Promise<{
 }
 
 /**
- * Opens the DevOS Portfolio project tab from the home grid.
+ * Opens the DevOS Portfolio project tab from the compact "Your live projects"
+ * row on the home tab's start page (spec D6 — the home carries rows now, not
+ * the old project grid).
  *
- * The card locator is scoped to the ACTIVE tab panel: once a DevOS tab is
+ * The row locator is scoped to the ACTIVE tab panel: once a DevOS tab is
  * open, the tab strip's close button ("Close DevOS Portfolio") also matches
  * the /DevOS Portfolio/ name, and the strip sits OUTSIDE every
- * `.browser-tab-panel` — the panel scope keeps the locator single-match
- * (strict mode) in every caller.
+ * `.browser-tab-panel`. The row button's accessible name ("DevOS Portfolio +
+ * host + yours badge") is unique within its panel — the row's external
+ * "Open DevOS Portfolio in a new tab" affordance is a link, not a button —
+ * so the scoped locator stays single-match (strict mode) in every caller.
  */
 async function openDevosProjectTab(page: Page): Promise<void> {
   await activePanel(page)
@@ -192,7 +196,8 @@ test.describe("DevOS Browser — reload + container query", () => {
     await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute("aria-selected", "true");
 
-    // A project tab opens from the home grid (the tab is named by TITLE).
+    // A project tab opens from the compact "Your live projects" row on the
+    // start page (the tab is named by TITLE).
     await openDevosProjectTab(page);
 
     // The side panel toggles open for the project tab.

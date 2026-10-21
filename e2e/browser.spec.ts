@@ -2,11 +2,15 @@ import { test, expect, type Page } from "@playwright/test";
 import { gotoApp } from "./utils";
 
 /**
- * DevOS Browser e2e matrix (Task 12).
+ * DevOS Browser e2e matrix (real-web reconciliation, spec D6/D7/D8).
  *
- * The Browser is the singleton OS window the "Projects" launchers open
- * (spec §7): a Chrome-like tab strip over a warm-tail content router
- * (active + 2 MRU tabs stay mounted) with a project side panel beside it.
+ * The Browser is a STAND-ALONE app (spec D7): its own desktop icon opens the
+ * `type:"browser"` singleton; the Projects desktop icon opens the Projects
+ * window again, and a project card THERE launches a browser tab. A
+ * Chrome-like tab strip rides over a warm-tail content router (active + 2
+ * MRU tabs stay mounted) with a project side panel beside it, and the home
+ * tab is the Chrome-classic start page (greeting, shortcut tiles, recently
+ * visited chips, compact "Your live projects" rows — spec D6).
  *
  * Determinism rules for this file:
  * - `/api/project-meta` is ROUTE-MOCKED with a fixed ProjectMeta, so the side
@@ -78,16 +82,16 @@ function browserWindow(page: Page) {
     .filter({ has: page.locator("span.font-display", { hasText: /^Browser$/ }) });
 }
 
-/** The window whose body is the legacy Projects list (must never open now). */
-function legacyProjectsWindow(page: Page) {
+/** The Projects registry window (the project-list window the Projects icon opens). */
+function projectsRegistryWindow(page: Page) {
   return page
     .locator(".os-window-enter")
     .filter({ has: page.locator("h2", { hasText: /^Projects$/ }) });
 }
 
-/** Open the DevOS Browser through the "Projects" desktop icon. */
+/** Open the DevOS Browser through the "Browser" desktop icon. */
 async function openBrowser(page: Page): Promise<void> {
-  await page.getByTitle("Open Projects").dblclick();
+  await page.getByTitle("Open Browser").dblclick();
   await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
 }
 
@@ -114,18 +118,24 @@ test.describe("DevOS Browser", () => {
     await gotoApp(page);
   });
 
-  test("the Projects desktop icon opens the Browser window (not a Projects window)", async ({
+  test("the Browser desktop icon opens the Browser singleton (not a Projects window)", async ({
     page,
   }) => {
+    // Both launcher icons exist — the count-0 probe below would be vacuous if
+    // the wrong icon were clicked, so the Projects icon is pinned present
+    // before the Browser icon is chosen.
+    const projectsIcon = page.getByTitle("Open Projects");
+    await expect(projectsIcon).toBeVisible();
     await openBrowser(page);
 
-    // The launcher routes "Projects" into the Browser singleton: the window
-    // that opens is titled "Browser" and carries the browser shell.
+    // The launcher routes the "Browser" icon into the browser singleton: the
+    // window that opens is titled "Browser" and carries the browser shell.
     await expect(browserWindow(page)).toBeVisible();
     await expect(page.getByRole("tablist", { name: "Browser tabs" })).toBeVisible();
 
-    // The legacy Projects list window must NOT be what opened.
-    await expect(legacyProjectsWindow(page)).toHaveCount(0);
+    // The Projects window must NOT be what this icon opened (the count-0
+    // probes the "Open Browser" click above).
+    await expect(projectsRegistryWindow(page)).toHaveCount(0);
 
     // The window opens with exactly one tab — the home tab — and it is active.
     await expect(tabs(page)).toHaveCount(1);
@@ -133,12 +143,37 @@ test.describe("DevOS Browser", () => {
     await expect(panels(page)).toHaveCount(1);
   });
 
-  test("a project card opens a project tab and the side panel shows the mocked meta", async ({
+  test("the Projects desktop icon opens the Projects window and its card opens a browser project tab", async ({
+    page,
+  }) => {
+    // Route-mocked: the project tab's README must never reach GitHub.
+    await mockProjectMeta(page);
+
+    await page.getByTitle("Open Projects").dblclick();
+    await expect(projectsRegistryWindow(page)).toBeVisible();
+
+    // The card routes into the browser singleton via openBrowser(slug)…
+    await projectsRegistryWindow(page)
+      .getByRole("button", { name: /DevOS Portfolio/ })
+      .click();
+
+    // …and the browser window opens with a project tab on top of home.
+    await expect(browserWindow(page)).toBeVisible();
+    await expect(tabs(page)).toHaveCount(2);
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  test("a row on the start page opens a project tab and the side panel shows the mocked meta", async ({
     page,
   }) => {
     const calls = await mockProjectMeta(page);
     await openBrowser(page);
 
+    // The "DevOS Portfolio" compact row on the start page opens the project
+    // tab (the home no longer carries the project grid — spec D6).
     await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
 
     // A project tab joined the strip and took over. The tab is named by the
@@ -176,17 +211,13 @@ test.describe("DevOS Browser", () => {
     const calls = await mockProjectMeta(page);
     await openBrowser(page);
 
-    // Four project tabs on top of the home tab. The cards live on the HOME
-    // tab, so the flow is home → card → home → card … (the home tab stays
-    // mounted, hidden, while a project tab is active).
-    for (const card of [
-      /DevOS Portfolio/,
-      /AI Job Portal/,
-      /SaaS CRM Platform/,
-      /API Automation/,
-    ]) {
+    // Four project tabs on top of the home tab. The rows live on the HOME
+    // tab's start page ("Your live projects" compact row), so the flow is
+    // home → row → home → row … (the home tab stays mounted, hidden, while a
+    // project tab is active).
+    for (const row of [/DevOS Portfolio/, /AI Job Portal/, /SaaS CRM Platform/, /API Automation/]) {
       await page.getByRole("tab", { name: "Home" }).click();
-      await page.getByRole("button", { name: card }).click();
+      await page.getByRole("button", { name: row }).click();
     }
     await expect(tabs(page)).toHaveCount(5);
 
@@ -221,8 +252,15 @@ test.describe("DevOS Browser", () => {
 
     // …and the blocked tile renders the fallback panel INSTANTLY (the iframe
     // pipeline is skipped entirely, so there is no blank-frame flash). The
-    // budget stays under the WebView watchdog (3500ms) on purpose.
-    await expect(page.getByText(/can't be embedded/i)).toBeVisible({ timeout: 3_000 });
+    // D4 copy names the host and promises a live preview. The budget stays
+    // under the WebView watchdog (3500ms) on purpose.
+    await expect(page.getByText(/www\.google\.com blocks embedding/)).toBeVisible({
+      timeout: 3_000,
+    });
+
+    // A host-blocked tile had NO iframe attempt — the Retry affordance must
+    // not exist (it renders only when onRetry is provided).
+    await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
 
     // The blocked tile NEVER mounts an iframe — not in its panel, not anywhere
     // in the browser window.
@@ -260,7 +298,8 @@ test.describe("DevOS Browser", () => {
     await mockProjectMeta(page);
     await openBrowser(page);
 
-    // Two project tabs, opened from the home tab's grid.
+    // Two project tabs, opened from the home tab's compact "Your live
+    // projects" rows.
     await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
     await page.getByRole("tab", { name: "Home" }).click();
     await page.getByRole("button", { name: /AI Job Portal/ }).click();
@@ -288,6 +327,37 @@ test.describe("DevOS Browser", () => {
     await page.getByRole("button", { name: "Close AI Job Portal" }).click();
     await expect(page.getByRole("tab", { name: "AI Job Portal" })).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("button", { name: /DevOS Portfolio/ })).toBeVisible();
+  });
+
+  test("closing the LAST tab lands on a freshly seeded home tab (never the blank shell)", async ({
+    page,
+  }) => {
+    await openBrowser(page);
+
+    // Open a project tab from the compact row, then close the home tab so
+    // exactly one tab remains. (Attritional closes like the test above never
+    // empty the tab list — home survives them — so the D8 reseed needs the
+    // home tab itself to go first.)
+    await page.getByRole("button", { name: /DevOS Portfolio/ }).click();
+    await page.getByRole("tab", { name: "Home" }).click();
+    await page.getByRole("button", { name: "Close Home" }).click();
+    await expect(page.getByRole("tab", { name: "Home" })).toHaveCount(0);
+    await expect(tabs(page)).toHaveCount(1);
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    // The LAST-tab close: the slice dissolves the record and reseeds Home
+    // (the blank `<div className="h-full" />` cold shell is unreachable).
+    await page.getByRole("button", { name: "Close DevOS Portfolio" }).click();
+    await expect(page.getByRole("tab", { name: "DevOS Portfolio" })).toHaveCount(0);
+    await expect(tabs(page)).toHaveCount(1);
+    await expect(page.getByRole("tab", { name: "Home" })).toHaveAttribute("aria-selected", "true");
+
+    // The seeded tab is the real start page (its content shows), not a shell.
+    await expect(page.getByRole("heading", { name: "Your live projects" })).toBeVisible();
     await expect(page.getByRole("button", { name: /DevOS Portfolio/ })).toBeVisible();
   });
 });
