@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET, resetProjectMetaCache } from "@/app/api/project-meta/route";
@@ -333,5 +337,112 @@ describe("GET /api/project-meta", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ─── F8: the REAL GitHub envelope (frozen fixtures) ──────────────────────────
+//
+// The suite's idealized JSON (REPO_FACTS_JSON) never proved the route
+// parses GitHub's ACTUAL shapes. The fixtures below are the RAW upstream
+// bodies captured once by scripts/capture-project-meta-fixture.ts — the
+// repo JSON, the README rendered as HTML, and the /releases/latest answer.
+// The route must parse THESE, not a hand-written approximation.
+
+const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "github");
+
+/** The captured repo JSON (raw upstream body). */
+const REPO_FIXTURE = JSON.parse(
+  readFileSync(join(FIXTURE_DIR, "repo-portfolio-2026.json"), "utf8"),
+) as Record<string, unknown>;
+
+/** The captured README, exactly as GitHub served it as HTML. */
+const README_FIXTURE = readFileSync(join(FIXTURE_DIR, "readme-portfolio-2026.html"), "utf8");
+
+/** The captured /releases/latest answer (this repo publishes no release). */
+const RELEASE_FIXTURE = JSON.parse(
+  readFileSync(join(FIXTURE_DIR, "release-portfolio-2026.json"), "utf8"),
+) as Record<string, unknown>;
+
+/**
+ * URL-aware upstream mock serving the three captured bodies.
+ *
+ * The ordered `mockResolvedValueOnce` style used above cannot express
+ * "the README fetch answers HTML, the release fetch 404s" — it depends on
+ * the order the route happens to issue its three parallel calls. Keying on
+ * the request URL is order-independent and mirrors the real upstream.
+ */
+function mockGitHubFixtures() {
+  fetchMock.mockImplementation((url: string) => {
+    if (url.endsWith("/readme")) {
+      return Promise.resolve({ ok: true, status: 200, text: async () => README_FIXTURE });
+    }
+    if (url.endsWith("/releases/latest")) {
+      return Promise.resolve({ ok: false, status: 404, json: async () => RELEASE_FIXTURE });
+    }
+    return Promise.resolve({ ok: true, status: 200, json: async () => REPO_FIXTURE });
+  });
+}
+
+describe("GET /api/project-meta — the real GitHub envelope", () => {
+  it("serves the captured repo facts verbatim", async () => {
+    mockGitHubFixtures();
+
+    const res = await GET(makeRequest(`?repo=${REPO}`));
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.stars).toBe(REPO_FIXTURE.stargazers_count);
+    expect(body.language).toBe(REPO_FIXTURE.language);
+    expect(body.homepage).toBe(REPO_FIXTURE.homepage);
+    expect(body.createdAt).toBe(REPO_FIXTURE.created_at);
+    expect(body.pushedAt).toBe(REPO_FIXTURE.pushed_at);
+  });
+
+  it("derives the timeline from the captured dates", async () => {
+    mockGitHubFixtures();
+
+    const res = await GET(makeRequest(`?repo=${REPO}`));
+
+    const body = (await res.json()) as { timeline: { label: string; period: string }[] };
+    // The captured repo was created in July 2026 and last pushed in
+    // October 2026 — the real months, derived from the real timestamps.
+    expect(body.timeline).toEqual([
+      { label: "Created", period: "2026-07" },
+      { label: "Last push", period: "2026-10" },
+    ]);
+  });
+
+  it("sanitizes the captured README into real markup", async () => {
+    mockGitHubFixtures();
+
+    const res = await GET(makeRequest(`?repo=${REPO}`));
+
+    const body = (await res.json()) as { readmeHtml: string; degraded: boolean };
+    expect(body.degraded).toBe(false);
+    // The captured body is GitHub's rendered README (a <div id="readme">
+    // wrapper around an <article>); the heading survives sanitization.
+    expect(body.readmeHtml).toContain("<h1");
+    expect(body.readmeHtml).toContain("DevOS Portfolio");
+    // …but nothing executable or restyling survives it.
+    for (const tag of ["script", "style", "link", "base", "meta"]) {
+      expect(body.readmeHtml, tag).not.toMatch(new RegExp(`<${tag}\\b`, "i"));
+    }
+    expect(body.readmeHtml).not.toMatch(/\bonerror\s*=/i);
+    // The sanitizer rewrote the anchors' rel="nofollow" into the forced
+    // target/rel pair — proof the raw body was sanitized, not echoed.
+    expect(body.readmeHtml).not.toContain("nofollow");
+    expect(body.readmeHtml).toContain('rel="noopener noreferrer"');
+  });
+
+  it("degrades to a two-row timeline on the captured no-release answer", async () => {
+    mockGitHubFixtures();
+
+    const res = await GET(makeRequest(`?repo=${REPO}`));
+
+    const body = (await res.json()) as { timeline: { label: string }[] };
+    // The captured /releases/latest answer is GitHub's 404 for a repo with
+    // no release — the timeline drops the release row.
+    expect(RELEASE_FIXTURE).toEqual({ notFound: true });
+    expect(body.timeline.map((row) => row.label)).toEqual(["Created", "Last push"]);
   });
 });

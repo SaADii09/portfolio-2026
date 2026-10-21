@@ -11,3 +11,5 @@ pnpm-lock.yaml
 bun.lockb
 .fallow/
 .superpowers/
+# Frozen upstream evidence (F8) — byte-exact GitHub bodies, never reformatted.
+src/test/fixtures/
