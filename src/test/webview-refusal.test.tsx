@@ -168,7 +168,7 @@ describe("WebView fallback wiring", () => {
     });
     restoreDocument();
 
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
   });
 
@@ -184,7 +184,7 @@ describe("WebView fallback wiring", () => {
     });
     restoreDocument();
 
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
   });
 
@@ -222,7 +222,7 @@ describe("WebView fallback wiring", () => {
     });
     restoreDocument();
 
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
   });
 
@@ -241,7 +241,7 @@ describe("WebView fallback wiring", () => {
       `/api/embed-check?url=${encodeURIComponent(GITHUB)}`,
       expect.objectContaining({ signal: expect.anything() }),
     );
-    expect(screen.getByText(/can't be embedded/i)).toBeDefined();
+    expect(screen.getByText(/blocks embedding/i)).toBeDefined();
     const shot = document.querySelector<HTMLImageElement>("img[src*='/api/screenshot']");
     expect(shot).not.toBeNull();
     expect(shot?.getAttribute("src")).toBe(`/api/screenshot?url=${encodeURIComponent(GITHUB)}`);
@@ -259,7 +259,7 @@ describe("WebView fallback wiring", () => {
     restoreDocument();
 
     expect(fetchMock).toHaveBeenCalled();
-    expect(screen.getByText(/can't be embedded/i)).toBeDefined();
+    expect(screen.getByText(/blocks embedding/i)).toBeDefined();
     expect(document.querySelector("img[src*='/api/screenshot']")).not.toBeNull();
     expect(screen.queryByTitle("Website preview")).toBeNull();
   });
@@ -275,7 +275,7 @@ describe("WebView fallback wiring", () => {
     await settle();
     restoreDocument();
 
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
   });
 
@@ -288,7 +288,7 @@ describe("WebView fallback wiring", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.getByTitle("Website preview")).toBeDefined();
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     // The frame renders the real site — no overlay may cover it while the
     // verdict flies.
     expect(screen.queryByText(/loading/i)).toBeNull();
@@ -313,7 +313,7 @@ describe("WebView fallback wiring", () => {
     // The deadline hit DURING the flight: no second probe, no refusal.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.getByTitle("Website preview")).toBeDefined();
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
 
     resolveVerdict();
     await settle();
@@ -363,7 +363,7 @@ describe("WebView fallback wiring", () => {
     await settle();
     restoreDocument();
 
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
   });
 
@@ -377,7 +377,7 @@ describe("WebView fallback wiring", () => {
     await settle();
     restoreDocument();
 
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
   });
 
@@ -411,13 +411,13 @@ describe("WebView fallback wiring", () => {
       await Promise.resolve();
     });
     restoreDocument();
-    expect(screen.getByText(/can't be embedded/i)).toBeDefined();
+    expect(screen.getByText(/blocks embedding/i)).toBeDefined();
 
     act(() => {
       screen.getByRole("button", { name: /retry/i }).click();
     });
 
-    expect(screen.queryByText(/can't be embedded/i)).toBeNull();
+    expect(screen.queryByText(/blocks embedding/i)).toBeNull();
     expect(screen.getByTitle("Website preview")).toBeDefined();
   });
 });
