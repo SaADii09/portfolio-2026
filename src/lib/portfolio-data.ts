@@ -353,9 +353,21 @@ export const PROJECTS: ProjectEntry[] = [
   },
 ];
 
+/**
+ * The projects indexed by slug — built ONCE at module load so a lookup is a
+ * hash hit instead of a linear scan (the browser resolves a slug per tab
+ * activation and per side-panel render).
+ *
+ * Slugs are unique (pinned by the data contract), so the index holds exactly
+ * one entry per project.
+ */
+const PROJECTS_BY_SLUG: ReadonlyMap<string, ProjectEntry> = new Map(
+  PROJECTS.map((project) => [project.slug, project] as const),
+);
+
 /** Look up a project by its URL-safe slug. */
 export function projectBySlug(slug: string): ProjectEntry | undefined {
-  return PROJECTS.find((p) => p.slug === slug);
+  return PROJECTS_BY_SLUG.get(slug);
 }
 
 // ─── Education ───────────────────────────────────────────────────────────────
