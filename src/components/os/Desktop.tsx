@@ -50,8 +50,9 @@ const APP_RENDERERS: Record<string, (w: WindowInstance) => ReactNode> = {
  * The body of a window, per its component.
  *
  * The browser branch mounts the DevOS Browser bound to THIS window's id (the
- * browser slice state is keyed per window). The `projects` branch stays for
- * windows persisted by an older build — new ones are launched as the Browser.
+ * browser slice state is keyed per window). The `projects` branch renders the
+ * registry Projects window (real-web Task C3) — its project cards open
+ * browser tabs via `openBrowser(slug)`.
  */
 export function renderAppContent(w: WindowInstance) {
   const renderer = w.component === undefined ? undefined : APP_RENDERERS[w.component];

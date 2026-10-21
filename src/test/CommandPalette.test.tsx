@@ -120,16 +120,35 @@ describe("CommandPalette", () => {
     expect(wrapped[wrapped.length - 1]).toHaveAttribute("aria-selected", "true");
   });
 
-  it("Enter on the second item opens the Browser (the Projects launcher)", () => {
+  it("Enter on the second item opens the Projects window (the registry path)", () => {
     const input = openPaletteInDom();
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    // The palette's "Open Projects" row funnels through `openApp`, which now
-    // routes into the DevOS Browser singleton.
-    expect(useStore.getState().windows.map((w) => w.title)).toContain("Browser");
-    expect(useStore.getState().isPaletteOpen).toBe(false);
+    // The palette's "Open Projects" row funnels through `openApp`, which opens
+    // the registry Projects window again — its project cards open browser tabs.
+    const state = useStore.getState();
+    const projects = state.windows[0];
+    expect(projects?.title).toBe("Projects");
+    expect(projects?.type).toBe("app");
+    expect(state.isPaletteOpen).toBe(false);
+  });
+
+  it("Enter on the third item opens the Browser singleton (browser follows projects)", () => {
+    const input = openPaletteInDom();
+
+    // APP_DEFS order: app rows render About → Projects → Browser → …, so two
+    // ArrowDowns land on "Open Browser" (the stand-alone browser AppId).
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const state = useStore.getState();
+    const browser = state.windows[0];
+    expect(browser?.title).toBe("Browser");
+    expect(browser?.type).toBe("browser");
+    expect(state.isPaletteOpen).toBe(false);
   });
 
   it("Enter is a no-op when there is no selection", () => {

@@ -107,7 +107,10 @@ describe("executeCommand — byte-for-byte outputs", () => {
     ["neofetch", [NEOFETCH_TEXT]],
     ["banner", [BANNER_TEXT]],
     ["sudo", ["⛔ Nice try. You don't have sudo access in a fake terminal."]],
-    ["ls", ["about  projects  resume  terminal  contact  control-panel"]],
+    // `ls` derives from APP_DEFS (app ids joined by two spaces) — the order moved
+    // from the historical literal ("resume, terminal, contact" before
+    // "control-panel") to registry order, and "browser" joined the list.
+    ["ls", ["about  projects  browser  control-panel  resume  terminal  contact"]],
   ];
 
   it.each(cases)("%s", (input, expected) => {
@@ -189,6 +192,12 @@ describe("executeCommand — OS bridge commands", () => {
       expect(ctx.openApp).toHaveBeenCalledWith("projects");
     });
 
+    it("opens the stand-alone Browser by id", () => {
+      const ctx = createCtx();
+      expect(executeCommand("open browser", ctx).lines).toEqual(["Opening Browser"]);
+      expect(ctx.openApp).toHaveBeenCalledWith("browser");
+    });
+
     it("resolves aliases: settings → control-panel, cv → resume", () => {
       const settingsCtx = createCtx();
       expect(executeCommand("open settings", settingsCtx).lines).toEqual(["Opening Control Panel"]);
@@ -208,7 +217,7 @@ describe("executeCommand — OS bridge commands", () => {
     it("prints the unknown-app hint and touches nothing", () => {
       const ctx = createCtx();
       expect(executeCommand("open nope", ctx).lines).toEqual([
-        "Unknown app: nope. Try: about, projects, terminal, contact, resume, control-panel",
+        "Unknown app: nope. Try: about, projects, browser, control-panel, resume, terminal, contact",
       ]);
       expect(ctx.openApp).not.toHaveBeenCalled();
     });
@@ -272,6 +281,7 @@ describe("executeCommand — OS bridge commands", () => {
       expect(lines).toEqual([
         "about — About Me",
         "projects — Projects",
+        "browser — Browser",
         "control-panel — Control Panel",
         "resume — Resume",
         "terminal — Terminal",
@@ -324,17 +334,17 @@ describe("TerminalApp wiring (jsdom)", () => {
 
   it("open focuses instead of duplicating, and music next reports fresh state", () => {
     render(createElement(TerminalApp));
-    // `open projects` funnels through `openApp`, which routes into the
-    // DevOS Browser singleton — the window it opens is the browser window.
+    // `open browser` funnels through `openApp`, whose `browser` row is the
+    // DevOS Browser singleton launcher — the window it opens is the browser.
     const launchedWindows = () => useStore.getState().windows.filter((w) => w.type === "browser");
 
-    submitCommand("open projects");
-    expect(screen.getByText("Opening Projects")).toBeInTheDocument();
+    submitCommand("open browser");
+    expect(screen.getByText("Opening Browser")).toBeInTheDocument();
     expect(launchedWindows()).toHaveLength(1);
 
-    submitCommand("open projects");
+    submitCommand("open browser");
     expect(launchedWindows()).toHaveLength(1);
-    expect(screen.getAllByText("Opening Projects")).toHaveLength(2);
+    expect(screen.getAllByText("Opening Browser")).toHaveLength(2);
 
     useStore.setState({ currentTrack: useStore.getState().queue[0] });
     submitCommand("music next");

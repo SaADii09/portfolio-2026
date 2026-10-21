@@ -16,6 +16,7 @@ import type { WindowType } from "@/types/window";
 export const APP_ICONS: Record<AppId, LucideIcon> = {
   about: User,
   projects: FolderKanban,
+  browser: Globe,
   "control-panel": Settings,
   resume: FileText,
   terminal: Terminal,
@@ -23,27 +24,27 @@ export const APP_ICONS: Record<AppId, LucideIcon> = {
 };
 
 /**
- * Icon key per window TYPE. The browser window is not an AppId (it has no
- * desktop icon of its own — the Projects launcher opens it), so the dock and
- * the taskbar resolve it from its type.
+ * Icon key per window TYPE. The browser window's globe also comes from this
+ * map: dock and taskbar resolve a window by its type first, so a
+ * `type:"browser"` window always reads its type glyph even though the
+ * component key would now resolve the same icon via `APP_ICONS`.
  */
 const WINDOW_TYPE_ICON_KEYS: Partial<Record<WindowType, string>> = {
   browser: "browser",
 };
 
 /**
- * Every icon a window can resolve to, by key: the app icons, the browser
- * window's globe, and the monitor fallback for anything unknown.
+ * Every icon a window can resolve to, by key: the app icons (including the
+ * browser globe) and the monitor fallback for anything unknown.
  */
 export const WINDOW_ICONS: Record<string, LucideIcon> = {
   ...APP_ICONS,
-  browser: Globe,
   monitor: Monitor,
 };
 
 /**
- * The icon key for a window: its type first (the browser window is a type, not
- * an app), then its app component, then the monitor fallback.
+ * The icon key for a window: its type first (the browser window's dedicated
+ * type glyph), then its app component, then the monitor fallback.
  */
 export function windowIconKeyFor(w: { type?: WindowType; component?: string }): string {
   return typeIconKey(w.type) ?? appIconKey(w.component) ?? "monitor";

@@ -33,6 +33,13 @@ describe("os-actions", () => {
       isPlaying: false,
       volume: 0.7,
       currentTrack: { id: "t1", title: "Neon Lights", artist: "Synthwave Dreams" },
+      // Browser identity state — the browser singleton is now launchable from
+      // this suite, so isolate its per-window records too.
+      browserWindows: {},
+      pendingSlug: null,
+      readmeLru: {},
+      metaLru: {},
+      sidePanelOpen: false,
     });
   });
 
@@ -58,6 +65,20 @@ describe("os-actions", () => {
       expect(state.activeWindowId).toBe(projectsId);
       const projects = state.windows.find((w) => w.id === projectsId)!;
       expect(projects.zIndex).toBe(Math.max(...state.windows.map((w) => w.zIndex)));
+    });
+
+    it("opens a SECOND window for projects even when a browser already exists", () => {
+      // Identity split (real-web Task C3): `browser` and `projects` are
+      // separate app ids with separate windows — the browser singleton's
+      // relaunch dedupe never catches a Projects launch.
+      openApp("browser");
+      openApp("projects");
+      openApp("projects");
+
+      const state = useStore.getState();
+      expect(state.windows).toHaveLength(2);
+      expect(state.windows.filter((w) => w.type === "browser")).toHaveLength(1);
+      expect(state.windows.find((w) => w.component === "projects")?.type).toBe("app");
     });
 
     it("restores a minimized window", () => {

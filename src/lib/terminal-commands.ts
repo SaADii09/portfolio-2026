@@ -56,7 +56,8 @@ const HELP = `Available commands:
 const MUSIC_ACTIONS = ["play", "pause", "toggle", "next", "prev"] as const;
 type MusicAction = (typeof MUSIC_ACTIONS)[number];
 
-const UNKNOWN_APP_HINT = "about, projects, terminal, contact, resume, control-panel";
+/** Derived from the registry, so a new AppId is reachable from `open` and `ls` for free. */
+const UNKNOWN_APP_HINT = APP_DEFS.map((a) => a.id).join(", ");
 
 /** `♪ <title> — <artist> [playing]` (or `[paused]`) — shared by the status and control paths. */
 function formatTrack(state: { title: string; artist: string; isPlaying: boolean }): string {
@@ -143,7 +144,7 @@ const COMMANDS = new Map<string, CommandHandler>([
   ["neofetch", (_args, ctx) => ({ lines: [neofetchText(ctx.theme)] })],
   ["banner", fixedOutput([BANNER])],
   ["sudo", fixedOutput(["⛔ Nice try. You don't have sudo access in a fake terminal."])],
-  ["ls", fixedOutput(["about  projects  resume  terminal  contact  control-panel"])],
+  ["ls", fixedOutput([APP_DEFS.map((a) => a.id).join("  ")])],
   ["open", handleOpen],
   ["music", handleMusic],
   ["apps", fixedOutput(APP_DEFS.map((a) => `${a.id} — ${a.title}`))],

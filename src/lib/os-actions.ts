@@ -32,13 +32,17 @@ function openRegistryApp(id: AppId): void {
  * cannot drift: adding an id to `AppId` is a COMPILE error until its launcher
  * is chosen here (no new app can silently skip the browser row).
  *
- * "projects" is the DevOS Browser: the plain launcher opens the singleton
- * Browser window. The launch WITH a slug is `openBrowser(slug)` (the project
- * cards) — never a second browser window.
+ * Identity split (real-web Task C3): the Browser is its own AppId whose row is
+ * the singleton launcher `openBrowser()` — NEVER `openRegistryApp`, which
+ * would open a `type:"app"` window and break the close-path cleanup, the
+ * relaunch dedupe, and the globe glyph (all keyed on `type:"browser"`).
+ * `projects` is back on the registry path: the Projects window, whose project
+ * cards open browser tabs via `openBrowser(slug)`.
  */
 const APP_LAUNCHERS: Record<AppId, (id: AppId) => void> = {
   about: openRegistryApp,
-  projects: () => openBrowser(),
+  projects: openRegistryApp,
+  browser: () => openBrowser(),
   "control-panel": openRegistryApp,
   resume: openRegistryApp,
   terminal: openRegistryApp,
@@ -72,7 +76,6 @@ export function openApp(id: AppId): void {
  *   land in state straight away instead of waiting for a consume that may
  *   never re-run.
  */
-// Note (Task 11): `openApp("projects")` delegates here — see APP_LAUNCHERS.
 export function openBrowser(projectSlug?: string): void {
   const store = useStore.getState();
   const existing = store.windows.find((w) => w.type === "browser");

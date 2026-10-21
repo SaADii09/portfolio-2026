@@ -2,7 +2,8 @@ import type { ThemeName } from "@/types/theme";
 import type { WidgetType } from "@/types/widget";
 
 /** Canonical app ids — the union the registry, launchers, and terminal all agree on. */
-export type AppId = "about" | "projects" | "control-panel" | "resume" | "terminal" | "contact";
+export type AppId =
+  "about" | "projects" | "browser" | "control-panel" | "resume" | "terminal" | "contact";
 
 export interface AppDef {
   id: AppId;
@@ -28,6 +29,14 @@ export const APP_DEFS: AppDef[] = [
     title: "Projects",
     component: "projects",
     keywords: ["work", "portfolio", "apps"],
+  },
+  {
+    // Appended directly after "projects" — the CommandPalette row-order pin
+    // (desktop-browser + e2e) reads the defs sequence.
+    id: "browser",
+    title: "Browser",
+    component: "browser",
+    keywords: ["browser", "web", "internet", "surf"],
   },
   {
     id: "control-panel",
