@@ -228,3 +228,78 @@ describe("GET route", () => {
     expect(text).not.toContain("github.com");
   });
 });
+
+/**
+ * URL-aware Microlink mock for the eviction pin: the Microlink API answers
+ * with a fresh screenshot URL, the image URL answers with the PNG bytes.
+ *
+ * The image answer must carry a FRESH body per call: the route re-reads the
+ * body through `new Response(image.body)`, and a ReadableStream can be read
+ * only once — a shared body instance fails on the SECOND capture (the route
+ * then answers 502, because the unusable body throws inside the capture).
+ */
+function mockMicrolinkFlow() {
+  let shot = 0;
+  fetchMock.mockImplementation((url: string) => {
+    if (url.startsWith("https://api.microlink.io/")) {
+      shot += 1;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: { screenshot: { url: `https://cdn.microlink.io/shot-${shot}.png` } },
+        }),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      body: new Response(new Uint8Array(TINY_PNG)).body,
+      headers: {
+        get: (name: string) => (name.toLowerCase() === "content-type" ? "image/png" : null),
+      },
+    });
+  });
+}
+
+describe("GET /api/screenshot — the cache eviction order", () => {
+  it("evicts the OLDEST insertion at the cap, not the most recent", async () => {
+    mockMicrolinkFlow();
+    const paths = Array.from(
+      { length: 33 },
+      (_, index) => `https://github.com/SaADii09/repo-${index}`,
+    );
+
+    for (const path of paths) {
+      const res = await GET(makeRequest(`?url=${encodeURIComponent(path)}`));
+      expect(res.status).toBe(200);
+    }
+
+    // 33 captures × 2 upstream fetches each (the API call + the bytes).
+    expect(fetchMock).toHaveBeenCalledTimes(66);
+
+    // The FIRST cached path was evicted (insertion-order eviction at 32) —
+    // it must be captured again.
+    const first = await GET(makeRequest(`?url=${encodeURIComponent(paths[0]!)}`));
+    expect(first.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(68);
+
+    // The LAST cached path is still cached — no new capture.
+    const last = await GET(makeRequest(`?url=${encodeURIComponent(paths[32]!)}`));
+    expect(last.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(68);
+  });
+
+  it("starts from a clean slate after a cache reset", async () => {
+    mockMicrolinkFlow();
+    const path = "https://github.com/SaADii09/repo-0";
+
+    await GET(makeRequest(`?url=${encodeURIComponent(path)}`));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    resetScreenshotCache();
+
+    await GET(makeRequest(`?url=${encodeURIComponent(path)}`));
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+});

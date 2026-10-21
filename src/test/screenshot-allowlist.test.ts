@@ -27,6 +27,24 @@ describe("SCREENSHOT_ALLOWED_ORIGINS", () => {
       expect(SCREENSHOT_ALLOWED_ORIGINS.has(new URL(project.demoUrl).origin)).toBe(true);
     }
   });
+
+  it("contains the curated tile origins, pinned literally", () => {
+    // The literal tile origins — not a re-derivation from the same registry
+    // the module reads — so a tile change cannot silently drop its capture
+    // eligibility.
+    for (const origin of [
+      "https://www.google.com",
+      "https://www.youtube.com",
+      "https://github.com",
+      "https://en.wikipedia.org",
+      "https://portfolio-2026-sp9k.vercel.app",
+      "https://auth-kit-fe.vercel.app",
+      "https://venuze-dashboard.vercel.app",
+      "https://mega-blog-taupe.vercel.app",
+    ]) {
+      expect(SCREENSHOT_ALLOWED_ORIGINS.has(origin), origin).toBe(true);
+    }
+  });
 });
 
 describe("isScreenshotAllowed", () => {
@@ -92,5 +110,18 @@ describe("allow-list module load", () => {
     expect(allowlist.isScreenshotAllowed("https://en.wikipedia.org/wiki/DevOS")).toBe(true);
     // …the malformed one was skipped, not fatal.
     expect(allowlist.isScreenshotAllowed("https://not a url")).toBe(false);
+    // The skip is REAL: the malformed tile contributed no origin at all —
+    // the set holds exactly the project's own origins + the one well-formed
+    // tile + github.com.
+    const expected = new Set(
+      [
+        ...PROJECTS.flatMap((project) => [project.repoUrl, project.demoUrl ?? ""]),
+        "https://en.wikipedia.org",
+        "https://github.com",
+      ]
+        .filter((url) => url !== "")
+        .map((url) => new URL(url).origin),
+    );
+    expect([...allowlist.SCREENSHOT_ALLOWED_ORIGINS].sort()).toEqual([...expected].sort());
   });
 });

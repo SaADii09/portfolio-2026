@@ -1,29 +1,32 @@
 import { isScreenshotAllowed } from "@/lib/screenshot-allowlist";
 import sharp from "sharp";
 
-// The two-clause gate lives in src/lib/screenshot-allowlist.ts (github.com
-// stays eligible; demo and future tile origins feed it); the route keeps its
-// historical export name so existing callers and tests stay stable.
+// The two-clause gate lives in src/lib/screenshot-allowlist.ts: https plus
+// an origin from the allow set (the project repo/demo origins, the curated
+// tile origins and github.com — github.com stays eligible, Review Focus 5).
+// The route keeps its historical export name so existing callers and tests
+// stay stable.
 export function isAllowedUrl(url: string): boolean {
   return isScreenshotAllowed(url);
 }
 
 /**
- * In-memory TTL cache for screenshot bytes. Microlink's free tier is tightly
- * rate-limited and each capture is slow + heavy — the fallback panel needs a
- * small :card:-sized view, not a fresh full-res capture per visitor. Entries
- * evict lazily (leader sweep on insert) to keep the map bounded.
+ * In-memory TTL cache for screenshot bytes (cap 32, 6h TTL). Microlink's
+ * free tier is tightly rate-limited and each capture is slow + heavy — the
+ * fallback panel needs a small card-sized view, not a fresh full-res capture
+ * per visitor. Entries evict on insert: expired first, then the OLDEST by
+ * insertion order, so the map stays bounded.
  */
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — screenshots are rarely stale
 const CACHE_MAX = 32;
 
-/** Microlink serve-size floor card captures; a preview panel needs less. */
+/** The server-side resize bounds — the capture is fitted INSIDE 1280×720. */
 const SLICE_WIDTH = 1280;
 const SLICE_HEIGHT = 720;
 const SLICE_QUALITY = 70;
 const screenshotCache = new Map<string, { bytes: ArrayBuffer; contentType: string; at: number }>();
 
-/** Expired entries go first (value sweep, same pass as before). */
+/** Expired entries go first (value sweep); the oldest follows. */
 function evictExpiredEntries(): void {
   for (const [key, value] of screenshotCache) {
     if (Date.now() - value.at > CACHE_TTL_MS) screenshotCache.delete(key);
