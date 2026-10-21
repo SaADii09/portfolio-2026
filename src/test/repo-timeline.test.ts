@@ -6,6 +6,8 @@ import { deriveTimeline } from "@/lib/repo-timeline";
 //   deriveTimeline(createdAt, pushedAt, latestReleaseTag?) → rows labeled
 //   Created → [Latest release vX.Y] → Last push, periods as "YYYY-MM";
 //   unparseable dates collapse to a single {"Created","unknown"} row, never throws.
+// The 4th argument (the release's publish date) came with F1: the release
+// row carries the release's real month instead of a permanent "unknown".
 
 describe("deriveTimeline", () => {
   it("returns created + last-push rows when no release tag exists", () => {
@@ -30,6 +32,48 @@ describe("deriveTimeline", () => {
     expect(deriveTimeline("2026-07-14T10:00:00Z", "2026-10-20T12:00:00Z", "v1.2.0")).toEqual([
       { label: "Created", period: "2026-07" },
       { label: "Latest release v1.2.0", period: "unknown" },
+      { label: "Last push", period: "2026-10" },
+    ]);
+  });
+
+  it("uses the release's publish month when the release carries a date", () => {
+    // F1: GitHub's /releases/latest sends `published_at` — the release row
+    // carries the real month instead of a permanent "unknown".
+    expect(
+      deriveTimeline(
+        "2026-07-14T10:00:00Z",
+        "2026-10-20T12:00:00Z",
+        "v1.2.0",
+        "2026-10-05T09:21:01Z",
+      ),
+    ).toEqual([
+      { label: "Created", period: "2026-07" },
+      { label: "Latest release v1.2.0", period: "2026-10" },
+      { label: "Last push", period: "2026-10" },
+    ]);
+  });
+
+  it("keeps the release period unknown when the publish date is missing or garbage", () => {
+    expect(deriveTimeline("2026-07-14T10:00:00Z", "2026-10-20T12:00:00Z", "v1.2.0", null)).toEqual([
+      { label: "Created", period: "2026-07" },
+      { label: "Latest release v1.2.0", period: "unknown" },
+      { label: "Last push", period: "2026-10" },
+    ]);
+    expect(
+      deriveTimeline("2026-07-14T10:00:00Z", "2026-10-20T12:00:00Z", "v1.2.0", "not-a-date"),
+    ).toEqual([
+      { label: "Created", period: "2026-07" },
+      { label: "Latest release v1.2.0", period: "unknown" },
+      { label: "Last push", period: "2026-10" },
+    ]);
+  });
+
+  it("ignores a publish date that arrives without a release tag", () => {
+    // No tag → no release row at all; the date alone never invents one.
+    expect(
+      deriveTimeline("2026-07-14T10:00:00Z", "2026-10-20T12:00:00Z", null, "2026-10-05T09:21:01Z"),
+    ).toEqual([
+      { label: "Created", period: "2026-07" },
       { label: "Last push", period: "2026-10" },
     ]);
   });

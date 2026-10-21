@@ -4,9 +4,12 @@ import { deriveTimeline } from "@/lib/repo-timeline";
 
 /**
  * Project metadata served to the browser side panel (Task 10) and cached in
- * the browserSlice meta LRU (Task 6). `readmeHtml` is sanitized BEFORE it is
- * cached or returned; `degraded` marks a README GitHub refused to serve
- * (403/429 rate limits) — the panel keeps the repo facts either way.
+ * the browserSlice meta LRU (Task 6) as well as in this route's own
+ * in-memory cache. `readmeHtml` is sanitized BEFORE it is cached or
+ * returned; `degraded` marks a README GitHub refused to serve (403/429 rate
+ * limits) — the panel keeps the repo facts either way. The `timeline` rows
+ * are derived from the repo's created/pushed dates and the latest release's
+ * tag + publish date.
  */
 export interface ProjectMeta {
   slug: string;
@@ -50,12 +53,24 @@ function projectSlugFor(repo: string): string {
 }
 
 /**
- * In-memory TTL cache for GitHub project metadata (6h). Pattern mirrors the
- * screenshot route: bounded Map, expired-first + oldest eviction on insert.
+ * In-memory TTL cache for GitHub project metadata. A FULL answer lives 6h;
+ * a DEGRADED one (GitHub refused the README but the repo facts are good)
+ * lives 60s — a degraded answer means "try again soon", the same rationale
+ * as the failure cache. Pattern mirrors the screenshot route: bounded Map,
+ * expired-first + oldest eviction on insert.
  */
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — repo facts rarely move
+const DEGRADED_TTL_MS = 60 * 1000; // 60s — a refused README must recover fast
 const CACHE_MAX = 16;
-const metaCache = new Map<string, { meta: ProjectMeta; at: number }>();
+
+/** A cache entry with its own TTL — the degraded and the full answer differ. */
+interface CacheEntry {
+  meta: ProjectMeta;
+  at: number;
+  ttlMs: number;
+}
+
+const metaCache = new Map<string, CacheEntry>();
 
 /**
  * Negative cache for FAILED upstream reads (60s). Without it a broken
@@ -65,11 +80,12 @@ const metaCache = new Map<string, { meta: ProjectMeta; at: number }>();
  * for that long).
  */
 const FAILURE_TTL_MS = 60 * 1000; // 60s — a failure must recover fast
-const failureCache = new Map<string, { at: number }>();
+const failureCache = new Map<string, { at: number; ttlMs: number }>();
 
 function metaCacheGet(repo: string): ProjectMeta | null {
   const cached = metaCache.get(repo);
-  if (cached === undefined || Date.now() - cached.at >= CACHE_TTL_MS) return null;
+  if (cached === undefined) return null;
+  if (Date.now() - cached.at >= cached.ttlMs) return null;
   return cached.meta;
 }
 
@@ -77,34 +93,35 @@ function metaCacheGet(repo: string): ProjectMeta | null {
 function failureCached(repo: string): boolean {
   const cached = failureCache.get(repo);
   if (cached === undefined) return false;
-  return Date.now() - cached.at < FAILURE_TTL_MS;
+  return Date.now() - cached.at < cached.ttlMs;
 }
 
 function failureCachePut(repo: string): void {
   // Same bounding as the success cache: drop expired entries first, then
   // oldest (insertion order) until the new entry fits under the cap.
-  evictExpiredEntries(failureCache, FAILURE_TTL_MS);
+  evictExpiredEntries(failureCache);
   evictOldestEntries(failureCache, CACHE_MAX);
-  failureCache.set(repo, { at: Date.now() });
+  failureCache.set(repo, { at: Date.now(), ttlMs: FAILURE_TTL_MS });
 }
 
 function metaCachePut(repo: string, meta: ProjectMeta): void {
   // Bound the map: drop expired entries first, then oldest (insertion order)
   // until the new entry fits under the cap.
-  evictExpiredEntries(metaCache, CACHE_TTL_MS);
+  evictExpiredEntries(metaCache);
   evictOldestEntries(metaCache, CACHE_MAX);
-  metaCache.set(repo, { meta, at: Date.now() });
+  const ttlMs = meta.degraded ? DEGRADED_TTL_MS : CACHE_TTL_MS;
+  metaCache.set(repo, { meta, at: Date.now(), ttlMs });
 }
 
-/** Drop entries whose `at` stamp is older than the TTL. */
-function evictExpiredEntries(cache: Map<string, { at: number }>, ttlMs: number): void {
+/** Drop entries whose `at` stamp is older than their own TTL. */
+function evictExpiredEntries<V extends { at: number; ttlMs: number }>(cache: Map<string, V>): void {
   for (const [key, value] of cache) {
-    if (Date.now() - value.at >= ttlMs) cache.delete(key);
+    if (Date.now() - value.at >= value.ttlMs) cache.delete(key);
   }
 }
 
 /** Drop the oldest entries (insertion order) until the map fits under the cap. */
-function evictOldestEntries(cache: Map<string, { at: number }>, max: number): void {
+function evictOldestEntries<V>(cache: Map<string, V>, max: number): void {
   while (cache.size >= max) {
     const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
@@ -172,18 +189,27 @@ function repoFactsOf(data: unknown): RepoFacts | null {
   };
 }
 
+/** The latest release's tag and publish date. */
+interface ReleaseFacts {
+  /** The release tag ("v1.2.0"), or null when there is no release. */
+  tag: string | null;
+  /** The release's publish timestamp, or null when GitHub sent none. */
+  publishedAt: string | null;
+}
+
 /**
- * `tag_name` of /releases/latest, or null when it doesn't exist (404/204 —
- * most repos have none) or the fetch/parse fails. The release lookup is
- * explicitly allowed to die without degrading the whole response.
+ * The latest release's tag AND publish date, or nulls when it doesn't exist
+ * (404/204 — most repos have none) or the fetch/parse fails. The release
+ * lookup is explicitly allowed to die without degrading the whole response.
  */
-async function releaseTagOf(response: Response | null): Promise<string | null> {
-  if (response === null || !response.ok) return null;
+async function releaseOf(response: Response | null): Promise<ReleaseFacts> {
+  if (response === null || !response.ok) return { tag: null, publishedAt: null };
   try {
     const data: unknown = await response.json();
-    return asString(objectOfUnknown(data).tag_name);
+    const meta = objectOfUnknown(data);
+    return { tag: asString(meta.tag_name), publishedAt: asString(meta.published_at) };
   } catch {
-    return null;
+    return { tag: null, publishedAt: null };
   }
 }
 
@@ -235,11 +261,12 @@ async function fetchProjectMeta(repo: string): Promise<ProjectMeta | null> {
   const upstream = await fetchUpstream(repo);
   if (upstream === null) return null;
   const { facts, readmeHtml, releaseRes } = upstream;
+  const release = await releaseOf(releaseRes);
   const meta: ProjectMeta = {
     slug: projectSlugFor(repo),
     readmeHtml,
     degraded: readmeHtml === null,
-    timeline: deriveTimeline(facts.createdAt, facts.pushedAt, await releaseTagOf(releaseRes)),
+    timeline: deriveTimeline(facts.createdAt, facts.pushedAt, release.tag, release.publishedAt),
     language: facts.language,
     stars: facts.stars,
     homepage: facts.homepage,
@@ -253,7 +280,10 @@ async function fetchProjectMeta(repo: string): Promise<ProjectMeta | null> {
 /**
  * Meta for a repo, honouring the negative cache: a recent failure is served
  * from it (the upstream is not re-hit), and a fresh failure is cached so the
- * next request inside the short TTL costs no upstream call.
+ * next request inside the short TTL costs no upstream call. A DEGRADED
+ * answer is not a failure — it is cached in the success cache under the
+ * short TTL, so a refused README is retried soon instead of staying
+ * degraded for the full 6h.
  */
 async function metaFor(repo: string): Promise<ProjectMeta | null> {
   if (failureCached(repo)) return null;

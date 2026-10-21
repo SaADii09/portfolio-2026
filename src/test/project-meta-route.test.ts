@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GET, resetProjectMetaCache } from "@/app/api/project-meta/route";
+import { ALLOWED_REPOS, GET, resetProjectMetaCache } from "@/app/api/project-meta/route";
 
 // Interface pinned by Task 4 (plan §Task 4) and consumed by Task 6 (metaLru)
 // and Task 10 (side panel):
@@ -239,12 +239,10 @@ describe("GET /api/project-meta", () => {
   });
 
   it("maps every PROJECTS repo into the allow set", async () => {
-    for (const repo of [
-      "SaADii09/portfolio-2026",
-      "SaADii09/Auth-kit-FE",
-      "SaADii09/venuze-dashboard",
-      "SaADii09/MCP-OpsBridge",
-    ]) {
+    // The allow set comes from the route itself (PROJECTS[].repoUrl) — the
+    // test must not re-declare the list, or it would pin a copy instead.
+    expect(ALLOWED_REPOS.size).toBeGreaterThan(0);
+    for (const repo of ALLOWED_REPOS) {
       fetchMock.mockReset();
       fetchMock
         .mockResolvedValueOnce({ ok: true, status: 200, json: async () => REPO_FACTS_JSON })
@@ -363,6 +361,14 @@ const RELEASE_FIXTURE = JSON.parse(
   readFileSync(join(FIXTURE_DIR, "release-portfolio-2026.json"), "utf8"),
 ) as Record<string, unknown>;
 
+/** Knobs for the fixture-serving mock. */
+interface FixtureMockOptions {
+  /** The README answer's status (200 = the captured HTML, 403 = refused). */
+  readmeStatus?: number;
+  /** The release body; omitted = GitHub's 404 "no release" answer. */
+  release?: Record<string, unknown>;
+}
+
 /**
  * URL-aware upstream mock serving the three captured bodies.
  *
@@ -371,17 +377,32 @@ const RELEASE_FIXTURE = JSON.parse(
  * the order the route happens to issue its three parallel calls. Keying on
  * the request URL is order-independent and mirrors the real upstream.
  */
-function mockGitHubFixtures() {
+function mockGitHubFixtures(options: FixtureMockOptions = {}) {
+  const readmeStatus = options.readmeStatus ?? 200;
   fetchMock.mockImplementation((url: string) => {
     if (url.endsWith("/readme")) {
-      return Promise.resolve({ ok: true, status: 200, text: async () => README_FIXTURE });
+      return Promise.resolve({
+        ok: readmeStatus === 200,
+        status: readmeStatus,
+        text: async () => README_FIXTURE,
+      });
     }
     if (url.endsWith("/releases/latest")) {
-      return Promise.resolve({ ok: false, status: 404, json: async () => RELEASE_FIXTURE });
+      const release = options.release;
+      return Promise.resolve(
+        release === undefined
+          ? { ok: false, status: 404, json: async () => RELEASE_FIXTURE }
+          : { ok: true, status: 200, json: async () => release },
+      );
     }
     return Promise.resolve({ ok: true, status: 200, json: async () => REPO_FIXTURE });
   });
 }
+
+/** The captured release envelope of a repo that DOES publish releases. */
+const RELEASE_SAMPLE_FIXTURE = JSON.parse(
+  readFileSync(join(FIXTURE_DIR, "release-sample-commander.js.json"), "utf8"),
+) as Record<string, unknown>;
 
 describe("GET /api/project-meta — the real GitHub envelope", () => {
   it("serves the captured repo facts verbatim", async () => {
@@ -444,5 +465,70 @@ describe("GET /api/project-meta — the real GitHub envelope", () => {
     // no release — the timeline drops the release row.
     expect(RELEASE_FIXTURE).toEqual({ notFound: true });
     expect(body.timeline.map((row) => row.label)).toEqual(["Created", "Last push"]);
+  });
+
+  it("gives the release row the release's real publish month", async () => {
+    // The captured release envelope of a repo that DOES publish releases —
+    // GitHub sends `published_at` next to `tag_name` (F1).
+    mockGitHubFixtures({ release: RELEASE_SAMPLE_FIXTURE });
+
+    const res = await GET(makeRequest(`?repo=${REPO}`));
+
+    const body = (await res.json()) as { timeline: { label: string; period: string }[] };
+    expect(RELEASE_SAMPLE_FIXTURE.published_at).toBe("2026-05-29T09:21:01Z");
+    expect(body.timeline).toEqual([
+      { label: "Created", period: "2026-07" },
+      { label: "Latest release v15.0.0", period: "2026-05" },
+      { label: "Last push", period: "2026-10" },
+    ]);
+  });
+});
+
+describe("GET /api/project-meta — the degraded cache TTL", () => {
+  it("caches a degraded answer for a minute, not for the 6h success TTL", async () => {
+    vi.useFakeTimers();
+    try {
+      mockGitHubFixtures({ readmeStatus: 403 });
+
+      const first = await GET(makeRequest(`?repo=${REPO}`));
+      expect(first.status).toBe(200);
+      const firstBody = (await first.json()) as { degraded: boolean };
+      expect(firstBody.degraded).toBe(true);
+      const callsAfterFirst = fetchMock.mock.calls.length;
+      expect(callsAfterFirst).toBeGreaterThan(0);
+
+      // Inside the short TTL — the degraded answer is served from the cache
+      // and the upstream is not re-hit.
+      const second = await GET(makeRequest(`?repo=${REPO}`));
+      expect(second.status).toBe(200);
+      expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+
+      // Past the 60s TTL — the route refetches. A degraded answer means
+      // "try again soon", never "frozen for 6h".
+      vi.advanceTimersByTime(61_000);
+
+      const third = await GET(makeRequest(`?repo=${REPO}`));
+      expect(third.status).toBe(200);
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a full answer cached for the full 6h TTL", async () => {
+    vi.useFakeTimers();
+    try {
+      mockGitHubFixtures();
+
+      await GET(makeRequest(`?repo=${REPO}`));
+      const callsAfterFirst = fetchMock.mock.calls.length;
+
+      vi.advanceTimersByTime(6 * 60 * 60 * 1000 - 1_000);
+
+      await GET(makeRequest(`?repo=${REPO}`));
+      expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
