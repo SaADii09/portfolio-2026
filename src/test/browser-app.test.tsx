@@ -781,6 +781,24 @@ describe("BrowserApp — chrome-classic home + host-aware tabs (Wave 1.5 B2)", (
     expect(embedChecks).toHaveLength(0);
   });
 
+  it("a typed INSECURE url says so — it never accuses the site of blocking", () => {
+    // A non-https url gets no iframe (our own CSP `frame-src 'self' https:`
+    // would refuse it), but the site did not block anything — the panel must
+    // not tell the visitor that it did.
+    render(<BrowserApp windowId="w1" />);
+
+    const address = screen.getByRole("textbox", { name: /address/i });
+    fireEvent.change(address, { target: { value: "http://insecure.example/page" } });
+    fireEvent.keyDown(address, { key: "Enter" });
+
+    const tab = windowState("w1").tabs.find((t) => t.kind === "web");
+    const panel = document.querySelector(`[data-tab-id="${tab?.id}"]`);
+    expect(panel).not.toBeNull();
+    expect(panel?.querySelector("iframe")).toBeNull();
+    expect(panel?.textContent).toContain("isn't served over HTTPS");
+    expect(panel?.textContent).not.toContain("blocks embedding");
+  });
+
   it("renders all eight shortcut tiles by name", () => {
     render(<BrowserApp windowId="w1" />);
     for (const tile of BROWSER_TILES) {

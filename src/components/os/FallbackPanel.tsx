@@ -32,7 +32,7 @@ export interface FallbackPanelProps {
  * Why the embed fell back to the panel. "blocked" = the host refused to be
  * framed; "error" = the frame never loaded (the host said nothing at all).
  */
-export type FallbackReason = "blocked" | "error";
+export type FallbackReason = "blocked" | "error" | "insecure";
 
 /**
  * The host or a neutral caption — the header names the SITE, never the raw
@@ -51,10 +51,13 @@ function hostOf(url: string): string {
  * the host actually refused to be framed ("blocked"). A load error ("error")
  * is a dead navigation: the host never answered, so blaming it for blocking
  * would be a lie — and the "live preview below" phrase would promise a
- * preview the failed embed never produced.
+ * preview the failed embed never produced. An insecure url ("insecure") is
+ * neither: the site is fine, the CONNECTION is not, so the panel must not
+ * accuse it of blocking.
  */
 function headline(url: string, reason: FallbackReason): string {
   if (reason === "error") return `${hostOf(url)} couldn't be loaded`;
+  if (reason === "insecure") return `${hostOf(url)} isn't served over HTTPS — secure pages only`;
   return `${hostOf(url)} blocks embedding — live preview below`;
 }
 

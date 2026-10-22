@@ -43,17 +43,27 @@ export function hostnameMatchesBlockedHost(hostname: string): boolean {
 }
 
 /**
- * https-only, fail-closed host classification: non-https and unparsable
- * urls are BOTH treated as blocked — an unverifiable scheme is never given
- * an iframe attempt.
+ * WHY a url is not embedded. The two reasons read very differently to a
+ * visitor, and the panel says so:
+ *   - `blocked`  — the site refuses to be framed (a known refuser host);
+ *   - `insecure` — the url is not served over HTTPS. Our own page's CSP
+ *     (`frame-src 'self' https:`) would refuse the frame anyway, so the
+ *     fail-closed scheme gate stays — but the site did not "block" anything.
  */
-export function isEmbedBlocked(url: string): boolean {
+export type EmbedBlockReason = "blocked" | "insecure";
+
+/**
+ * The reason a url gets no iframe attempt, or null when it may be framed.
+ * https-only, fail-closed: a non-https or unparsable url is never given an
+ * iframe attempt, and the reason tells the panel which story to tell.
+ */
+export function embedBlockReason(url: string): EmbedBlockReason | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    return true;
+    return "insecure";
   }
-  if (parsed.protocol !== "https:") return true;
-  return hostnameMatchesBlockedHost(parsed.hostname);
+  if (parsed.protocol !== "https:") return "insecure";
+  return hostnameMatchesBlockedHost(parsed.hostname) ? "blocked" : null;
 }

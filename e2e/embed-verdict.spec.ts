@@ -231,11 +231,13 @@ test.describe("DevOS Browser — embed verdicts", () => {
     await expect(page.locator(".browser-tab-panel iframe")).toHaveCount(0, { timeout: 1_000 });
     await expect(page.locator('iframe[title="Website preview"]')).toHaveCount(0);
 
-    // The preview panel appears…
+    // The preview panel appears — and it says WHY. An insecure url is not a
+    // site that "blocks embedding": the panel must not accuse it.
     await expect(page.getByRole("tab", { name: "localhost", exact: true })).toBeVisible();
-    await expect(activePanel(page).getByText(/blocks embedding/i)).toBeVisible({
+    await expect(activePanel(page).getByText(/isn't served over HTTPS/i)).toBeVisible({
       timeout: 3_000,
     });
+    await expect(activePanel(page).getByText(/blocks embedding/i)).toHaveCount(0);
     expect(checkCalls.length, "a non-https url never calls embed-check").toBe(0);
   });
 

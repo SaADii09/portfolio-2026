@@ -33,7 +33,7 @@ import type { BrowserTab, BrowserWindowState } from "@/store/browserSlice";
 import { computeWarmSet } from "@/lib/warm-set";
 import { BROWSER_TILES, type BrowserTile } from "@/lib/browser-apps";
 import { PROJECTS, projectBySlug, type ProjectEntry } from "@/lib/portfolio-data";
-import { isEmbedBlocked } from "@/lib/embed-rules";
+import { embedBlockReason } from "@/lib/embed-rules";
 import { ProjectSidePanel } from "@/components/apps/ProjectSidePanel";
 import { ReadmeView } from "@/components/apps/ReadmeView";
 import { WebView } from "@/components/os/WebView";
@@ -702,7 +702,7 @@ function ProjectTabBody({ tab, reloadKey }: { tab: BrowserTab; reloadKey: number
 
 /**
  * Web-tab content: refuser hosts are classified by HOSTNAME SUFFIX before any
- * iframe attempt (G3 — `isEmbedBlocked`, replacing the byte-exact tile match),
+ * iframe attempt (G3 — `embedBlockReason`, replacing the byte-exact tile match),
  * covering both typed URLs and tile clicks on ANY path/variant; the preview
  * renders instantly with no iframe mount and no `/api/embed-check` request.
  * Everything else goes through the WebView embed pipeline (probe/watchdog →
@@ -710,8 +710,12 @@ function ProjectTabBody({ tab, reloadKey }: { tab: BrowserTab; reloadKey: number
  * browser slice keeps no copy of it.
  */
 function WebTabBody({ url }: { url: string }) {
-  if (isEmbedBlocked(url)) {
-    return <FallbackPanel url={url} allowScreenshot />;
+  const reason = embedBlockReason(url);
+  if (reason !== null) {
+    // The panel says WHY: a known refuser host ("blocked") and an insecure
+    // url ("insecure") are different stories, and the copy must not accuse
+    // a site of blocking when the only problem is the scheme.
+    return <FallbackPanel url={url} allowScreenshot reason={reason} />;
   }
   return <WebView url={url} />;
 }
