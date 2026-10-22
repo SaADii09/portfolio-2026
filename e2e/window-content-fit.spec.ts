@@ -67,6 +67,22 @@ const MIN_WINDOW_HEIGHT = 200;
 const MOBILE_BREAKPOINT = 768;
 const MOBILE_TOP_GAP = 8;
 
+/**
+ * Mirror of APP_MIN_HEIGHTS (src/lib/window-geometry.ts, short-window spec).
+ * The mirror above computes open-path heights the SAME way the store does;
+ * this table exists to VERIFY the floors never bind on the open path at the
+ * tested viewports (a floor binding would change open sizes — and this spec
+ * would then be asserting stale numbers).
+ */
+const FLOORS: Record<Key, number> = {
+  about: 480,
+  browser: 380,
+  "control-panel": 420,
+  resume: 320,
+  terminal: 200,
+  contact: 500,
+};
+
 const clampNum = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
 
 /**
@@ -143,6 +159,28 @@ function expectInSafeZone(
     vh - bottomBar + 1,
   );
 }
+
+test("the per-app floors never bind on the open path at the tested viewports", async () => {
+  // Pure mirror arithmetic (no browser): at every viewport this spec opens
+  // apps at, the open path's clamped height must sit AT OR ABOVE the app's
+  // floor — otherwise a floor WOULD bind and every size pin above would be
+  // asserting post-floor numbers while the mirror above (floorless) says
+  // otherwise. This is the explicit reconciliation the short-window spec
+  // demands; if it fails, the mirror and the floor table have drifted.
+  for (const [vw, vh] of [
+    [1440, 900],
+    [1366, 768],
+    [375, 812],
+  ] as const) {
+    for (const key of APP_KEYS) {
+      const expected = expectedAppGeometry(key, vw, vh, 0);
+      expect(
+        expected.height,
+        `open height for ${key} @ ${vw}×${vh} ≥ floor (floor must not bind)`,
+      ).toBeGreaterThanOrEqual(FLOORS[key]);
+    }
+  }
+});
 
 async function openApp(page: Page, key: Key, mobile: boolean) {
   const icon = page.getByTitle(ICON_TITLES[key]);
