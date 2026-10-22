@@ -3,9 +3,28 @@ import { createWindowSlice, WindowSlice } from "@/store/windowSlice";
 import { getViewportBounds } from "@/lib/boundaries";
 import {
   getAppWindowGeometry,
+  minHeightFor,
   WEBVIEW_GEOMETRY_KEY,
   shouldUseTableGeometry,
 } from "@/lib/window-geometry";
+
+describe("minHeightFor — the per-app floor table (short-window spec)", () => {
+  it("returns every table value via the component string", () => {
+    expect(minHeightFor("contact")).toBe(500);
+    expect(minHeightFor("about")).toBe(480);
+    expect(minHeightFor("control-panel")).toBe(420);
+    expect(minHeightFor("browser")).toBe(380);
+    expect(minHeightFor("projects")).toBe(360);
+    expect(minHeightFor("resume")).toBe(320);
+    expect(minHeightFor("terminal")).toBe(200);
+  });
+
+  it("falls back to MIN_WINDOW_HEIGHT (200) for unknown, undefined, and webview keys", () => {
+    expect(minHeightFor("not-an-app")).toBe(200);
+    expect(minHeightFor(undefined)).toBe(200);
+    expect(minHeightFor(`${WEBVIEW_GEOMETRY_KEY}https://example.com`)).toBe(200);
+  });
+});
 
 /**
  * Locked per-app geometry (control-panel/geometry design spec §4.4).

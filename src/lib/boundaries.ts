@@ -1,4 +1,9 @@
-import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, MOBILE_BREAKPOINT } from "@/lib/constants";
+import {
+  MIN_WINDOW_WIDTH,
+  MIN_WINDOW_HEIGHT,
+  MOBILE_FILL_H,
+  MOBILE_BREAKPOINT,
+} from "@/lib/constants";
 
 const DEFAULT_WIDGET_W = 200;
 const DEFAULT_WIDGET_H = 100;
@@ -13,11 +18,35 @@ export function getViewportBounds(vw: number) {
   return { isMobile, topBar, bottomBar };
 }
 
-export function clampWindowSize(w: number, h: number, vw: number, vh: number) {
-  const { topBar, bottomBar } = getViewportBounds(vw);
+/**
+ * The tallest a window may paint at this viewport — the mobile fill cap
+ * (`vh − 140`, matching Window.tsx's mobile paint clamp) or the desktop
+ * content zone (`vh − topBar − bottomBar`). Mobile-conditional ON PURPOSE:
+ * a flat `vh − topBar − bottomBar` would shrink every mobile ceiling by
+ * 28px and change existing behaviour (short-window spec, validation B1).
+ */
+export function availableWindowHeight(vw: number, vh: number): number {
+  const { isMobile, topBar, bottomBar } = getViewportBounds(vw);
+  return isMobile ? vh - MOBILE_FILL_H : vh - topBar - bottomBar;
+}
+
+/**
+ * `minHeight` is the per-app floor (short-window spec G1). A floor taller
+ * than the paintable height collapses to it — a window is never painted
+ * shorter than its floor, nor taller than the viewport allows.
+ */
+export function clampWindowSize(
+  w: number,
+  h: number,
+  vw: number,
+  vh: number,
+  minHeight: number = MIN_WINDOW_HEIGHT,
+) {
+  const available = availableWindowHeight(vw, vh);
+  const floor = Math.min(minHeight, available);
   return {
     width: Math.max(MIN_WINDOW_WIDTH, Math.min(w, vw)),
-    height: Math.max(MIN_WINDOW_HEIGHT, Math.min(h, vh - topBar - bottomBar)),
+    height: Math.max(floor, Math.min(h, available)),
   };
 }
 

@@ -1,5 +1,11 @@
-import { DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT } from "@/lib/constants";
+import {
+  DEFAULT_WINDOW_WIDTH,
+  DEFAULT_WINDOW_HEIGHT,
+  MIN_WINDOW_HEIGHT,
+  MOBILE_FILL_H,
+} from "@/lib/constants";
 import { clampWindowSize, getViewportBounds } from "@/lib/boundaries";
+import type { AppId } from "@/lib/apps";
 
 /**
  * Per-app default window geometry (control-panel/geometry design spec §4.4).
@@ -42,6 +48,8 @@ interface SlotSpec {
 interface Spec {
   size: SizeSpec;
   slot: SlotSpec;
+  /** Per-app height floor (short-window spec G1) — threaded into clampSize. */
+  minHeight: number;
 }
 
 /** DevOS Browser content-fit size + first-open anchor slot (browser spec §7). */
@@ -77,6 +85,35 @@ const APP_SLOTS: Record<string, SlotSpec> = {
 const WEBVIEW_SIZE: SizeSpec = { width: 800, height: 560 };
 const WEBVIEW_SLOT: SlotSpec = { leftFrac: 0.5, topFrac: 0.4 };
 
+/**
+ * Per-app height floors (short-window spec) — the height at which each app's
+ * primary action stays IN-VIEWPORT WITHOUT SCROLLING. `Record<AppId, …>`
+ * makes a new AppId a compile error until it declares a floor. Values:
+ * contact 500 · about 480 · control-panel 420 (deliberately scrolls below
+ * the Theme section) · browser 380 (⅓–¼ unreachable BY DESIGN — the start
+ * page compacts, see the browser compaction CSS) · projects 360 · resume
+ * 320 · terminal 200 (the global floor; its 158px body fits).
+ */
+export const APP_MIN_HEIGHTS: Record<AppId, number> = {
+  contact: 500,
+  about: 480,
+  "control-panel": 420,
+  browser: 380,
+  projects: 360,
+  resume: 320,
+  terminal: 200,
+};
+
+/**
+ * The height floor for a window keyed by `component` (or a geometry key).
+ * Unknown components and `webview:<url>` iframe keys resolve to the global
+ * `MIN_WINDOW_HEIGHT`. A lookup, not a chain — one guarded map read.
+ */
+export function minHeightFor(component?: string): number {
+  if (!component) return MIN_WINDOW_HEIGHT;
+  return APP_MIN_HEIGHTS[component as AppId] ?? MIN_WINDOW_HEIGHT;
+}
+
 /** Unknown components keep today's defaults (spec §4.4 fallback row). */
 const FALLBACK_SIZE: SizeSpec = { width: DEFAULT_WINDOW_WIDTH, height: DEFAULT_WINDOW_HEIGHT };
 const FALLBACK_X = 80;
@@ -87,11 +124,12 @@ const MIN_VIEWPORT_WIDTH = 320;
 const MIN_VIEWPORT_HEIGHT = 480;
 
 /**
- * Mobile fill margins — Window.tsx clamps display size to `vw − 32 × vh − 140`,
- * so the table size must already respect that or windows paint taller than safe.
+ * Mobile fill WIDTH margin — Window.tsx clamps display size to `vw − 32`,
+ * so the table size must already respect that or windows paint wider than
+ * safe. (The height twin, MOBILE_FILL_H, moved to constants.ts so
+ * boundaries.ts can consume it for `availableWindowHeight` — validation B7.)
  */
 const MOBILE_FILL_W = 32;
-const MOBILE_FILL_H = 140;
 /** Mobile windows sit just under the status bar (spec §4.4 mobile rule). */
 const MOBILE_TOP_GAP = 8;
 
@@ -100,11 +138,13 @@ function clampRange(value: number, min: number, max: number): number {
 }
 
 function lookupSpec(key: string): Spec | null {
-  if (key.startsWith(WEBVIEW_GEOMETRY_KEY)) return { size: WEBVIEW_SIZE, slot: WEBVIEW_SLOT };
+  if (key.startsWith(WEBVIEW_GEOMETRY_KEY)) {
+    return { size: WEBVIEW_SIZE, slot: WEBVIEW_SLOT, minHeight: minHeightFor(key) };
+  }
   const size = APP_SIZES[key];
   const slot = APP_SLOTS[key];
   if (!size || !slot) return null;
-  return { size, slot };
+  return { size, slot, minHeight: minHeightFor(key) };
 }
 
 /**
@@ -139,7 +179,7 @@ export function resolveOpenGeometry(
   vh: number,
   offset: number,
 ): WindowGeometry {
-  if (!shouldUseTableGeometry(config)) return legacyOpenGeometry(config, offset);
+  if (!shouldUseTableGeometry(config)) return legacyOpenGeometry(config, vw, vh, offset);
   return getAppWindowGeometry(config.component ?? `webview:${config.url}`, vw, vh, offset);
 }
 
@@ -154,22 +194,32 @@ function legacyOpenSize(config: GeometryRequest): SizeSpec {
   };
 }
 
-function legacyOpenGeometry(config: GeometryRequest, offset: number): WindowGeometry {
-  return { ...legacyOpenPosition(config, offset), ...legacyOpenSize(config) };
+function legacyOpenGeometry(
+  config: GeometryRequest,
+  vw: number,
+  vh: number,
+  offset: number,
+): WindowGeometry {
+  // Explicit geometry is still floored: a caller may hand a height below the
+  // app's floor (or below MIN_WINDOW_HEIGHT) — G1 says NO height-setting path
+  // bypasses the floor. Unknown/url-only configs floor at MIN_WINDOW_HEIGHT.
+  const raw = { ...legacyOpenPosition(config, offset), ...legacyOpenSize(config) };
+  const size = clampWindowSize(raw.width, raw.height, vw, vh, minHeightFor(config.component));
+  return { ...raw, ...size };
 }
 
-function clampSize(raw: SizeSpec, vw: number, vh: number): SizeSpec {
-  const clamped = clampWindowSize(raw.width, raw.height, vw, vh);
+function clampSize(raw: SizeSpec, vw: number, vh: number, minHeight: number): SizeSpec {
+  const clamped = clampWindowSize(raw.width, raw.height, vw, vh, minHeight);
   return { width: clamped.width, height: clamped.height };
 }
 
 /** Mobile shrinks the table size to the fill constraint before clamping. */
-function mobileSize(size: SizeSpec, vw: number, vh: number): SizeSpec {
+function mobileSize(size: SizeSpec, vw: number, vh: number, minHeight: number): SizeSpec {
   const filled: SizeSpec = {
     width: Math.min(size.width, vw - MOBILE_FILL_W),
     height: Math.min(size.height, vh - MOBILE_FILL_H),
   };
-  return clampSize(filled, vw, vh);
+  return clampSize(filled, vw, vh, minHeight);
 }
 
 function desktopPosition(
@@ -231,15 +281,17 @@ function settle(
 
 function specGeometry(spec: Spec, vw: number, vh: number, cascade: number): WindowGeometry {
   const { isMobile } = getViewportBounds(vw);
-  const size = isMobile ? mobileSize(spec.size, vw, vh) : clampSize(spec.size, vw, vh);
+  const size = isMobile
+    ? mobileSize(spec.size, vw, vh, spec.minHeight)
+    : clampSize(spec.size, vw, vh, spec.minHeight);
   const pos = isMobile
     ? mobilePosition(size.width, size.height, vw, vh, cascade)
     : desktopPosition(spec.slot, size.width, size.height, vw, vh, cascade);
   return settle(pos, size.width, size.height, vw, vh);
 }
 
-function fallbackGeometry(vw: number, vh: number, cascade: number): WindowGeometry {
-  const size = clampSize(FALLBACK_SIZE, vw, vh);
+function fallbackGeometry(key: string, vw: number, vh: number, cascade: number): WindowGeometry {
+  const size = clampSize(FALLBACK_SIZE, vw, vh, minHeightFor(key));
   const pos = legacyPosition(cascade);
   return settle(pos, size.width, size.height, vw, vh);
 }
@@ -259,6 +311,6 @@ export function getAppWindowGeometry(
   const vw = Math.max(MIN_VIEWPORT_WIDTH, vwRaw);
   const vh = Math.max(MIN_VIEWPORT_HEIGHT, vhRaw);
   const spec = lookupSpec(key);
-  if (!spec) return fallbackGeometry(vw, vh, cascade);
+  if (!spec) return fallbackGeometry(key, vw, vh, cascade);
   return specGeometry(spec, vw, vh, cascade);
 }

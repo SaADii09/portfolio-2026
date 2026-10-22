@@ -179,11 +179,53 @@ describe("windowSlice", () => {
     store.openWindow({ title: "About", type: "app", component: "about" });
     const win = store.windows[0];
     // The defaults table resolves "about" to 560×620 at its slot — the
-    // remembered rect (500×300 @ 140,80) must win instead.
+    // remembered rect (500×300 @ 140,80) must win instead, EXCEPT the height:
+    // 300 sits below about's 480 floor, so the stale restore clamps UP
+    // (short-window spec: a pre-floor lastGeometry never resurrects a
+    // too-short window). x/y/width are untouched by the floor.
     expect(win?.x).toBe(140);
     expect(win?.y).toBe(80);
     expect(win?.width).toBe(500);
-    expect(win?.height).toBe(300);
+    expect(win?.height).toBe(480);
+  });
+
+  it("clamps a floored window's resize up to the per-app floor (updateWindowSize)", () => {
+    const id = store.openWindow({ title: "About", type: "app", component: "about" });
+    // The floor makes the resize unfakeable: a drag that reports 300px on an
+    // about window still commits at 480 (jsdom 1024×768 → desktop available
+    // 656 ≥ 480, so the available clamp never binds here).
+    store.updateWindowSize(id, 560, 300);
+    expect(store.windows[0]?.height).toBe(480);
+    // Width keeps its own (unchanged) minimum.
+    store.updateWindowSize(id, 10, 500);
+    expect(store.windows[0]?.width).toBe(280);
+    expect(store.windows[0]?.height).toBe(500);
+  });
+
+  it("clamps updateWindowSize to the available height on a short viewport", () => {
+    const originalH = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 500 });
+    try {
+      // Desktop (1024 wide): available = 500 − 36 − 76 = 388. A 480 floor
+      // collapses to the available paintable height — never taller.
+      const id = store.openWindow({ title: "About", type: "app", component: "about" });
+      store.updateWindowSize(id, 560, 700);
+      expect(store.windows[0]?.height).toBe(388);
+    } finally {
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalH });
+    }
+  });
+
+  it("restores a stale below-floor browser lastGeometry clamped UP to the floor", () => {
+    // A lastGeometry persisted before the floors shipped (e.g. 960×225).
+    store.lastGeometry["browser"] = { x: 40, y: 30, width: 960, height: 225 };
+    store.openWindow({ title: "Browser", type: "app", component: "browser" });
+    const win = store.windows[0];
+    // Browser floor 380; jsdom desktop available 656 ≥ 380 → clamps to 380.
+    expect(win?.width).toBe(960);
+    expect(win?.height).toBe(380);
+    expect(win?.x).toBe(40);
+    expect(win?.y).toBe(30);
   });
 
   it("saves webview geometry under webview:<url> independently per url", () => {

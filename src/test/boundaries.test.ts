@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveWidgetCollisions } from "@/lib/boundaries";
+import { resolveWidgetCollisions, availableWindowHeight, clampWindowSize } from "@/lib/boundaries";
 
 const OTHER = { x: 100, y: 100, width: 200, isCollapsed: false };
 
@@ -34,5 +34,51 @@ describe("resolveWidgetCollisions", () => {
       768,
     );
     expect(result.x).toBe(304);
+  });
+});
+
+describe("availableWindowHeight", () => {
+  it("returns 788 for desktop 1440×900", () => {
+    expect(availableWindowHeight(1440, 900)).toBe(788);
+  });
+
+  it("returns 672 for mobile 375×812", () => {
+    expect(availableWindowHeight(375, 812)).toBe(672);
+  });
+
+  it("collapses a floor above available (mobile 375×375, floor 470 → 235)", () => {
+    const vw = 375;
+    const vh = 375;
+    const floor = 470;
+    const available = availableWindowHeight(vw, vh); // 235
+    expect(clampWindowSize(375, floor, vw, vh, floor).height).toBe(available);
+  });
+
+  it("collapses a floor above available (desktop 812×375, floor 360 → 263)", () => {
+    const vw = 812;
+    const vh = 375;
+    const floor = 360;
+    const available = availableWindowHeight(vw, vh); // 263
+    expect(clampWindowSize(812, floor, vw, vh, floor).height).toBe(available);
+  });
+
+  it("uses default MIN_WINDOW_HEIGHT (200) if no floor provided", () => {
+    // Minimal desktop 400x400: available = 400 - 112 = 288.
+    // MIN_WINDOW_HEIGHT is 200.
+    // clampWindowSize(400, 100, 400, 400) -> h = max(200, min(100, 288)) = 200.
+    expect(clampWindowSize(400, 100, 400, 400).height).toBe(200);
+  });
+});
+
+describe("clampWindowSize", () => {
+  it("clamps height to [floor, available]", () => {
+    const vw = 1000;
+    const vh = 800;
+    const floor = 500;
+    // available = 800 - 112 = 688.
+    // clamp(1000, 550, 1000, 800, 500) -> [500, 688]
+    expect(clampWindowSize(1000, 550, vw, vh, floor).height).toBe(550);
+    expect(clampWindowSize(1000, 450, vw, vh, floor).height).toBe(500);
+    expect(clampWindowSize(1000, 700, vw, vh, floor).height).toBe(688);
   });
 });

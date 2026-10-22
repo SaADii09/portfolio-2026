@@ -7,8 +7,13 @@ import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useContextMenuLongPress } from "@/hooks/useContextMenuLongPress";
 import { useHeaderDragHandlers } from "@/hooks/useHeaderDragHandlers";
 import { useDragPosition } from "@/hooks/useDragPosition";
-import { clampWindowSize, clampWindowPosition, clampDragPosition } from "@/lib/boundaries";
-import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT } from "@/lib/constants";
+import {
+  clampWindowSize,
+  clampWindowPosition,
+  clampDragPosition,
+  availableWindowHeight,
+} from "@/lib/boundaries";
+import { minHeightFor } from "@/lib/window-geometry";
 import { X, Minus, Maximize2, Minimize2, ExternalLink, Target } from "lucide-react";
 import { ContextMenu } from "./ContextMenu";
 
@@ -116,44 +121,35 @@ export function Window({ id, children }: WindowProps) {
       let pendingY = wy;
       let rafScheduled = false;
 
+      // Per-app floor (short-window spec G1): the gesture clamps the height
+      // to [floor, available] through clampWindowSize, then rebuilds the
+      // north/west edge anchors from the CLAMPED size so top/left resize
+      // keeps the opposite edge pinned.
+      const floor = minHeightFor(win.component);
+
       const onMove = (e: PointerEvent) => {
         const dx = e.clientX - sx;
         const dy = e.clientY - sy;
 
-        let newW = sw;
-        let newH = sh;
-        let newX = wx;
-        let newY = wy;
-
-        if (edge.includes("e")) newW = Math.max(MIN_WINDOW_WIDTH, sw + dx);
-        if (edge.includes("w")) {
-          newW = Math.max(MIN_WINDOW_WIDTH, sw - dx);
-          newX = wx + (sw - newW);
-        }
-        if (edge.includes("s")) newH = Math.max(MIN_WINDOW_HEIGHT, sh + dy);
-        if (edge.includes("n")) {
-          newH = Math.max(MIN_WINDOW_HEIGHT, sh - dy);
-          newY = wy + (sh - newH);
-        }
+        const rawW = edge.includes("e") ? sw + dx : edge.includes("w") ? sw - dx : sw;
+        const rawH = edge.includes("s") ? sh + dy : edge.includes("n") ? sh - dy : sh;
 
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const size = clampWindowSize(newW, newH, vw, vh);
-        const pos = clampWindowPosition(newX, newY, size.width, size.height, vw, vh);
-        newW = size.width;
-        newH = size.height;
-        newX = pos.x;
-        newY = pos.y;
+        const size = clampWindowSize(rawW, rawH, vw, vh, floor);
+        const rawX = edge.includes("w") ? wx + (sw - size.width) : wx;
+        const rawY = edge.includes("n") ? wy + (sh - size.height) : wy;
+        const pos = clampWindowPosition(rawX, rawY, size.width, size.height, vw, vh);
 
-        pendingW = newW;
-        pendingH = newH;
-        pendingX = newX;
-        pendingY = newY;
+        pendingW = size.width;
+        pendingH = size.height;
+        pendingX = pos.x;
+        pendingY = pos.y;
 
         if (el) {
-          el.style.transform = `translate(${newX}px, ${newY}px)`;
-          el.style.width = `${newW}px`;
-          el.style.height = `${newH}px`;
+          el.style.transform = `translate(${pendingX}px, ${pendingY}px)`;
+          el.style.width = `${pendingW}px`;
+          el.style.height = `${pendingH}px`;
         }
 
         if (!rafScheduled) {
@@ -270,7 +266,10 @@ export function Window({ id, children }: WindowProps) {
     const vw = typeof window !== "undefined" ? window.innerWidth : 375;
     const vh = typeof window !== "undefined" ? window.innerHeight : 812;
     const mobileW = win.isMaximized ? vw : Math.min(win.width, vw - 32);
-    const mobileH = win.isMaximized ? vh - 84 : Math.min(win.height, vh - 140);
+    // The paint cap IS availableWindowHeight on mobile (vh − 140): identical
+    // to the old literal, now shared with every other height-setting path.
+    // The maximized branch (vh − 84) is the fill-viewport height — preserved.
+    const mobileH = win.isMaximized ? vh - 84 : Math.min(win.height, availableWindowHeight(vw, vh));
     const mobileX = win.isMaximized ? 0 : Math.max(0, Math.min(win.x, vw - mobileW));
     const mobileY = win.isMaximized ? 0 : Math.max(0, Math.min(win.y, vh - mobileH));
 

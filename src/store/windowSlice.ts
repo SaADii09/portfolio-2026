@@ -1,8 +1,18 @@
 import { StateCreator } from "zustand";
 import { WindowInstance, WindowConfig } from "@/types/window";
-import { clampWindowSize, clampWindowPosition, getViewportBounds } from "@/lib/boundaries";
+import {
+  clampWindowSize,
+  clampWindowPosition,
+  getViewportBounds,
+  availableWindowHeight,
+} from "@/lib/boundaries";
 import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, INITIAL_Z_INDEX } from "@/lib/constants";
-import { resolveOpenGeometry, WEBVIEW_GEOMETRY_KEY, WindowGeometry } from "@/lib/window-geometry";
+import {
+  resolveOpenGeometry,
+  WEBVIEW_GEOMETRY_KEY,
+  WindowGeometry,
+  minHeightFor,
+} from "@/lib/window-geometry";
 import type { BrowserSlice } from "./browserSlice";
 
 /**
@@ -51,7 +61,10 @@ function clampToViewport(w: WindowInstance): WindowInstance {
   if (typeof window === "undefined") return w;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const size = clampWindowSize(w.width, w.height, vw, vh);
+  // Per-app floor (short-window spec G1): a viewport resize never leaves a
+  // window shorter than its floor (collapsed to the available height when
+  // the viewport cannot paint it).
+  const size = clampWindowSize(w.width, w.height, vw, vh, minHeightFor(w.component));
   const pos = clampWindowPosition(w.x, w.y, size.width, size.height, vw, vh);
   return { ...w, ...size, ...pos };
 }
@@ -73,11 +86,16 @@ function geometryKeyForWindow(w: WindowInstance): string {
  * [0, zoneHeight − h], mirroring `settle()` in window-geometry.ts and the
  * zone-floor semantics of `clampWindowPosition` in boundaries.ts, which now
  * clamps the y floor at zone 0 instead of topBar (no +topBar shift on
- * restore). Post-wave dedupe target: swap this local implementation onto
- * that export.
+ * restore). `key` resolves the per-app floor (short-window spec G1): a stale
+ * below-floor rect (persisted before the floors shipped) restores clamped UP.
  */
-function clampRemembered(rect: WindowGeometry, vw: number, vh: number): WindowGeometry {
-  const size = clampWindowSize(rect.width, rect.height, vw, vh);
+function clampRemembered(
+  rect: WindowGeometry,
+  vw: number,
+  vh: number,
+  key: string,
+): WindowGeometry {
+  const size = clampWindowSize(rect.width, rect.height, vw, vh, minHeightFor(key));
   const { topBar, bottomBar } = getViewportBounds(vw);
   const zoneHeight = vh - topBar - bottomBar;
   return {
@@ -124,7 +142,7 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
     const key = geometryKeyForConfig(config);
     const remembered = key ? get().lastGeometry[key] : undefined;
     const geometry = remembered
-      ? clampRemembered(remembered, vw, vh)
+      ? clampRemembered(remembered, vw, vh, key)
       : resolveOpenGeometry(config, vw, vh, offset);
 
     const win: WindowInstance = {
@@ -225,16 +243,22 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
   },
 
   updateWindowSize: (id, width, height) => {
+    // The floor makes the resize unfakeable (short-window spec G1): whatever
+    // the gesture reports, a window's committed height is never below its
+    // per-app floor — collapsed to the available paintable height on a short
+    // viewport so the floored window stays inside the safe zone.
+    const { vw, vh } = viewportSize();
+    const available = availableWindowHeight(vw, vh);
     set((s) => ({
-      windows: s.windows.map((w) =>
-        w.id === id
-          ? {
-              ...w,
-              width: Math.max(MIN_WINDOW_WIDTH, width),
-              height: Math.max(MIN_WINDOW_HEIGHT, height),
-            }
-          : w,
-      ),
+      windows: s.windows.map((w) => {
+        if (w.id !== id) return w;
+        const floor = Math.min(minHeightFor(w.component), available);
+        return {
+          ...w,
+          width: Math.max(MIN_WINDOW_WIDTH, width),
+          height: Math.min(available, Math.max(floor, height)),
+        };
+      }),
     }));
   },
 
