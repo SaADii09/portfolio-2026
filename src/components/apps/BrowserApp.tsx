@@ -621,7 +621,7 @@ function HomeTabBody({ windowId }: { windowId: string }) {
       <p className="font-body text-xs text-os-muted">{greetingCopy()}</p>
 
       <section aria-label="Shortcuts">
-        <h3 className="font-display text-xs text-os-accent mb-1.5">Shortcuts</h3>
+        <h2 className="font-display text-xs text-os-accent mb-1.5">Shortcuts</h2>
         <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
           {BROWSER_TILES.map((tile) => (
             <ShortcutTile
@@ -635,7 +635,7 @@ function HomeTabBody({ windowId }: { windowId: string }) {
 
       {visitRecency.length > 0 && (
         <section aria-label="Recently visited">
-          <h3 className="font-display text-xs text-os-accent mb-1.5">Recently visited</h3>
+          <h2 className="font-display text-xs text-os-accent mb-1.5">Recently visited</h2>
           <div className="flex flex-wrap gap-2">
             {visitRecency.slice(0, 8).map((origin) => (
               <VisitChip
@@ -650,7 +650,7 @@ function HomeTabBody({ windowId }: { windowId: string }) {
       )}
 
       <section aria-label="Your live projects">
-        <h3 className="font-display text-xs text-os-accent mb-1.5">Your live projects</h3>
+        <h2 className="font-display text-xs text-os-accent mb-1.5">Your live projects</h2>
         <div className="flex flex-col gap-2">
           {PROJECTS.map((entry) => (
             <ProjectRowCard

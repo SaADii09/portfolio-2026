@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { useStore, persistPartialize } from "@/store";
+import { createBrowserSlice, type BrowserSlice } from "@/store/browserSlice";
 import { openBrowser } from "@/lib/os-actions";
 
 /**
@@ -10,7 +11,31 @@ import { openBrowser } from "@/lib/os-actions";
  * reaches the persisted store.
  */
 
-const BROWSER_KEYS = ["browserWindows", "readmeLru", "metaLru", "pendingSlug", "sidePanelOpen"];
+/**
+ * The browser slice's STATE keys (its actions excluded) — derived from the
+ * slice itself so the persist non-leak pin below can never drift: a browser
+ * key added to the slice MUST be added to the pinned list, or the pin fails.
+ */
+const BROWSER_STATE_KEYS: string[] = Object.entries(
+  createBrowserSlice(
+    () => undefined,
+    () => ({}) as BrowserSlice,
+    {} as never,
+  ),
+)
+  .filter(([, value]) => typeof value !== "function")
+  .map(([key]) => key)
+  .sort();
+
+const BROWSER_KEYS = [
+  "browserWindows",
+  "metaLru",
+  "pendingSlug",
+  "readmeLru",
+  "sidePanelOpen",
+  "visitCounts",
+  "visitRecency",
+];
 
 describe("browser window plumbing @ 1440×900", () => {
   const originalInnerWidth = window.innerWidth;
@@ -222,10 +247,13 @@ describe("browser window plumbing @ 1440×900", () => {
       openBrowser("devos");
       const partial = persistPartialize(useStore.getState());
       const keys = Object.keys(partial);
+      // The pinned list is the slice's FULL state surface — a browser key
+      // added to the slice without a matching pin entry fails here.
+      expect(BROWSER_KEYS).toEqual(BROWSER_STATE_KEYS);
       for (const key of BROWSER_KEYS) {
         expect(keys).not.toContain(key);
       }
-      // The SERIALIZED substance carries none of the five browser keys — a
+      // The SERIALIZED substance carries none of the browser keys — a
       // nested/renamed field would still leak the session (T7).
       const serialized = JSON.stringify(partial);
       for (const key of BROWSER_KEYS) {

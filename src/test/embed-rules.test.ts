@@ -39,6 +39,15 @@ describe("isEmbedBlocked", () => {
     expect(isEmbedBlocked("https://docs.google.com/doc")).toBe(true);
   });
 
+  it("blocks the trailing-dot (DNS-root) form of a refuser host", () => {
+    // `youtube.com.` is the DNS-root spelling of `youtube.com` — the SAME
+    // host, and the WHATWG URL parser keeps the dot in `hostname`. The block
+    // classification must not lose it there: an iframe attempt for a known
+    // refuser breaks the "no iframe attempt for a refuser host" contract.
+    expect(isEmbedBlocked("https://youtube.com./watch")).toBe(true);
+    expect(isEmbedBlocked("https://www.youtube.com./watch")).toBe(true);
+  });
+
   it("does NOT match hosts that merely contain a list entry", () => {
     expect(isEmbedBlocked("https://notyoutube.com")).toBe(false);
     expect(isEmbedBlocked("https://youtubeevil.com")).toBe(false);

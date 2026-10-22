@@ -5,6 +5,7 @@ import { createWidgetSlice, WidgetSlice } from "@/store/widgetSlice";
 import { createMusicSlice, MusicSlice } from "@/store/musicSlice";
 import { createUiSlice, UiSlice } from "@/store/uiSlice";
 import { useStore, persistPartialize, persistMigrator, PersistedAppState } from "@/store";
+import { createBrowserSlice, type BrowserSlice } from "@/store/browserSlice";
 
 // jsdom has no Web Audio API — stub the synth engine so music slice logic is testable
 vi.mock("@/lib/audio-engine", () => ({
@@ -19,6 +20,24 @@ vi.mock("@/lib/audio-engine", () => ({
 }));
 
 type Slice = WindowSlice & ThemeSlice & WidgetSlice & MusicSlice & UiSlice;
+
+/**
+ * The browser slice's STATE keys (its actions excluded) — derived from the
+ * slice itself so the persist non-leak pin below can never drift: a browser
+ * key added to the slice MUST be added to the pinned list, or the pin fails.
+ * (The slice initializer only builds its state and action closures — it
+ * never calls `set`/`get` — so it is safe to construct it bare.)
+ */
+const BROWSER_STATE_KEYS: string[] = Object.entries(
+  createBrowserSlice(
+    () => undefined,
+    () => ({}) as BrowserSlice,
+    {} as never,
+  ),
+)
+  .filter(([, value]) => typeof value !== "function")
+  .map(([key]) => key)
+  .sort();
 
 function createTestStore(): Slice {
   const store: Slice = {} as Slice;
@@ -433,10 +452,21 @@ describe("persist partialize", () => {
     expect(persisted).not.toHaveProperty("music");
   });
 
-  it("persists none of the browser slice's five keys (T7)", () => {
+  it("persists none of the browser slice's seven state keys (T7)", () => {
     // Browser state is ephemeral per spec §7 — none of its keys may reach
-    // localStorage, not even nested under another name.
-    const BROWSER_KEYS = ["browserWindows", "readmeLru", "metaLru", "pendingSlug", "sidePanelOpen"];
+    // localStorage, not even nested under another name. The pinned list is
+    // the slice's FULL state surface (checked against the slice itself), so
+    // a newly added browser key cannot slip past this pin.
+    const BROWSER_KEYS = [
+      "browserWindows",
+      "metaLru",
+      "pendingSlug",
+      "readmeLru",
+      "sidePanelOpen",
+      "visitCounts",
+      "visitRecency",
+    ];
+    expect(BROWSER_KEYS).toEqual(BROWSER_STATE_KEYS);
     const persisted = persistPartialize(useStore.getState());
     const keys = Object.keys(persisted);
     const serialized = JSON.stringify(persisted);

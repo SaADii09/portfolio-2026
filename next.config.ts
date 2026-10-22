@@ -9,6 +9,30 @@ const scriptSrc = `script-src 'self' 'unsafe-inline'${
 }`;
 
 /**
+ * The production origin from NEXT_PUBLIC_SITE_URL, or null when the value is
+ * absent or unusable.
+ *
+ * The parse MUST NOT throw: this module is evaluated by `next build` /
+ * `next dev` BEFORE the app exists, and the owner sets the variable in the
+ * host environment (README + .env.example). A typo like `saadahmad.dev`
+ * (no scheme) makes `new URL()` throw `TypeError: Invalid URL`, which kills
+ * the build with an opaque stack. So a malformed value degrades to null →
+ * 'self' alone — the same tolerance `src/lib/site.ts` shows (it only strips
+ * a trailing slash and never validates).
+ */
+function configuredSiteOrigin(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const origin = new URL(raw).origin;
+    // Non-special schemes (mailto:, data:, file:) report the LITERAL origin
+    // "null" — never a usable frame-ancestor value.
+    return origin === "null" ? null : origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Anti-clickjacking: the app may only be framed by itself, plus our own
  * production origin when NEXT_PUBLIC_SITE_URL is configured — the Browser
  * embeds the deployed portfolio. Read at config-eval time (Next.js loads
@@ -17,9 +41,7 @@ const scriptSrc = `script-src 'self' 'unsafe-inline'${
  * fallback: pinning `https://localhost:3000` in a production deployment
  * would be meaningless at best.
  */
-const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL
-  ? new URL(process.env.NEXT_PUBLIC_SITE_URL).origin
-  : null;
+const siteOrigin = configuredSiteOrigin(process.env.NEXT_PUBLIC_SITE_URL);
 const frameAncestors = siteOrigin ? `'self' ${siteOrigin}` : "'self'";
 
 const csp = [

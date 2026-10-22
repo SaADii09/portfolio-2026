@@ -267,6 +267,16 @@ test.describe("browser-hosted webview geometry", () => {
     await page.route(/^https:\/\/en\.wikipedia\.org\/?$/, () => {
       /* deliberately stalled — see the comment above */
     });
+    // The stalled frame makes the WebView's 3500ms watchdog ask the server
+    // for a verdict — the route is MOCKED so the suite stays network-free
+    // (the real one does a DNS + HEAD against the embed host).
+    await page.route("**/api/embed-check*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ embeddable: true, reason: "ok" }),
+      }),
+    );
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoApp(page);
 

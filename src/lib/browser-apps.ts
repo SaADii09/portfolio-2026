@@ -1,9 +1,17 @@
 /**
  * Curated Browser app tile registry (spec §7, Task 5).
  *
- * `kind` drives the content path chosen by the Browser home tab (Task 9):
- * - "blocked"  → sites that refuse iframe embedding; FallbackPanel opens instantly
- * - "web"      → iframe pipeline (screenshot fallback via /api/screenshot)
+ * `kind` is DOCUMENTATION-ONLY — it declares the tile's nature:
+ * - "blocked"  → a site that refuses iframe embedding
+ * - "web"      → an embeddable site (iframe pipeline, screenshot fallback
+ *                via /api/screenshot)
+ *
+ * Since the real-web rework the RUNTIME path is HOST-based, not tile-based:
+ * `isEmbedBlocked` (src/lib/embed-rules.ts) classifies the clicked or typed
+ * url by hostname, so no production code path reads `kind` to choose a
+ * content path. The field stays as the table's declared intent, and a unit
+ * pin asserts every tile's `kind` agrees with the live classifier — so a
+ * stale tile table cannot drift away from the host rules unnoticed.
  *
  * `icon` is a lucide-react icon-name key; the renderer maps it to a component
  * (search → Search, play → Play, github → Github, globe → Globe).

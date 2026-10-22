@@ -17,6 +17,9 @@ import { gotoApp } from "./utils";
  *   panel's rows and the README body never depend on GitHub's rate limits.
  * - `/api/screenshot` is ROUTE-MOCKED with a 1×1 png, so the fallback panel
  *   never calls Microlink.
+ * - `/api/embed-check` is ROUTE-MOCKED with a scripted verdict, so the
+ *   WebView's watchdog never reaches the real route (a DNS + HEAD against
+ *   the embed host).
  * - The typed site is route-STALLED (never fulfilled), so the embedded frame
  *   stays mounted and the pin can observe it deterministically.
  *
@@ -71,6 +74,21 @@ async function mockScreenshot(page: Page): Promise<void> {
       status: 200,
       contentType: "image/png",
       body: Buffer.from(PNG_1X1_BASE64, "base64"),
+    }),
+  );
+}
+
+/**
+ * Mock /api/embed-check with a scripted verdict. The REAL route performs a
+ * DNS + HEAD against the embed host, so a mocked verdict keeps this suite
+ * network-free.
+ */
+async function mockEmbedCheck(page: Page, verdict: { embeddable: boolean; reason: string }) {
+  await page.route("**/api/embed-check*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(verdict),
     }),
   );
 }
@@ -269,8 +287,6 @@ test.describe("DevOS Browser", () => {
   });
 
   test("the address bar opens a web tab that embeds the site in an iframe", async ({ page }) => {
-    await openBrowser(page);
-
     // The typed site is route-STALLED (the handler never fulfils): the frame
     // stays mounted, so the pin observes the embed deterministically instead
     // of racing the WebView probe (which classifies cross-origin frames as
@@ -278,6 +294,13 @@ test.describe("DevOS Browser", () => {
     await page.route(/^https:\/\/en\.wikipedia\.org\/?$/, () => {
       /* deliberately stalled — see the comment above */
     });
+    // The stalled frame makes the WebView's 3500ms watchdog re-probe and
+    // possibly ask the server for a verdict. The route is MOCKED, so the
+    // suite never reaches the real one (which does a DNS + HEAD against the
+    // embed host) — the mock is the network-free guarantee.
+    await mockEmbedCheck(page, { embeddable: true, reason: "ok" });
+
+    await openBrowser(page);
 
     const address = page.getByLabel("Address bar");
     await address.fill("https://en.wikipedia.org");
@@ -290,6 +313,13 @@ test.describe("DevOS Browser", () => {
     await expect(activePanel(page).locator('iframe[title="Website preview"]')).toHaveCount(1, {
       timeout: 2_500,
     });
+
+    // The stall is not a hang: the WebView's watchdog deadline passes while
+    // the frame is mounted, and the live frame SURVIVES it (a verdict, if
+    // one is asked for, comes from the mock and cannot swap it out). The
+    // watchdog must never tear down a live frame.
+    await page.waitForTimeout(4_500);
+    await expect(activePanel(page).locator('iframe[title="Website preview"]')).toHaveCount(1);
   });
 
   test("closing a tab activates the previous one and lands back on the home tab", async ({
@@ -333,6 +363,9 @@ test.describe("DevOS Browser", () => {
   test("closing the LAST tab lands on a freshly seeded home tab (never the blank shell)", async ({
     page,
   }) => {
+    // The project tab opened below fetches its meta — route-mocked, so the
+    // suite never reaches GitHub's unauthenticated API.
+    await mockProjectMeta(page);
     await openBrowser(page);
 
     // Open a project tab from the compact row, then close the home tab so
