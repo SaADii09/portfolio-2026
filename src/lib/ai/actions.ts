@@ -75,17 +75,34 @@ const MARKER_SPAN = /\[\[\s*action\b[^\][]*\]\]/gi;
  */
 const PARTIAL_TAIL = /\[\[[^\]\[]*$/;
 
-/** Parse one whole `[[action:verb:arg]]` span; null = malformed/unknown → dropped. */
-function parseMarker(span: string): ActionRef | null {
-  const inner = span.slice(2, -2); // strip the exact [[ … ]] delimiters
-  const parts = inner.split(":");
+/** The i-th marker token, normalized (`""` when missing) — one place for the indexed-access guard. */
+function tokenAt(parts: string[], index: number): string {
+  const raw = parts[index];
+  return (raw ?? "").trim().toLowerCase();
+}
+
+/**
+ * Tokenize one whole `[[action:verb:arg]]` span into its `verb`/`arg` parts
+ * (lowercased); null = wrong shape (not exactly `action:verb:arg`).
+ */
+function splitMarkerParts(span: string): { verb: string; arg: string } | null {
+  const parts = span.slice(2, -2).split(":");
   if (parts.length !== 3) return null;
-  if ((parts[0] ?? "").trim().toLowerCase() !== "action") return null;
-  const verb = (parts[1] ?? "").trim().toLowerCase();
-  const arg = (parts[2] ?? "").trim().toLowerCase();
+  if (tokenAt(parts, 0) !== "action") return null;
+  return { verb: tokenAt(parts, 1), arg: tokenAt(parts, 2) };
+}
+
+/** Validate a tokenized `verb`/`arg` pair against the closed tables; null = unknown → dropped. */
+function validateVerbArg(verb: string, arg: string): ActionRef | null {
   if (!arg || !isChatActionVerb(verb)) return null;
   if (!ARG_VALIDATORS[verb](arg)) return null;
   return { verb, arg };
+}
+
+/** Parse one whole `[[action:verb:arg]]` span; null = malformed/unknown → dropped. */
+function parseMarker(span: string): ActionRef | null {
+  const parts = splitMarkerParts(span);
+  return parts ? validateVerbArg(parts.verb, parts.arg) : null;
 }
 
 function isChatActionVerb(value: string): value is ChatActionVerb {

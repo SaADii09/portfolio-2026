@@ -2,7 +2,7 @@ import { openApp, openBrowser, musicControl, setThemeByName, toggleWidget } from
 import type { MusicAction } from "@/lib/os-actions";
 import { resolveAppId } from "@/lib/apps";
 import type { WidgetType } from "@/types/widget";
-import type { ActionRef } from "./actions";
+import type { ActionRef, ChatActionVerb } from "./actions";
 
 /**
  * Client-only execution half of the marker protocol (controller ruling):
@@ -13,36 +13,39 @@ import type { ActionRef } from "./actions";
  * Never throws: an unknown verb or an unresolvable arg is a silent `false`
  * (actions are progressive enhancement, never load-bearing).
  */
+const MARKER_HANDLERS: Record<ChatActionVerb, (arg: string | undefined) => boolean> = {
+  open_app: (arg) => {
+    const id = arg ? resolveAppId(arg) : null;
+    if (!id) return false;
+    openApp(id);
+    return true;
+  },
+  open_project: (arg) => {
+    // Trust boundary: the parser already validated the slug against
+    // PROJECTS (`ARG_VALIDATORS.open_project`); the executor just forwards it.
+    if (!arg) return false;
+    openBrowser(arg);
+    return true;
+  },
+  set_theme: (arg) => (arg ? setThemeByName(arg) : false),
+  music: (arg) => {
+    if (!arg) return false;
+    // The parser validated the arg against MUSIC_ACTIONS already; the cast
+    // re-states that contract at the boundary (spec ruling).
+    musicControl(arg as MusicAction);
+    return true;
+  },
+  toggle_widget: (arg) => {
+    if (!arg) return false;
+    // Same: parser validated against WIDGET_DEFS.
+    toggleWidget(arg as WidgetType);
+    return true;
+  },
+};
+
 export function executeMarkerAction(a: ActionRef): boolean {
-  switch (a.verb) {
-    case "open_app": {
-      const id = a.arg ? resolveAppId(a.arg) : null;
-      if (!id) return false;
-      openApp(id);
-      return true;
-    }
-    case "open_project": {
-      if (!a.arg) return false;
-      openBrowser(a.arg);
-      return true;
-    }
-    case "set_theme":
-      return a.arg ? setThemeByName(a.arg) : false;
-    case "music": {
-      if (!a.arg) return false;
-      // The parser validated the arg against MUSIC_ACTIONS already; the cast
-      // re-states that contract at the boundary (spec ruling).
-      musicControl(a.arg as MusicAction);
-      return true;
-    }
-    case "toggle_widget": {
-      if (!a.arg) return false;
-      // Same: parser validated against WIDGET_DEFS.
-      toggleWidget(a.arg as WidgetType);
-      return true;
-    }
-    default:
-      // Unreachable for a parsed marker; guards hand-built refs at runtime.
-      return false;
-  }
+  // A table lookup tolerates an unknown verb at runtime (hand-built refs)
+  // where a switch would: undefined handler → false, never a throw.
+  const handler = MARKER_HANDLERS[a.verb];
+  return handler ? handler(a.arg) : false;
 }
