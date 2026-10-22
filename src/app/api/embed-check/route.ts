@@ -466,6 +466,10 @@ function requestOnce(
       resolve(null);
     });
     request.on("error", () => resolve(null));
+    // The request is only SENT here. Without this the socket never leaves
+    // the machine and every upstream answer is a timeout — a silent
+    // "unreachable" for the whole web.
+    request.end();
   });
 }
 

@@ -77,6 +77,8 @@ interface MockResponse {
 interface MockClientRequest {
   on: (event: string, handler: () => void) => void;
   destroy: () => void;
+  /** The transport only sends the request when `end()` is called. */
+  end: () => void;
 }
 
 const requestMock = vi.mocked(
@@ -149,18 +151,23 @@ beforeEach(() => {
         handlers[event] = handler;
       },
       destroy: () => undefined,
+      // The response only arrives when the request is actually SENT. A route
+      // that forgets `end()` therefore hangs until its own timeout instead of
+      // silently "passing" against a mock that answered on its own.
+      end: () => {
+        void Promise.resolve().then(() => {
+          if (hop.fail) {
+            handlers.error?.();
+            return;
+          }
+          if (hop.hang) {
+            handlers.timeout?.();
+            return;
+          }
+          callback(mockResponse(hop));
+        });
+      },
     };
-    void Promise.resolve().then(() => {
-      if (hop.fail) {
-        handlers.error?.();
-        return;
-      }
-      if (hop.hang) {
-        handlers.timeout?.();
-        return;
-      }
-      callback(mockResponse(hop));
-    });
     return client;
   });
 });
