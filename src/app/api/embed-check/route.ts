@@ -3,15 +3,21 @@ import type { IncomingHttpHeaders } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { LookupFunction } from "node:net";
 
-import { siteUrl } from "@/lib/site";
+import { clientIpOf, createRateLimiter, rateLimitedResponse } from "@/lib/rate-limit";
 
 // Interface pinned by Task A1 (embed verdict route):
 //   GET /api/embed-check?url=<https-url>
 //     → 200 { embeddable: boolean, reason: "ok" | "x-frame-options" | "csp-frame-ancestors" }
 //     → 400 {"error":"invalid url"} — non-https / unparsable / private DNS (never fetched)
+//     → 429 {"error":"Rate limit exceeded. Try again in a minute."} — per-IP limit
 //     → 502 {"error":"unreachable"} — timeout, network error, or a redirect hop
 //       that fails re-validation
 // Headers only: the response body is never read or retained.
+//
+// The verdict answers "may the EMBEDDER (the origin that called this route)
+// frame the target?" — so `frame-ancestors` is judged against the embedder:
+// 'self' requires the embedder to share the TARGET's origin, and every
+// other source must equal the embedder's origin.
 //
 // The outbound leg is `node:https`, NEVER the ambient `fetch`: the vetted
 // address is PINNED into the connection through a custom `lookup`, so the
@@ -35,6 +41,29 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — framing headers rarely change
  */
 const FAILURE_TTL_MS = 60 * 1000; // 60s — a failure must recover fast
 const CACHE_MAX = 32;
+/**
+ * Per-IP rate limit (the repo rule: "rate limit API routes per IP"). The
+ * route makes an unauthenticated outbound request per call, so without this
+ * a caller could turn it into an amplifier. 30/min is generous for a
+ * visitor opening sites and tight for an amplifier.
+ */
+const MAX_REQUESTS_PER_MINUTE = 30;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+const limiter = createRateLimiter({
+  limit: MAX_REQUESTS_PER_MINUTE,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+});
+
+/**
+ * Test plumbing: vitest shares the module instance across a file's tests, so
+ * the per-IP counter would otherwise leak between them.
+ * @expected-unused -- reset consumed only by test files (limiter isolation)
+ */
+export function resetEmbedCheckLimiter(): void {
+  limiter.reset();
+}
+
 /** Deadline for each outbound probe (HEAD and GET alike). */
 const TIMEOUT_MS = 5000;
 /** The redirect chain is walked by hand — at most 3 hops past the first. */
@@ -638,25 +667,38 @@ async function probeChain(url: URL, address: VettedAddress): Promise<WalkResult 
 }
 
 // ---------------------------------------------------------------------------
-// "Us" — the origins a frame-ancestors list may name. Both the CONFIGURED
-// site url AND the request's own origin (a Vercel preview deploy differs
-// from NEXT_PUBLIC_SITE_URL).
+// The EMBEDDER — the page that runs our browser and embeds the target.
+//
+// `frame-ancestors` describes who may EMBED the page:
+//   - `'self'` means "a document from THIS PAGE's own origin" — so the
+//     embedder must share the TARGET's origin, not merely be one of ours;
+//   - an explicit source (`https://app.example`) means "a document from THAT
+//     origin" — so it must equal the EMBEDDER's origin.
+//
+// The embedder is the origin that called this route (the app serving the
+// browser). The CONFIGURED site url is deliberately NOT part of it: a
+// preview deploy is not the production origin, and treating the configured
+// origin as a valid embedder made the route answer "embeddable" for a page
+// the browser would refuse (a dead frame instead of the preview panel).
 // ---------------------------------------------------------------------------
 
-interface OurOrigin {
+interface Embedder {
   /** The full origin, e.g. "https://example.com". */
   origin: string;
-  scheme: string;
-  hostname: string;
   /** The effective port — explicit, or the scheme's default. */
   port: string;
+  /** The scheme without its colon. */
+  scheme: string;
+  /** The hostname. */
+  hostname: string;
 }
 
 function defaultPortFor(scheme: string): string {
   return scheme === "https" ? "443" : "80";
 }
 
-function ourOriginOf(origin: string): OurOrigin | null {
+/** The embedder for a request — null when the request's origin is unusable. */
+function embedderOriginOf(origin: string): Embedder | null {
   try {
     const url = new URL(origin);
     const scheme = url.protocol.replace(":", "");
@@ -669,14 +711,6 @@ function ourOriginOf(origin: string): OurOrigin | null {
   } catch {
     return null;
   }
-}
-
-function ourOrigins(requestOrigin: string): OurOrigin[] {
-  const unique = new Map<string, OurOrigin>();
-  for (const candidate of [ourOriginOf(siteUrl), ourOriginOf(requestOrigin)]) {
-    if (candidate !== null) unique.set(candidate.origin, candidate);
-  }
-  return [...unique.values()];
 }
 
 /** A frame-ancestors source, parsed into the parts that must match. */
@@ -738,26 +772,26 @@ function isSubdomainOf(hostname: string, base: string): boolean {
   return hostname !== base && hostname.endsWith(`.${base}`);
 }
 
-function wildcardAllowsUs(source: SourceHost, ours: readonly OurOrigin[]): boolean {
+function wildcardAllowsUs(source: SourceHost, embedder: Embedder): boolean {
   const base = source.hostname.slice(2);
-  return ours.some((origin) => isSubdomainOf(origin.hostname, base));
+  return isSubdomainOf(embedder.hostname, base);
 }
 
 /** A source without a port means the DEFAULT port for its scheme. */
-function portMatches(source: SourceHost, origin: OurOrigin): boolean {
-  if (source.port === null) return origin.port === defaultPortFor(origin.scheme);
-  return source.port === origin.port;
+function portMatches(source: SourceHost, embedder: Embedder): boolean {
+  if (source.port === null) return embedder.port === defaultPortFor(embedder.scheme);
+  return source.port === embedder.port;
 }
 
-function originAllows(source: SourceHost, origin: OurOrigin): boolean {
-  if (source.hostname !== origin.hostname) return false;
-  if (source.scheme !== null && source.scheme !== origin.scheme) return false;
-  return portMatches(source, origin);
+function originAllows(source: SourceHost, embedder: Embedder): boolean {
+  if (source.hostname !== embedder.hostname) return false;
+  if (source.scheme !== null && source.scheme !== embedder.scheme) return false;
+  return portMatches(source, embedder);
 }
 
-function sourceAllowsUs(source: SourceHost, ours: readonly OurOrigin[]): boolean {
-  if (source.wildcard) return wildcardAllowsUs(source, ours);
-  return ours.some((origin) => originAllows(source, origin));
+function sourceAllowsUs(source: SourceHost, embedder: Embedder): boolean {
+  if (source.wildcard) return wildcardAllowsUs(source, embedder);
+  return originAllows(source, embedder);
 }
 
 const NONE_SOURCES = new Set(["'none'", "none"]);
@@ -768,15 +802,17 @@ function isNoneSource(source: string): boolean {
 
 function sourceAllowsUsText(
   source: string,
-  requestIsOurs: boolean,
-  ours: readonly OurOrigin[],
+  sameOriginAsEmbedder: boolean,
+  embedder: Embedder,
 ): boolean {
   const src = source.trim().toLowerCase();
   if (src === "*") return true;
-  if (src === "'self'") return requestIsOurs;
+  // 'self' = "a document from the TARGET's own origin" — so the embedder
+  // must share the target's origin.
+  if (src === "'self'") return sameOriginAsEmbedder;
   const parsed = parseSource(src);
   if (parsed === null) return false;
-  return sourceAllowsUs(parsed, ours);
+  return sourceAllowsUs(parsed, embedder);
 }
 
 // ---------------------------------------------------------------------------
@@ -804,38 +840,36 @@ function frameAncestorsLists(csp: string): string[][] {
 
 function listAllows(
   sources: readonly string[],
-  requestIsOurs: boolean,
-  ours: readonly OurOrigin[],
+  sameOriginAsEmbedder: boolean,
+  embedder: Embedder,
 ): boolean {
   if (sources.some(isNoneSource)) return false;
-  return sources.some((source) => sourceAllowsUsText(source, requestIsOurs, ours));
+  return sources.some((source) => sourceAllowsUsText(source, sameOriginAsEmbedder, embedder));
 }
 
 function cspVerdict(
   csp: string | null,
-  requestIsOurs: boolean,
-  ours: readonly OurOrigin[],
+  sameOriginAsEmbedder: boolean,
+  embedder: Embedder,
 ): EmbedVerdict {
   if (csp === null) return OK_VERDICT;
   const lists = frameAncestorsLists(csp);
   if (lists.length === 0) return OK_VERDICT;
-  const allowed = lists.every((sources) => listAllows(sources, requestIsOurs, ours));
+  const allowed = lists.every((sources) => listAllows(sources, sameOriginAsEmbedder, embedder));
   return allowed ? OK_VERDICT : CSP_BLOCKED;
 }
 
-/** True when the framed page is one of OUR pages (so 'self' allows it). */
-function isOurs(url: URL, ours: readonly OurOrigin[]): boolean {
-  return ours.some((origin) => origin.origin === url.origin);
-}
-
-function evaluateFraming(
-  response: HopResponse,
-  finalUrl: URL,
-  ours: readonly OurOrigin[],
-): EmbedVerdict {
+/**
+ * The verdict for one upstream response.
+ *
+ * `'self'` is judged against the TARGET's origin (the embedder must share
+ * it); every other source is judged against the EMBEDDER's origin.
+ */
+function evaluateFraming(response: HopResponse, finalUrl: URL, embedder: Embedder): EmbedVerdict {
   const xfo = headerValue(response.headers, "x-frame-options");
   if (xfo !== null && isDenyingXfo(xfo)) return XFO_BLOCKED;
-  return cspVerdict(cspValue(response.headers), isOurs(finalUrl, ours), ours);
+  const sameOriginAsEmbedder = finalUrl.origin === embedder.origin;
+  return cspVerdict(cspValue(response.headers), sameOriginAsEmbedder, embedder);
 }
 
 // Fixed bodies never echo the requested url or upstream state.
@@ -854,7 +888,7 @@ function failureResponse(kind: FailureKind): Response {
   return kind === "invalid" ? invalidUrl() : unreachable();
 }
 
-async function verdictFor(url: URL, key: string, ours: readonly OurOrigin[]): Promise<Response> {
+async function verdictFor(url: URL, key: string, embedder: Embedder | null): Promise<Response> {
   const address = await resolvePublicAddress(unbracketHost(url.hostname));
   if (address === null) {
     failureCachePut(key, "invalid");
@@ -867,22 +901,35 @@ async function verdictFor(url: URL, key: string, ours: readonly OurOrigin[]): Pr
     return unreachable();
   }
 
-  const verdict = evaluateFraming(outcome.response, outcome.finalUrl, ours);
+  // An unusable request origin means we cannot tell who the embedder is —
+  // the honest answer is "we cannot prove it may be framed".
+  const verdict =
+    embedder === null ? CSP_BLOCKED : evaluateFraming(outcome.response, outcome.finalUrl, embedder);
   verdictCachePut(key, verdict);
   return Response.json(verdict);
 }
 
+/** A cached answer for this key — the verdict, the failure, or null. */
+function cachedResponse(key: string): Response | null {
+  const cached = cachedVerdict(key);
+  if (cached !== null) return Response.json(cached);
+  const failure = cachedFailure(key);
+  if (failure !== null) return failureResponse(failure);
+  return null;
+}
+
 export async function GET(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);
+  if (limiter.isLimited(clientIpOf(request))) {
+    return rateLimitedResponse();
+  }
+
   const url = parseHttpsUrl(requestUrl.searchParams.get("url"));
   if (url === null) return invalidUrl();
 
   const key = cacheKeyFor(url);
-  const cached = cachedVerdict(key);
-  if (cached !== null) return Response.json(cached);
+  const cached = cachedResponse(key);
+  if (cached !== null) return cached;
 
-  const failure = cachedFailure(key);
-  if (failure !== null) return failureResponse(failure);
-
-  return verdictFor(url, key, ourOrigins(requestUrl.origin));
+  return verdictFor(url, key, embedderOriginOf(requestUrl.origin));
 }

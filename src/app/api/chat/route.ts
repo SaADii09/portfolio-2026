@@ -1,4 +1,10 @@
 import { retrieveRelevantContext } from "@/lib/rag";
+import {
+  clientIpOf,
+  createRateLimiter,
+  pruneTimestamps as pruneStamps,
+  rateLimitedResponse,
+} from "@/lib/rate-limit";
 
 const MAX_REQUESTS_PER_MINUTE = 15;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -7,23 +13,17 @@ const ALLOWED_ROLES = new Set<string>(["user", "assistant"]);
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_LENGTH = 10_000;
 
-const requestLog = new Map<string, number[]>();
+const limiter = createRateLimiter({
+  limit: MAX_REQUESTS_PER_MINUTE,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+});
 
+/**
+ * The window's own pruner — kept here for the route's existing contract.
+ * @expected-unused -- consumed only by test files (the limiter prunes for real)
+ */
 export function pruneTimestamps(stamps: number[], now: number): number[] {
-  return stamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-}
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const pruned = pruneTimestamps(requestLog.get(ip) ?? [], now);
-  if (pruned.length === 0) {
-    requestLog.delete(ip);
-  }
-  if (pruned.length >= MAX_REQUESTS_PER_MINUTE) {
-    return true;
-  }
-  requestLog.set(ip, [...pruned, now]);
-  return false;
+  return pruneStamps(stamps, now, RATE_LIMIT_WINDOW_MS);
 }
 
 const SYSTEM_PROMPT_BASE = `You are DevOS AI, an assistant embedded in Saad Ahmad's interactive portfolio website.
@@ -79,13 +79,10 @@ export function validateMessages(input: unknown): ValidationOk | ValidationFail 
 }
 
 export async function POST(request: Request) {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    request.headers.get("x-real-ip") ??
-    "127.0.0.1";
+  const ip = clientIpOf(request);
 
-  if (isRateLimited(ip)) {
-    return Response.json({ error: "Rate limit exceeded. Try again in a minute." }, { status: 429 });
+  if (limiter.isLimited(ip)) {
+    return rateLimitedResponse();
   }
 
   let body: unknown;

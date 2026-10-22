@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lookup } from "node:dns/promises";
 import { request } from "node:https";
 
-import { GET, resetEmbedCheckCache } from "@/app/api/embed-check/route";
+import { GET, resetEmbedCheckCache, resetEmbedCheckLimiter } from "@/app/api/embed-check/route";
 import { siteUrl } from "@/lib/site";
 
 // Interface pinned by Task A1 (embed verdict route):
@@ -125,8 +125,18 @@ function mockResponse(hop: MockHop): MockResponse {
   };
 }
 
-function makeRequest(search: string, origin = "http://localhost"): Request {
-  return { url: `${origin}/api/embed-check${search}` } as unknown as Request;
+/**
+ * A request for the route. The default origin matches the app's own origin
+ * (so the embedder IS the configured site url, as in production), and every
+ * request gets its OWN address unless one is given — the per-IP rate limit
+ * would otherwise bleed between the tests.
+ */
+let requestCounter = 0;
+
+function makeRequest(search: string, origin = "http://localhost:3000", ip?: string): Request {
+  const headers = new Headers();
+  headers.set("x-forwarded-for", ip ?? `203.0.113.${(requestCounter += 1) % 250}`);
+  return { url: `${origin}/api/embed-check${search}`, headers } as unknown as Request;
 }
 
 const OUR_ORIGIN = new URL(siteUrl).origin;
@@ -141,6 +151,7 @@ beforeEach(() => {
   fetchMock.mockClear();
   lookupMock.mockReset();
   resetEmbedCheckCache(); // module-scope cache would bleed verdicts across tests
+  resetEmbedCheckLimiter(); // the per-IP counter is module-scope too
   vi.stubGlobal("fetch", fetchMock);
   lookupMock.mockImplementation(async (host: string) => dnsAnswers.get(host) ?? [PUBLIC_ADDRESS]);
   requestMock.mockReset();
@@ -545,12 +556,91 @@ describe("verdicts from response headers", () => {
   it("allows a frame-ancestors directive listing the REQUEST's own origin", async () => {
     queueHop({
       status: 200,
-      headers: { "content-security-policy": "frame-ancestors http://localhost" },
+      headers: { "content-security-policy": "frame-ancestors http://localhost:3000" },
     });
 
     const res = await GET(makeRequest(`?url=${encodeURIComponent("https://target.example/")}`));
 
     await expect(res.json()).resolves.toEqual({ embeddable: true, reason: "ok" });
+  });
+
+  it("blocks a source that names the CONFIGURED site origin but not the embedder", async () => {
+    // The configured site url is NOT the embedder. When the app runs on
+    // another origin (a local dev server, a preview deploy) the browser
+    // refuses the frame — the route must say so, or the tab shows a dead
+    // frame instead of the preview panel.
+    queueHop({
+      status: 200,
+      headers: { "content-security-policy": `frame-ancestors ${OUR_ORIGIN}` },
+    });
+
+    const res = await GET(
+      makeRequest(
+        `?url=${encodeURIComponent("https://target.example/")}`,
+        "https://embedder.example",
+      ),
+    );
+
+    await expect(res.json()).resolves.toEqual({
+      embeddable: false,
+      reason: "csp-frame-ancestors",
+    });
+  });
+
+  it("allows 'self' when the embedder shares the TARGET's origin", async () => {
+    // 'self' in frame-ancestors means "a document from THIS PAGE's own
+    // origin" — so the embedder must share the target's origin.
+    queueHop({
+      status: 200,
+      headers: { "content-security-policy": "frame-ancestors 'self'" },
+    });
+
+    const res = await GET(
+      makeRequest(`?url=${encodeURIComponent("https://same.example/")}`, "https://same.example"),
+    );
+
+    await expect(res.json()).resolves.toEqual({ embeddable: true, reason: "ok" });
+  });
+
+  it("blocks 'self' when the embedder does NOT share the target's origin", async () => {
+    queueHop({
+      status: 200,
+      headers: { "content-security-policy": "frame-ancestors 'self'" },
+    });
+
+    const res = await GET(
+      makeRequest(
+        `?url=${encodeURIComponent("https://other.example/")}`,
+        "https://embedder.example",
+      ),
+    );
+
+    await expect(res.json()).resolves.toEqual({
+      embeddable: false,
+      reason: "csp-frame-ancestors",
+    });
+  });
+
+  it("rate limits a caller that probes past the per-IP budget", async () => {
+    // The route makes an unauthenticated outbound request per call, so the
+    // repo's rule ("rate limit API routes per IP") applies.
+    const request = () =>
+      GET(
+        makeRequest(
+          `?url=${encodeURIComponent(`https://limited.example/${Math.random()}`)}`,
+          "http://localhost",
+          "203.0.113.7",
+        ),
+      );
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const res = await request();
+      expect(res.status, `attempt ${attempt} must be served`).toBe(200);
+    }
+
+    const blocked = await request();
+    expect(blocked.status).toBe(429);
+    expect(await blocked.text()).toContain("Rate limit exceeded");
   });
 
   it("allows a scheme-less frame-ancestors source equivalent to our host", async () => {
