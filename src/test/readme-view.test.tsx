@@ -53,6 +53,19 @@ describe("ReadmeView", () => {
     expect(link.getAttribute("rel")).toContain("noopener");
   });
 
+  it("top-aligns the degraded body — never center-clips in a short scroller", () => {
+    // Short-window spec G3: flex-centering + h-full inside an overflow-auto
+    // body clips BOTH edges in a short window; the top is then unreachable.
+    // Top-aligned + min-h-full keeps the whole block reachable by scrolling.
+    render(<ReadmeView html="" degraded slug="devos" />);
+    const body = screen.getByText(/cache/i).closest("div");
+    const tokens = body?.className.split(" ") ?? [];
+    expect(tokens).toContain("justify-start");
+    expect(tokens).toContain("min-h-full");
+    expect(tokens).not.toContain("justify-center");
+    expect(tokens).not.toContain("h-full");
+  });
+
   it("paints the degraded escape hatch with theme tokens", () => {
     render(<ReadmeView html="" degraded slug="devos" />);
     // F6: `background: var(--accent-1)` / `color: var(--bg-primary)` became

@@ -37,7 +37,11 @@ export function ReadmeView({ html, degraded, slug }: ReadmeViewProps) {
       return <p className="p-4 font-body text-sm text-os-muted">Unknown project.</p>;
     }
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center overflow-auto">
+      // Top-aligned (short-window spec G3): flex-centering inside an
+      // overflow-auto body center-clips BOTH edges in a short window — the
+      // icon and the first paragraph become unreachable. min-h-full keeps
+      // the escape hatch vertically centered when the body IS tall.
+      <div className="flex min-h-full flex-col items-center justify-start gap-3 p-6 text-center overflow-auto">
         <BookOpen size={28} className="opacity-50 text-os-muted" />
         <p className="font-body text-sm text-os-muted max-w-xs">
           The README cache isn&apos;t ready and the upstream source may be busy. It should warm up
