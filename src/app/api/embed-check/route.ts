@@ -39,6 +39,14 @@ const CACHE_MAX = 32;
 const TIMEOUT_MS = 5000;
 /** The redirect chain is walked by hand — at most 3 hops past the first. */
 const MAX_REDIRECTS = 3;
+/**
+ * The OVERALL deadline for one verdict. A chain is up to 4 hops and each hop
+ * may cost HEAD + a GET fallback, so the per-request timeout alone allowed a
+ * ~40s request — a single unauthenticated call holding eight sockets open.
+ * The whole walk is therefore bounded, and the outstanding request is
+ * destroyed when the budget runs out.
+ */
+const WALK_DEADLINE_MS = 10000;
 const USER_AGENT = "DevOS-EmbedCheck/1.0";
 
 export interface EmbedVerdict {
@@ -312,12 +320,14 @@ interface EmbeddingRule {
 
 /**
  * ::ffff:0:0/96 (IPv4-mapped — the form the WHATWG parser and dns.lookup
- * both use), ::/96 (IPv4-compatible), 2002::/16 (6to4) and 64:ff9b::/96
- * (NAT64). The embedded address inherits the IPv4 ruling.
+ * both use), ::/96 (IPv4-compatible), ::ffff:0:0:0/96 (IPv4-translated),
+ * 2002::/16 (6to4) and 64:ff9b::/96 (NAT64). The embedded address inherits
+ * the IPv4 ruling.
  */
 const IPV4_EMBEDDING_RULES: readonly EmbeddingRule[] = [
   { prefix: [0, 0, 0, 0, 0, 0xffff], hi: 6, lo: 7 },
   { prefix: [0, 0, 0, 0, 0, 0], hi: 6, lo: 7 },
+  { prefix: [0, 0, 0, 0, 0xffff, 0], hi: 6, lo: 7 },
   { prefix: [0x2002], hi: 1, lo: 2 },
   { prefix: [0x64, 0xff9b], hi: 6, lo: 7 },
 ];
@@ -345,6 +355,7 @@ const FORBIDDEN_IPV6_RANGES: ReadonlyArray<readonly [number, number]> = [
   [0xfe00, 0xfc00], // fc00::/7 — unique local
   [0xffc0, 0xfe80], // fe80::/10 — link-local
   [0xff00, 0xff00], // ff00::/8 — multicast
+  [0xff00, 0x0000], // ::/8 — reserved (incl. the deprecated fec0::/10)
 ];
 
 function isForbiddenIpv6Range(groups: number[]): boolean {
@@ -473,6 +484,18 @@ function requestOnce(
   });
 }
 
+/**
+ * The url we actually PUT ON THE WIRE. Credentials are stripped: Node turns
+ * `https://user:pass@host/` into an `Authorization: Basic …` header, so
+ * forwarding them would leak the visitor's secret to the probed host.
+ */
+function probeUrl(url: URL): string {
+  const clean = new URL(url.toString());
+  clean.username = "";
+  clean.password = "";
+  return clean.toString();
+}
+
 function headerValue(headers: IncomingHttpHeaders, name: string): string | null {
   const value = headers[name];
   if (value === undefined) return null;
@@ -495,12 +518,22 @@ function isMethodNotAllowed(status: number): boolean {
   return status === 405 || status === 501;
 }
 
-/** HEAD first; a 405/501 falls back to GET on the same (vetted) address. */
+/**
+ * A HEAD that answers 3xx WITHOUT a Location is not authoritative — some
+ * servers only send the target on GET. Such an answer must be re-asked.
+ */
+function needsGetRetry(response: HopResponse): boolean {
+  if (isMethodNotAllowed(response.statusCode)) return true;
+  return isRedirect(response.statusCode) && headerValue(response.headers, "location") === null;
+}
+
+/** HEAD first; a 405/501 (or a headless 3xx) falls back to GET on the same address. */
 async function requestWithFallback(url: URL, address: VettedAddress): Promise<HopResponse | null> {
-  const head = await requestOnce(url.toString(), address, "HEAD");
+  const target = probeUrl(url);
+  const head = await requestOnce(target, address, "HEAD");
   if (head === null) return null;
-  if (!isMethodNotAllowed(head.statusCode)) return head;
-  return requestOnce(url.toString(), address, "GET");
+  if (!needsGetRetry(head)) return head;
+  return requestOnce(target, address, "GET");
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +597,7 @@ interface WalkResult {
 }
 
 /** Walk the chain, re-vetting EVERY hop before it is requested. */
-async function walkChain(start: URL, first: VettedAddress): Promise<WalkResult | null> {
+async function walkChainUnbounded(start: URL, first: VettedAddress): Promise<WalkResult | null> {
   let current = start;
   let address = first;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
@@ -575,6 +608,25 @@ async function walkChain(start: URL, first: VettedAddress): Promise<WalkResult |
     address = step.next.address;
   }
   return null;
+}
+
+/**
+ * The walk under an OVERALL deadline. Each hop may cost HEAD + a GET
+ * fallback, so the per-request timeout alone allowed a ~40s verdict — a
+ * single unauthenticated call holding eight sockets open. Past the budget
+ * the answer is "unreachable" (the client keeps the live frame, which is the
+ * safe degradation).
+ */
+async function walkChain(start: URL, first: VettedAddress): Promise<WalkResult | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const expired = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), WALK_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([walkChainUnbounded(start, first), expired]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
 }
 
 async function probeChain(url: URL, address: VettedAddress): Promise<WalkResult | null> {

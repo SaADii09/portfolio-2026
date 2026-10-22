@@ -100,6 +100,8 @@ interface MockHop {
   hang?: boolean;
   /** The upstream connection fails outright. */
   fail?: boolean;
+  /** The upstream says nothing at all — only an overall deadline can end it. */
+  silent?: boolean;
 }
 
 const hops: MockHop[] = [];
@@ -162,6 +164,10 @@ beforeEach(() => {
           }
           if (hop.hang) {
             handlers.timeout?.();
+            return;
+          }
+          if (hop.silent) {
+            // The upstream says nothing — no response, no timeout, no error.
             return;
           }
           callback(mockResponse(hop));
@@ -259,11 +265,19 @@ describe("SSRF guards — the 400 gate", () => {
       "fe80::a",
     ];
 
-    for (const address of forbidden) {
-      dnsAnswers.set("host.example", [{ address, family: address.includes(":") ? 6 : 4 }]);
-      const res = await GET(makeRequest(`?url=${encodeURIComponent("https://host.example/")}`));
+    // Each address gets its OWN host: the failure cache is keyed by url, so
+    // a shared host would let iteration 2+ replay the cached refusal
+    // without ever classifying the new address (a vacuous pin).
+    for (const [index, address] of forbidden.entries()) {
+      const host = `private-${index}.example`;
+      dnsAnswers.set(host, [{ address, family: address.includes(":") ? 6 : 4 }]);
+      const res = await GET(makeRequest(`?url=${encodeURIComponent(`https://${host}/`)}`));
       expect(res.status, `address ${address} must refuse`).toBe(400);
       expect(requestMock, `address ${address} must not be requested`).not.toHaveBeenCalled();
+      expect(
+        lookupMock.mock.calls.some((call) => call[0] === host),
+        `address ${address} must be classified by the resolver, not replayed from the cache`,
+      ).toBe(true);
     }
   });
 
@@ -302,12 +316,19 @@ describe("the address normalization — IPv4-mapped and IPv4-compatible IPv6", (
   ];
 
   it("refuses an IPv4-MAPPED answer in its hex form", async () => {
-    for (const [address] of mapped) {
-      dnsAnswers.set("mapped.example", [{ address, family: 6 }]);
-      const res = await GET(makeRequest(`?url=${encodeURIComponent("https://mapped.example/")}`));
+    // A host per address: a shared host would let the failure cache replay
+    // the first refusal and skip the classification of the rest.
+    for (const [index, [address]] of mapped.entries()) {
+      const host = `mapped-${index}.example`;
+      dnsAnswers.set(host, [{ address, family: 6 }]);
+      const res = await GET(makeRequest(`?url=${encodeURIComponent(`https://${host}/`)}`));
       expect(res.status, `address ${address} must refuse`).toBe(400);
       expect(requestMock, `address ${address} must not be requested`).not.toHaveBeenCalled();
       expect(fetchMock, `address ${address} must not reach the transport`).not.toHaveBeenCalled();
+      expect(
+        lookupMock.mock.calls.some((call) => call[0] === host),
+        `address ${address} must be classified, not replayed from the cache`,
+      ).toBe(true);
     }
   });
 
@@ -329,11 +350,16 @@ describe("the address normalization — IPv4-mapped and IPv4-compatible IPv6", (
   });
 
   it("refuses the IPv4-COMPATIBLE form", async () => {
-    for (const address of ["::7f00:1", "::a9fe:a9fe", "::127.0.0.1"]) {
-      dnsAnswers.set("compat.example", [{ address, family: 6 }]);
-      const res = await GET(makeRequest(`?url=${encodeURIComponent("https://compat.example/")}`));
+    for (const [index, address] of ["::7f00:1", "::a9fe:a9fe", "::127.0.0.1"].entries()) {
+      const host = `compat-${index}.example`;
+      dnsAnswers.set(host, [{ address, family: 6 }]);
+      const res = await GET(makeRequest(`?url=${encodeURIComponent(`https://${host}/`)}`));
       expect(res.status, `address ${address} must refuse`).toBe(400);
       expect(requestMock, `address ${address} must not be requested`).not.toHaveBeenCalled();
+      expect(
+        lookupMock.mock.calls.some((call) => call[0] === host),
+        `address ${address} must be classified, not replayed from the cache`,
+      ).toBe(true);
     }
   });
 
@@ -347,11 +373,16 @@ describe("the address normalization — IPv4-mapped and IPv4-compatible IPv6", (
   it("refuses the 6to4 and NAT64 forms that carry a private address", async () => {
     const embedded = ["2002:7f00:1::", "2002:a9fe:a9fe::", "64:ff9b::7f00:1", "64:ff9b::a9fe:a9fe"];
 
-    for (const address of embedded) {
-      dnsAnswers.set("embedded.example", [{ address, family: 6 }]);
-      const res = await GET(makeRequest(`?url=${encodeURIComponent("https://embedded.example/")}`));
+    for (const [index, address] of embedded.entries()) {
+      const host = `embedded-${index}.example`;
+      dnsAnswers.set(host, [{ address, family: 6 }]);
+      const res = await GET(makeRequest(`?url=${encodeURIComponent(`https://${host}/`)}`));
       expect(res.status, `address ${address} must refuse`).toBe(400);
       expect(requestMock, `address ${address} must not be requested`).not.toHaveBeenCalled();
+      expect(
+        lookupMock.mock.calls.some((call) => call[0] === host),
+        `address ${address} must be classified, not replayed from the cache`,
+      ).toBe(true);
     }
   });
 
@@ -361,6 +392,7 @@ describe("the address normalization — IPv4-mapped and IPv4-compatible IPv6", (
     const res = await GET(makeRequest(`?url=${encodeURIComponent("https://v6.example/")}`));
 
     expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ embeddable: true, reason: "ok" });
   });
 });
 
@@ -378,11 +410,16 @@ describe("the extended IPv4 forbidden table", () => {
   ];
 
   it("refuses every extended range at the gate", async () => {
-    for (const address of forbidden) {
-      dnsAnswers.set("extended.example", [{ address, family: 4 }]);
-      const res = await GET(makeRequest(`?url=${encodeURIComponent("https://extended.example/")}`));
+    for (const [index, address] of forbidden.entries()) {
+      const host = `extended-${index}.example`;
+      dnsAnswers.set(host, [{ address, family: 4 }]);
+      const res = await GET(makeRequest(`?url=${encodeURIComponent(`https://${host}/`)}`));
       expect(res.status, `address ${address} must refuse`).toBe(400);
       expect(requestMock, `address ${address} must not be requested`).not.toHaveBeenCalled();
+      expect(
+        lookupMock.mock.calls.some((call) => call[0] === host),
+        `address ${address} must be classified, not replayed from the cache`,
+      ).toBe(true);
     }
   });
 
@@ -400,6 +437,7 @@ describe("the extended IPv4 forbidden table", () => {
     const res = await GET(makeRequest(`?url=${encodeURIComponent("https://public.example/")}`));
 
     expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ embeddable: true, reason: "ok" });
   });
 });
 
@@ -414,6 +452,28 @@ describe("the pinned transport", () => {
       address: "93.184.216.34",
       family: 4,
     });
+  });
+
+  it("bounds every socket with a timeout (a dropped timeout would hang the route)", async () => {
+    dnsAnswers.set("timeout.example", [{ address: "93.184.216.34", family: 4 }]);
+
+    await GET(makeRequest(`?url=${encodeURIComponent("https://timeout.example/")}`));
+
+    expect(requested[0]?.options.timeout).toBe(5000);
+  });
+
+  it("strips credentials before putting the request on the wire", async () => {
+    dnsAnswers.set("creds.example", [{ address: "93.184.216.34", family: 4 }]);
+
+    const res = await GET(
+      makeRequest(`?url=${encodeURIComponent("https://user:secret@creds.example/")}`),
+    );
+
+    expect(res.status).toBe(200);
+    const target = requested[0]?.url ?? "";
+    expect(target).not.toContain("secret");
+    expect(target).not.toContain("user:");
+    expect(target).toContain("creds.example");
   });
 
   it("never reaches for the ambient fetch", async () => {
@@ -683,6 +743,37 @@ describe("the redirect walk — every hop is re-vetted", () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ embeddable: false, reason: "x-frame-options" });
     expect(requestedUrls()).toEqual(["https://target.example/", "https://final.example/landing"]);
+  });
+
+  it("re-asks with GET when a HEAD answers 3xx WITHOUT a location", async () => {
+    // A HEAD that answers 302 with no Location is not authoritative — some
+    // servers only send the target on GET. The verdict must come from the
+    // GET, not from the headless 302.
+    queueHop({ status: 302 });
+    queueHop({ status: 200, headers: { "x-frame-options": "DENY" } });
+
+    const res = await GET(makeRequest(`?url=${encodeURIComponent("https://target.example/")}`));
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ embeddable: false, reason: "x-frame-options" });
+    expect(requested.length).toBe(2);
+  });
+
+  it("gives up on a silent upstream when the overall deadline runs out", async () => {
+    vi.useFakeTimers();
+    try {
+      dnsAnswers.set("slow.example", [{ address: "93.184.216.34", family: 4 }]);
+      queueHop({ silent: true });
+
+      const pending = GET(makeRequest(`?url=${encodeURIComponent("https://slow.example/")}`));
+      await vi.advanceTimersByTimeAsync(10_000);
+      const res = await pending;
+
+      expect(res.status).toBe(502);
+      expect(await res.text()).toBe('{"error":"unreachable"}');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("NEVER requests a hop that resolves to a private address", async () => {
