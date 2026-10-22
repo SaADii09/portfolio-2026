@@ -26,9 +26,10 @@ export type AppStore = WindowSlice &
  * user's volume and current track.
  *
  * The browser slice's state (`browserWindows`, `readmeLru`, `metaLru`,
- * `pendingSlug`, `sidePanelOpen`) is deliberately NOT persisted — browser
- * sessions are ephemeral per spec §7, and the migrator below drops any stray
- * browser keys an old localStorage blob might carry.
+ * `pendingSlug`, `sidePanelOpen`, `visitRecency`, `visitCounts`) is
+ * deliberately NOT persisted — browser sessions are ephemeral per spec §7,
+ * and the migrator below drops any stray browser keys an old localStorage
+ * blob might carry.
  */
 export type PersistedAppState = Pick<
   AppStore,

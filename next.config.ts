@@ -17,8 +17,8 @@ const scriptSrc = `script-src 'self' 'unsafe-inline'${
  * host environment (README + .env.example). A typo like `saadahmad.dev`
  * (no scheme) makes `new URL()` throw `TypeError: Invalid URL`, which kills
  * the build with an opaque stack. So a malformed value degrades to null →
- * 'self' alone — the same tolerance `src/lib/site.ts` shows (it only strips
- * a trailing slash and never validates).
+ * 'self' alone — the same tolerance `src/lib/site.ts` shows (an unusable
+ * value falls back to the localhost default).
  */
 function configuredSiteOrigin(raw: string | undefined): string | null {
   if (!raw) return null;

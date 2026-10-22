@@ -3,6 +3,22 @@ import { gotoApp } from "./utils";
 import { SITE_LAST_UPDATED } from "../src/lib/site";
 
 /**
+ * The configured production origin, or null when the variable is unset or
+ * unusable. The app degrades a malformed NEXT_PUBLIC_SITE_URL to its
+ * localhost default (src/lib/site.ts) and the build survives it — the spec
+ * must not throw on the very typo the app now tolerates.
+ */
+function configuredOrigin(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const origin = new URL(raw).origin;
+    return origin === "null" ? null : origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Canonical origin the app publishes in robots.txt / sitemap.xml: `siteUrl` in
  * src/lib/site.ts is `NEXT_PUBLIC_SITE_URL` when configured, otherwise its
  * localhost fallback. Derive the expectation from the environment/baseURL
@@ -10,8 +26,8 @@ import { SITE_LAST_UPDATED } from "../src/lib/site";
  * against a deployment (`PLAYWRIGHT_BASE_URL`) or a configured canonical URL.
  */
 function canonicalOrigin(baseURL: string | undefined, pageUrl: string): string {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL;
-  if (configured) return new URL(configured).origin;
+  const configured = configuredOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+  if (configured !== null) return configured;
   return new URL(baseURL ?? pageUrl).origin;
 }
 
@@ -134,8 +150,12 @@ test.describe("Security headers", () => {
     // portfolio. With the origin unset (local dev) it is 'self' alone.
     expect(csp).toContain("frame-ancestors 'self'");
     expect(csp).not.toMatch(/frame-ancestors 'none'/);
-    if (process.env.NEXT_PUBLIC_SITE_URL) {
-      const configured = new URL(process.env.NEXT_PUBLIC_SITE_URL).origin;
+    // The configured origin is only asserted when it is USABLE: the app
+    // itself degrades a malformed NEXT_PUBLIC_SITE_URL to 'self' alone (see
+    // src/lib/site.ts), so the spec must not throw on the same typo the
+    // build now survives.
+    const configured = configuredOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+    if (configured !== null) {
       expect(csp).toContain(`frame-ancestors 'self' ${configured}`);
     }
     // The global X-Frame-Options header is gone: CSP frame-ancestors owns
