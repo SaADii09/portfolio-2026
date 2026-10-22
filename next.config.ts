@@ -28,6 +28,16 @@ function configuredSiteOrigin(raw: string | undefined): string | null {
     // "null" — never a usable frame-ancestor value.
     return origin === "null" ? null : origin;
   } catch {
+    // The same tolerance `src/lib/site.ts` shows (an unusable value falls
+    // back to the localhost default) — and the same shout about it, so a
+    // typo is visible in the build log either way.
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[config] NEXT_PUBLIC_SITE_URL is not a valid absolute URL (${JSON.stringify(
+          raw,
+        )}) — frame-ancestors falls back to 'self'`,
+      );
+    }
     return null;
   }
 }

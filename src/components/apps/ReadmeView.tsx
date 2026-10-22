@@ -47,7 +47,7 @@ export function ReadmeView({ html, degraded, slug }: ReadmeViewProps) {
           href={repoUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-body rounded-os transition-opacity hover:opacity-80 bg-os-accent text-os-bg"
+          className="inline-flex items-center gap-1.5 min-h-[44px] px-3 py-1.5 text-xs font-body rounded-os transition-opacity hover:opacity-80 bg-os-accent text-os-bg"
         >
           <ExternalLink size={12} />
           Open on GitHub

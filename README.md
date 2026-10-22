@@ -11,7 +11,7 @@ Interactive Web OS portfolio — a fully functional desktop environment in the b
 - **Command palette** — `Ctrl/Cmd+K` fuzzy-searches every app, widget, and command with arrow-key navigation
 - **Global shortcuts** — `Esc` ownership chain, `Alt+Arrow` snap-to-half, `Ctrl/Cmd+W` closes the focused window
 - **6 functional apps** — About, Projects, Terminal, Contact, Resume, Control Panel
-- **DevOS Browser** — one browser window with a tab strip: project tabs render each repo's sanitized GitHub README, web tabs run the sandboxed iframe pipeline (screenshot fallback), and the home tab carries the project grid plus 8 curated app tiles — with a warm-tab cache and a project side panel (about, tech, timeline, links)
+- **DevOS Browser** — one browser window with a tab strip: project tabs render each repo's sanitized GitHub README, web tabs run the sandboxed iframe pipeline (a server-side framing verdict decides whether a site may be embedded, and a genuine refuser gets a live preview with a reader fallback), and the home tab is a Chrome-style start page (shortcut tiles, recently visited, your live projects) — with a warm-tab cache and a project side panel (about, tech, timeline, links)
 - **4 live widgets** — CPU monitor, Weather (Open-Meteo API), Music player (Web Audio synth), Sticky notes
 - **Terminal ↔ OS bridge** — `theme`, `open <app>`, `music <action>`, and `apps` drive real OS state
 - **AI chat assistant** — Anthropic streaming API with BM25 RAG over a local knowledge base
@@ -118,7 +118,7 @@ npm run build
 npm start
 ```
 
-Deploy to Vercel, Netlify, or any Node.js host. Everything is prerendered except the four API routes (`/api/chat`, `/api/screenshot`, `/api/project-meta`, `/api/weather`). Set `ANTHROPIC_API_KEY` and `NEXT_PUBLIC_SITE_URL` in the host's environment.
+Deploy to Vercel, Netlify, or any Node.js host. Everything is prerendered except the five API routes (`/api/chat`, `/api/embed-check`, `/api/screenshot`, `/api/project-meta`, `/api/weather`). Set `ANTHROPIC_API_KEY` and `NEXT_PUBLIC_SITE_URL` in the host's environment.
 
 ## License
 

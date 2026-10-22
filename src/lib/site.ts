@@ -29,6 +29,10 @@ function siteUrlFrom(raw: string | undefined): string {
   if (candidate === "") return FALLBACK_SITE_URL;
   const parsed = parseAbsoluteUrl(candidate);
   if (parsed !== null) return parsed;
+  // The repo logs to the console in development only (docs/Rules.md §4) —
+  // but a malformed site url is worth shouting about at BUILD time, where
+  // NODE_ENV is "production" for the build itself. The build log is the
+  // place the owner will look, so the warning stays for the build.
   console.warn(
     `[site] NEXT_PUBLIC_SITE_URL is not a valid absolute URL (${JSON.stringify(
       candidate,
