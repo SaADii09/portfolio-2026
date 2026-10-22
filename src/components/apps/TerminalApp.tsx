@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "@/store";
+import { useScrollFade } from "@/hooks/useScrollFade";
 import { openApp, musicControl, setThemeByName } from "@/lib/os-actions";
 import { executeCommand, BANNER, type TerminalContext } from "@/lib/terminal-commands";
 
@@ -34,6 +35,9 @@ export function TerminalApp() {
   const [histIdx, setHistIdx] = useState(-1);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // The scroll affordance (G4): the terminal list is one of the five
+  // measured scrollers.
+  useScrollFade(listRef);
 
   useEffect(() => {
     if (listRef.current) {

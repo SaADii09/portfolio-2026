@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { useStore } from "@/store";
 import { BrowserApp, resetMetaRequests } from "@/components/apps/BrowserApp";
@@ -47,6 +49,50 @@ function windowState(windowId: string) {
 async function flush() {
   await act(async () => {});
 }
+
+describe("BrowserApp — start-page compaction classes (short-window B1)", () => {
+  it("renders the greeting, tile-label and project-host hooks the compact CSS keys on", () => {
+    render(<BrowserApp windowId="win-b1" />);
+    // The greeting row — hidden by @container tabpanel (max-height: 299px).
+    const greeting = screen.getByText(/good (morning|afternoon|evening|night)/i);
+    expect(greeting.className).toContain("browser-home-greeting");
+    // Every tile's label span — hidden in compact mode; the colored square,
+    // the grid, the aria-labels and the 44px targets remain.
+    const tiles = screen.getAllByRole("button", { name: BROWSER_TILES[0]?.name ?? "" });
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const tile of BROWSER_TILES) {
+      const btn = screen.getByRole("button", { name: tile.name });
+      const label = btn.querySelector(".browser-tile-label");
+      expect(label, `label span for ${tile.name}`).not.toBeNull();
+    }
+    // Project rows: the host span is the compact-mode hide (name+arrow stay).
+    for (const entry of PROJECTS) {
+      const row = screen.getByRole("button", { name: new RegExp(entry.title, "i") });
+      expect(
+        row.querySelector(".browser-project-row-host"),
+        `host span for ${entry.slug}`,
+      ).not.toBeNull();
+    }
+  });
+
+  it("keys the tab-panel container + compaction rules in the SOURCE css", () => {
+    // Unit tests can only see source css; the built-CSS pipeline (Tailwind +
+    // lightningcss) is asserted in the e2e css-integrity spec.
+    const css = readFileSync(join(__dirname, "..", "app", "globals.css"), "utf-8");
+    expect(css).toMatch(/\.browser-tab-panel\s*\{[^}]*container-type:\s*size/);
+    expect(css).toMatch(/\.browser-tab-panel\s*\{[^}]*container-name:\s*tabpanel/);
+    expect(css).toContain("@container tabpanel (max-height: 299px)");
+    for (const hook of [
+      "browser-home-greeting",
+      "browser-tile-label",
+      "browser-project-row-host",
+    ]) {
+      expect(css.indexOf(hook), `${hook} appears in a compaction rule`).toBeGreaterThan(
+        css.indexOf("@container tabpanel (max-height: 299px)"),
+      );
+    }
+  });
+});
 
 describe("BrowserApp", () => {
   const fetchMock = vi.fn(async () => ({

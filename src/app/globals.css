@@ -725,6 +725,35 @@ select,
   z-index: 5;
 }
 
+/* ── Browser Start-Page Compaction (short-window spec G2) ──
+ * The browser floor is 380px (≈238px of panel body below the chrome). A
+ * plain CSS class (NOT Tailwind's named-container utility — it emits
+ * `inline-size`, but the compaction must respond to HEIGHT) turns the tab
+ * panel into a size container. Below 299px the start page compacts: the
+ * greeting and tile labels hide (colored squares, grid, aria-labels and
+ * 44px targets all remain), project rows collapse to name+arrow, and the
+ * Shortcuts region stays fully in view at the floor. Sibling queries (the
+ * Phase-15 side panel's @max-[560px] rules on .browser-shell) are untouched.
+ */
+.browser-tab-panel {
+  container-type: size;
+  container-name: tabpanel;
+}
+
+@container tabpanel (max-height: 299px) {
+  .browser-home-greeting {
+    display: none;
+  }
+
+  .browser-tile-label {
+    display: none;
+  }
+
+  .browser-project-row-host {
+    display: none;
+  }
+}
+
 /* ── Focus Ring ──────────────────────────────────────── */
 
 .os-focus-ring:focus-visible {

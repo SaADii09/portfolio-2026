@@ -1,9 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useRef } from "react";
 import { ChevronRight, ExternalLink, GitFork, Loader2, RotateCw } from "lucide-react";
 import type { ProjectMeta } from "@/app/api/project-meta/route";
 import type { ProjectEntry } from "@/lib/portfolio-data";
+import { useScrollFade } from "@/hooks/useScrollFade";
 
 export interface ProjectSidePanelProps {
   /** The project behind the active tab; null when the slug is unknown. */
@@ -202,6 +204,10 @@ export function ProjectSidePanel({
   onRetry,
   onCollapse,
 }: ProjectSidePanelProps) {
+  // The scroll affordance (G4): the side-panel body is one of the five
+  // measured scrollers.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  useScrollFade(bodyRef);
   const frameClass = [
     "flex flex-col min-h-0 shrink-0 overflow-hidden glass glass-pos border-os-border",
     RAIL_CLASS,
@@ -222,7 +228,7 @@ export function ProjectSidePanel({
           <ChevronRight size={14} />
         </button>
       </header>
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-4">
+      <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-4">
         <PanelBody entry={entry} meta={meta} loading={loading} error={error} onRetry={onRetry} />
       </div>
     </aside>

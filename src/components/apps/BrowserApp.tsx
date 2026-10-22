@@ -11,6 +11,7 @@ import {
   type ReactNode,
   type UIEvent,
 } from "react";
+import { useScrollFade } from "@/hooks/useScrollFade";
 import {
   ArrowLeft,
   ArrowRight,
@@ -555,7 +556,9 @@ function ShortcutTile({ tile, onOpen }: { tile: BrowserTile; onOpen: () => void 
       >
         {tile.name.charAt(0)}
       </span>
-      <span className="truncate max-w-full text-center">{tile.name}</span>
+      {/* browser-tile-label: hidden in compact mode — the colored square, the
+          grid, the aria-label and the 44px target all remain (short-window B1). */}
+      <span className="browser-tile-label truncate max-w-full text-center">{tile.name}</span>
     </button>
   );
 }
@@ -592,7 +595,11 @@ function ProjectRowCard({ entry, onOpen }: { entry: ProjectEntry; onOpen: () => 
       >
         <BookOpen size={14} className="text-os-accent shrink-0" aria-hidden="true" />
         <span className="truncate max-w-[160px] font-display">{entry.title}</span>
-        <span className="truncate font-body text-os-muted">{hostOfProjectRow(entry)}</span>
+        {/* browser-project-row-host: hidden in compact mode (name+badge+arrow
+            stay; the row collapses to one line — short-window B1). */}
+        <span className="browser-project-row-host truncate font-body text-os-muted">
+          {hostOfProjectRow(entry)}
+        </span>
         <span className="shrink-0 px-1.5 py-0.5 text-[9px] rounded-os bg-os-accent text-os-bg font-display">
           yours
         </span>
@@ -618,7 +625,9 @@ function HomeTabBody({ windowId }: { windowId: string }) {
 
   return (
     <div className="flex flex-col gap-4 p-3">
-      <p className="font-body text-xs text-os-muted">{greetingCopy()}</p>
+      {/* browser-home-greeting: hidden by the @container tabpanel compaction
+          rule when the panel is below the 299px floor body (short-window B1). */}
+      <p className="browser-home-greeting font-body text-xs text-os-muted">{greetingCopy()}</p>
 
       <section aria-label="Shortcuts">
         <h2 className="font-display text-xs text-os-accent mb-1.5">Shortcuts</h2>
@@ -809,6 +818,10 @@ function TabPanel({
   children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // The scroll affordance (G4): every real scroller announces its state —
+  // the tab panel is one of the five (Window body, tab panel, terminal,
+  // side panel, chat list).
+  useScrollFade(panelRef);
   const scrollRef = useRef<ScrollState>(newScrollState(tab.scrollTop));
 
   // The persisted position is restored whenever this panel becomes the

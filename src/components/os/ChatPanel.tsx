@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { useScrollFade } from "@/hooks/useScrollFade";
 import { MessageCircle, X, Send, ChevronLeft, ChevronRight, Bot, User, Clock } from "lucide-react";
 
 function formatTime(ts: number): string {
@@ -25,6 +26,10 @@ export function ChatPanel() {
 
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  // The scroll affordance (G4): the chat list is one of the five measured
+  // scrollers. The docked and expanded branches share this ref — the hook
+  // re-attaches when the branch swap replaces the element.
+  useScrollFade(listRef);
 
   useEffect(() => {
     if (listRef.current) {
