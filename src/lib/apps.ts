@@ -3,7 +3,7 @@ import type { WidgetType } from "@/types/widget";
 
 /** Canonical app ids — the union the registry, launchers, and terminal all agree on. */
 export type AppId =
-  "about" | "projects" | "browser" | "control-panel" | "resume" | "terminal" | "contact";
+  "about" | "projects" | "browser" | "control-panel" | "resume" | "terminal" | "contact" | "chat";
 
 export interface AppDef {
   id: AppId;
@@ -62,6 +62,15 @@ export const APP_DEFS: AppDef[] = [
     title: "Contact",
     component: "contact",
     keywords: ["email", "mail", "message", "reach out"],
+  },
+  {
+    // Appended last so the palette row-order pins (about → projects → browser → …)
+    // keep their positions. The launcher is device-aware (see APP_LAUNCHERS):
+    // desktop opens a Dev Chat window, mobile toggles the chat sheet.
+    id: "chat",
+    title: "Dev Chat",
+    component: "chat",
+    keywords: ["ai", "assistant", "bot", "chat", "ask"],
   },
 ];
 

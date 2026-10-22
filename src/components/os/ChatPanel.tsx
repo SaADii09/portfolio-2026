@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
+import { openApp } from "@/lib/os-actions";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { MessageCircle, X, Send, ChevronLeft, ChevronRight, Bot, User, Clock } from "lucide-react";
 
@@ -21,6 +22,11 @@ export function ChatPanel() {
   const toggleChat = useStore((s) => s.toggleChat);
   const setChatExpanded = useStore((s) => s.setChatExpanded);
   const sendMessage = useStore((s) => s.sendMessage);
+  // Chat is a registered OS app: the desktop edge tab stands in for the chat
+  // WINDOW, so it only exists while no non-minimized chat window is on screen.
+  const hasChatWindow = useStore((s) =>
+    s.windows.some((w) => w.component === "chat" && !w.isMinimized),
+  );
   const isMobile = useIsMobile();
 
   const [input, setInput] = useState("");
@@ -221,9 +227,11 @@ export function ChatPanel() {
     );
   }
   if (!chatOpen) {
+    // A chat window is already the chat surface — no edge tab beside it.
+    if (hasChatWindow) return null;
     return (
       <button
-        onClick={toggleChat}
+        onClick={() => openApp("chat")}
         className="fixed right-0 top-1/3 z-[9997] flex items-center justify-center w-8 h-12 rounded-l-os transition-all hover:w-10 glow-sm"
         style={{
           background: "var(--accent-1)",

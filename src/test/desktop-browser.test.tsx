@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { Globe, Monitor } from "lucide-react";
+import { Globe, Monitor, Bot } from "lucide-react";
 import { useStore } from "@/store";
 import { openApp } from "@/lib/os-actions";
 import { APP_DEFS } from "@/lib/apps";
@@ -272,6 +272,13 @@ describe("dock/taskbar window icons", () => {
     expect(WINDOW_ICONS[windowIconKeyFor({})]).toBe(Monitor);
   });
 
+  it("gives the chat app the Bot glyph (and a window can resolve it)", () => {
+    // Chat is a registered AppId: the icon grid, Start menu, and context menus
+    // all read APP_ICONS, so the row must exist and reach a chat WINDOW too.
+    expect(APP_ICONS.chat).toBe(Bot);
+    expect(WINDOW_ICONS[windowIconKeyFor({ type: "app", component: "chat" })]).toBe(Bot);
+  });
+
   it("never resolves an inherited object key as an icon", () => {
     // "toString" is on Object.prototype — the lookup uses own keys only.
     expect(windowIconKeyFor({ type: "app", component: "toString" })).toBe("monitor");
@@ -304,12 +311,12 @@ describe("desktop icon table", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders 7 icons (one per AppId) with the globe on the Browser launcher", () => {
+  it("renders 8 icons (one per AppId) with the globe on the Browser launcher", () => {
     render(<Desktop />);
 
     // Desktop icons are the only `title="Open …"` buttons in the OS shell.
     const iconButtons = screen.getAllByTitle(/^Open /);
-    expect(iconButtons).toHaveLength(7);
+    expect(iconButtons).toHaveLength(8);
     for (const def of APP_DEFS) {
       expect(
         screen.getByTitle(`Open ${def.desktopLabel ?? def.title}`),
