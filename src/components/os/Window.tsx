@@ -7,6 +7,7 @@ import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useContextMenuLongPress } from "@/hooks/useContextMenuLongPress";
 import { useHeaderDragHandlers } from "@/hooks/useHeaderDragHandlers";
 import { useDragPosition } from "@/hooks/useDragPosition";
+import { useScrollFade } from "@/hooks/useScrollFade";
 import {
   clampWindowSize,
   clampWindowPosition,
@@ -39,6 +40,11 @@ export function Window({ id, children }: WindowProps) {
 
   const rafRef = useRef(0);
   const windowElRef = useRef<HTMLDivElement>(null);
+  // The scroll affordance (G4): the content scroller announces
+  // data-scrollable / data-scrolled-end for the sticky-bottom fade. The hook
+  // re-attaches when the mobile/desktop branch swap replaces this element.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useScrollFade(contentRef);
   // Live cleanup of an in-flight resize gesture. The gesture closure registers
   // it on start; the unmount effect invokes it so a mid-gesture unmount cannot
   // leave document listeners or a pending rAF behind. (Same contract as
@@ -336,7 +342,10 @@ export function Window({ id, children }: WindowProps) {
           </div>
         )}
 
-        <div className="os-window-content flex-1 p-4 font-body text-sm text-os-text">
+        <div
+          ref={contentRef}
+          className="os-window-content flex-1 p-4 font-body text-sm text-os-text"
+        >
           {children}
         </div>
 
@@ -410,7 +419,9 @@ export function Window({ id, children }: WindowProps) {
         </div>
       )}
 
-      <div className="os-window-content flex-1 p-4 font-body text-sm text-os-text">{children}</div>
+      <div ref={contentRef} className="os-window-content flex-1 p-4 font-body text-sm text-os-text">
+        {children}
+      </div>
 
       {renderDesktopResizeHandles()}
       {renderContextMenu()}

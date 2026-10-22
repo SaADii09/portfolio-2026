@@ -4,7 +4,7 @@ import {
   MIN_WINDOW_HEIGHT,
   MOBILE_FILL_H,
 } from "@/lib/constants";
-import { clampWindowSize, getViewportBounds } from "@/lib/boundaries";
+import { availableWindowHeight, clampWindowSize, getViewportBounds } from "@/lib/boundaries";
 import type { AppId } from "@/lib/apps";
 
 /**
@@ -294,6 +294,22 @@ function fallbackGeometry(key: string, vw: number, vh: number, cascade: number):
   const size = clampSize(FALLBACK_SIZE, vw, vh, minHeightFor(key));
   const pos = legacyPosition(cascade);
   return settle(pos, size.width, size.height, vw, vh);
+}
+
+/**
+ * The height a resize commits to (short-window spec G1) — the reported
+ * height clamped into `[min(floor, available), available]`. Pure; shared by
+ * updateWindowSize so the floor is unfakeable from ANY caller.
+ */
+export function clampResizedHeight(
+  height: number,
+  component: string | undefined,
+  vw: number,
+  vh: number,
+): number {
+  const available = availableWindowHeight(vw, vh);
+  const floor = Math.min(minHeightFor(component), available);
+  return Math.min(available, Math.max(floor, height));
 }
 
 /**

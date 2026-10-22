@@ -1,17 +1,13 @@
 import { StateCreator } from "zustand";
 import { WindowInstance, WindowConfig } from "@/types/window";
-import {
-  clampWindowSize,
-  clampWindowPosition,
-  getViewportBounds,
-  availableWindowHeight,
-} from "@/lib/boundaries";
+import { clampWindowSize, clampWindowPosition, getViewportBounds } from "@/lib/boundaries";
 import { MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, INITIAL_Z_INDEX } from "@/lib/constants";
 import {
   resolveOpenGeometry,
   WEBVIEW_GEOMETRY_KEY,
   WindowGeometry,
   minHeightFor,
+  clampResizedHeight,
 } from "@/lib/window-geometry";
 import type { BrowserSlice } from "./browserSlice";
 
@@ -244,21 +240,19 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
 
   updateWindowSize: (id, width, height) => {
     // The floor makes the resize unfakeable (short-window spec G1): whatever
-    // the gesture reports, a window's committed height is never below its
-    // per-app floor — collapsed to the available paintable height on a short
-    // viewport so the floored window stays inside the safe zone.
+    // the gesture reports, the committed height passes clampResizedHeight —
+    // never below the per-app floor, never above the paintable height.
     const { vw, vh } = viewportSize();
-    const available = availableWindowHeight(vw, vh);
     set((s) => ({
-      windows: s.windows.map((w) => {
-        if (w.id !== id) return w;
-        const floor = Math.min(minHeightFor(w.component), available);
-        return {
-          ...w,
-          width: Math.max(MIN_WINDOW_WIDTH, width),
-          height: Math.min(available, Math.max(floor, height)),
-        };
-      }),
+      windows: s.windows.map((w) =>
+        w.id === id
+          ? {
+              ...w,
+              width: Math.max(MIN_WINDOW_WIDTH, width),
+              height: clampResizedHeight(height, w.component, vw, vh),
+            }
+          : w,
+      ),
     }));
   },
 

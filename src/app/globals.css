@@ -703,6 +703,28 @@ select,
   background: color-mix(in srgb, var(--text-secondary) 50%, transparent);
 }
 
+/* ── Scroll Affordance (short-window spec G4) ──────────
+ * A sticky-bottom fade announcing "there is more below" on any scroller the
+ * useScrollFade hook has measured. Sticky — NOT absolute — so it rides the
+ * visible bottom edge instead of scrolling away with the content. In flow
+ * (adds its height to scrollHeight), pointer-transparent, colored via the
+ * color-mix token idiom. Gone at the scroll end (data-scrolled-end).
+ */
+[data-scrollable="true"]:not([data-scrolled-end="true"])::after {
+  content: "";
+  position: sticky;
+  bottom: 0;
+  display: block;
+  height: 24px;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--bg-primary) 65%, transparent),
+    transparent
+  );
+  z-index: 5;
+}
+
 /* ── Focus Ring ──────────────────────────────────────── */
 
 .os-focus-ring:focus-visible {
