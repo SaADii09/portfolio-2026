@@ -1,4 +1,3 @@
-import { retrieveRelevantContext } from "@/lib/rag";
 import {
   clientIpOf,
   createRateLimiter,
@@ -6,6 +5,7 @@ import {
   rateLimitedResponse,
 } from "@/lib/rate-limit";
 import { resolveProviderFromEnv, type ProviderResolutionError } from "@/lib/ai/registry";
+import { buildSystemPrompt } from "@/lib/ai/prompt";
 import type { NormalizedStreamEvent, StreamRequest } from "@/lib/ai/provider";
 
 const MAX_REQUESTS_PER_MINUTE = Number(process.env.AI_RATE_LIMIT_PER_MIN ?? 15);
@@ -32,16 +32,6 @@ const limiter = createRateLimiter({
 export function pruneTimestamps(stamps: number[], now: number): number[] {
   return pruneStamps(stamps, now, RATE_LIMIT_WINDOW_MS);
 }
-
-const SYSTEM_PROMPT_BASE = `You are DevOS AI, an assistant embedded in Saad Ahmad's interactive portfolio website.
-You help visitors learn about Saad's work, skills, projects, and experience.
-Be concise, friendly, and helpful. Use markdown sparingly (bold for emphasis).
-If asked something outside your knowledge, say you don't know rather than making up an answer.
-The current year is 2026.
-
-Below is relevant context from Saad's portfolio knowledge base. Use it to answer the user's question.
-If the context doesn't contain enough information, answer based on what you know about Saad from the context.
-`;
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -192,9 +182,7 @@ export async function POST(request: Request) {
   const messages = validated.messages;
 
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
-  const context = lastUserMessage ? retrieveRelevantContext(lastUserMessage.content) : "";
-
-  const systemPrompt = SYSTEM_PROMPT_BASE + (context ? `\n\nRelevant context:\n${context}` : "");
+  const systemPrompt = buildSystemPrompt({ userQuery: lastUserMessage?.content ?? "" });
 
   const resolved = resolveProviderFromEnv(process.env);
   if ("error" in resolved) return resolutionErrorToResponse(resolved.error);
