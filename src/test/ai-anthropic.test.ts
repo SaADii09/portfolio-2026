@@ -6,6 +6,7 @@ import {
 } from "node:stream/web";
 import { ANTHROPIC_ADAPTER, createAnthropicAdapter } from "@/lib/ai/adapters/anthropic";
 import type { NormalizedStreamEvent, StreamRequest } from "@/lib/ai/provider";
+import { readAiFixture } from "./ai-fixture";
 
 /** Node's ReadableStream is structurally close to lib.dom's but not identical under strict types. */
 function nodeStream(source: NodeUnderlyingSource<Uint8Array>): ReadableStream<Uint8Array> {
@@ -309,5 +310,39 @@ describe("anthropic adapter streaming", () => {
     });
     controller.abort();
     expect(await iterator.next()).toEqual({ done: true, value: undefined });
+  });
+});
+
+/**
+ * Task 12 gated pin: once the owner captures a real Anthropic response, the
+ * SAME adapter runs against the REAL body. The expected text is re-derived by
+ * a second, adapter-free reader of the same wire, so the parse-equality pin is
+ * "two independent readers agree", not "the fixture matches a snapshot".
+ * Absent fixture → skipped; the inline transcript above stays the pin.
+ */
+function capturedSseText(fixture: string): string {
+  return fixture
+    .split("\n")
+    .filter((line) => line.startsWith("data:") && !line.includes("[DONE]"))
+    .map((line) => JSON.parse(line.slice("data:".length).trim()) as { delta?: { text?: string } })
+    .map((payload) => payload.delta?.text ?? "")
+    .join("");
+}
+
+describe("anthropic adapter · captured fixture", () => {
+  const FIXTURE = readAiFixture("anthropic");
+
+  it.runIf(FIXTURE !== null)("re-parses the captured upstream body", async () => {
+    const fixture = FIXTURE ?? "";
+    const { fetch } = fetchReturning({ ok: true, status: 200, body: bodyStream(fixture) });
+    const adapter = createAnthropicAdapter({ fetchImpl: fetch });
+
+    const events = await collect(adapter.stream(testRequest()));
+
+    expect(capturedSseText(fixture).length).toBeGreaterThan(0);
+    expect(events.every((event) => event.type === "token")).toBe(true);
+    expect(events.map((event) => (event.type === "token" ? event.text : "")).join("")).toBe(
+      capturedSseText(fixture),
+    );
   });
 });

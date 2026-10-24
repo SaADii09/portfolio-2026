@@ -6,6 +6,7 @@ import {
 } from "node:stream/web";
 import { OPENAI_COMPAT_ADAPTER, createOpenAiCompatAdapter } from "@/lib/ai/adapters/openai-compat";
 import type { NormalizedStreamEvent, StreamRequest } from "@/lib/ai/provider";
+import { readAiFixture } from "./ai-fixture";
 
 /** Node's ReadableStream is structurally close to lib.dom's but not identical under strict types. */
 function nodeStream(source: NodeUnderlyingSource<Uint8Array>): ReadableStream<Uint8Array> {
@@ -308,6 +309,59 @@ describe("openai-compat adapter streaming", () => {
           text: "openai-compat needs AI_BASE_URL and AI_MODEL set — check .env.example.",
         },
       ]);
+    } finally {
+      delete process.env.AI_BASE_URL;
+      delete process.env.AI_MODEL;
+    }
+  });
+});
+
+/**
+ * Task 12 gated pins: one row per capturable openai-compat endpoint. When the
+ * owner runs `scripts/capture-ai-fixture.ts <provider>`, that row stops being
+ * skipped and the adapter must reproduce — byte-for-byte — the text a second,
+ * adapter-free reader extracts from the SAME stored body.
+ */
+const CAPTURED_BASES: Record<string, string> = {
+  groq: "https://api.groq.com/openai/v1",
+  openrouter: "https://openrouter.ai/api/v1",
+  ollama: "http://localhost:11434/v1",
+};
+
+const CAPTURED_PROVIDERS = Object.keys(CAPTURED_BASES);
+
+/** The text a captured compat body carries, read without adapter code. */
+function capturedSseText(fixture: string): string {
+  return fixture
+    .split("\n")
+    .filter((line) => line.startsWith("data:") && !line.includes("[DONE]"))
+    .map((line) => {
+      const payload = JSON.parse(line.slice("data:".length).trim()) as {
+        choices?: Array<{ delta?: { content?: string } }>;
+      };
+      return payload.choices?.[0]?.delta?.content ?? "";
+    })
+    .join("");
+}
+
+describe.each(CAPTURED_PROVIDERS)("openai-compat · captured %s fixture", (provider) => {
+  const FIXTURE = readAiFixture(provider);
+
+  it.runIf(FIXTURE !== null)("re-parses the captured upstream body", async () => {
+    const fixture = FIXTURE ?? "";
+    process.env.AI_BASE_URL = CAPTURED_BASES[provider];
+    process.env.AI_MODEL = "captured";
+    try {
+      const { fetch } = fetchReturning({ ok: true, status: 200, body: bodyStream(fixture) });
+      const adapter = createOpenAiCompatAdapter({ fetchImpl: fetch });
+
+      const events = await collect(adapter.stream(testRequest()));
+
+      expect(capturedSseText(fixture).length).toBeGreaterThan(0);
+      expect(events.every((event) => event.type === "token")).toBe(true);
+      expect(events.map((event) => (event.type === "token" ? event.text : "")).join("")).toBe(
+        capturedSseText(fixture),
+      );
     } finally {
       delete process.env.AI_BASE_URL;
       delete process.env.AI_MODEL;
