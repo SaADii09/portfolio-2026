@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Bot, User, Clock } from "lucide-react";
 import type { Message } from "@/types/chat";
+import { AssistantMarkdown } from "@/components/apps/chat-internal/AssistantMarkdown";
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], {
@@ -13,9 +14,9 @@ function formatTime(ts: number): string {
 }
 
 /**
- * Shared transcript surface — the lifted prior ChatPanel markup (one
- * implementation for the desktop window and the mobile sheet). Scrolls to the
- * newest message and renders the empty state when the conversation is bare.
+ * Shared transcript surface — one implementation for the desktop window and
+ * the mobile sheet. Assistant answers render through `AssistantMarkdown`
+ * (marker stripping + link allow-list live there).
  */
 export function MessageList({ messages }: { messages: Message[] }) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -70,12 +71,10 @@ export function MessageList({ messages }: { messages: Message[] }) {
                 color: msg.role === "user" ? "var(--bg-primary)" : "var(--text-primary)",
               }}
             >
-              {msg.content}
-              {msg.streaming && (
-                <span
-                  className="inline-block w-1.5 h-3.5 ml-0.5 animate-pulse rounded-sm"
-                  style={{ background: "var(--accent-1)" }}
-                />
+              {msg.role === "assistant" ? (
+                <AssistantMarkdown content={msg.content} streaming={msg.streaming === true} />
+              ) : (
+                <p className="whitespace-pre-wrap">{msg.content}</p>
               )}
             </div>
             <span

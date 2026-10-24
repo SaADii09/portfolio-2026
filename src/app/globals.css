@@ -1124,3 +1124,97 @@ select,
     transform: translate(-1px, 0);
   }
 }
+
+/* ── Chat markdown (react-markdown output) — theme tokens only ─────────── */
+.md-os {
+  font-family: var(--font-body);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.md-os > :first-child {
+  margin-top: 0;
+}
+.md-os > :last-child {
+  margin-bottom: 0;
+}
+.md-os p {
+  margin: 0.35em 0;
+}
+.md-os strong {
+  font-weight: 700;
+}
+.md-os em {
+  font-style: italic;
+}
+.md-os a,
+.md-os-link {
+  color: var(--accent-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-os a:hover,
+.md-os-link:hover {
+  color: var(--accent-2);
+}
+.md-os ul,
+.md-os ol {
+  margin: 0.4em 0;
+  padding-inline-start: 1.15em;
+}
+.md-os ul {
+  list-style: disc;
+}
+.md-os ol {
+  list-style: decimal;
+}
+.md-os li {
+  margin: 0.15em 0;
+}
+.md-os blockquote {
+  margin: 0.4em 0;
+  padding-inline-start: 0.6em;
+  border-inline-start: 2px solid color-mix(in srgb, var(--border) 55%, transparent);
+  color: var(--text-secondary);
+}
+.md-os code {
+  padding: 0.05em 0.3em;
+  border-radius: calc(var(--radius) / 2);
+  background: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
+  font-size: 0.95em;
+}
+.md-os pre {
+  margin: 0.45em 0;
+  padding: 0.5em 0.65em;
+  overflow-x: auto;
+  border-radius: calc(var(--radius) / 2);
+  background: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
+}
+.md-os pre code {
+  padding: 0;
+  background: transparent;
+}
+.md-os table {
+  border-collapse: collapse;
+  margin: 0.45em 0;
+}
+.md-os th,
+.md-os td {
+  border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  padding: 0.2em 0.45em;
+  text-align: start;
+}
+.md-os-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  margin-inline-start: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: var(--accent-1);
+  animation: md-os-blink 1s steps(2, start) infinite;
+}
+@keyframes md-os-blink {
+  50% {
+    opacity: 0;
+  }
+}

@@ -62,6 +62,7 @@ beforeEach(() => {
     messages: [],
     isLoading: false,
     unreadCount: 0,
+    chatGreeted: true,
   });
 });
 
@@ -78,6 +79,16 @@ describe("ChatApp", () => {
 
     expect(screen.getByText("What do you build?")).toBeInTheDocument();
     expect(screen.getByText("Portfolio tools like this desktop.")).toBeInTheDocument();
+  });
+
+  it("renders assistant markdown from the store", () => {
+    useStore.setState({
+      messages: [msg("a1", "assistant", "The **dashboard** is live.")],
+    });
+
+    render(<ChatApp />);
+
+    expect(screen.getByText("dashboard").tagName).toBe("STRONG");
   });
 
   it("shows the empty state while the conversation is bare", () => {
@@ -149,6 +160,7 @@ describe("ChatApp", () => {
       expect(chip.className).toContain("min-h-[44px]");
     }
   });
+
 });
 
 describe("StarterChips", () => {
