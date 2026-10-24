@@ -16,12 +16,17 @@
  *
  * Quota: each turn is a real provider call, and the route allows
  * AI_RATE_LIMIT_PER_MIN (15) requests per minute per IP — ten questions fit,
- * re-running back-to-back may not. Never run this in CI.
+ * re-running back-to-back may not. The PROVIDER's own limit is usually the
+ * tighter one: this prompt is ~2.4k tokens, so Groq's free tier (8k TPM)
+ * sustains roughly two turns a minute. Set `SMOKE_DELAY_MS=35000` to pace the
+ * run and avoid 429s. Never run this in CI.
  */
 
 import { extractChatActions, type ActionRef } from "@/lib/ai/actions";
 
 const BASE_URL = process.env.SMOKE_BASE_URL ?? "http://localhost:3000";
+/** Pause between turns, for providers that bill tokens per minute. */
+const DELAY_MS = Number(process.env.SMOKE_DELAY_MS ?? 0);
 
 /** The fixed visitor script — the last two are the marker prompts. */
 const GOLDEN_QUESTIONS = [
@@ -102,8 +107,15 @@ function report(index: number, question: string, result: TurnResult): void {
   console.log(`   reply: ${text.replace(/\s+/g, " ").slice(0, 240) || "(empty)"}`);
 }
 
+/** Sleeps between turns when SMOKE_DELAY_MS asks for it (nothing after the last). */
+async function pace(index: number): Promise<void> {
+  if (DELAY_MS <= 0 || index >= GOLDEN_QUESTIONS.length - 1) return;
+  await new Promise<void>((resolve) => setTimeout(resolve, DELAY_MS));
+}
+
 async function main(): Promise<void> {
   console.log(`golden Q&A against ${BASE_URL} (one real provider call per question)`);
+  if (DELAY_MS > 0) console.log(`pacing ${DELAY_MS}ms between turns`);
 
   let failures = 0;
   let markers = 0;
@@ -113,6 +125,7 @@ async function main(): Promise<void> {
     report(index, question, result);
     if (result.error) failures += 1;
     markers += extractChatActions(result.text).actions.length;
+    await pace(index);
   }
 
   console.log(`\n${GOLDEN_QUESTIONS.length} questions · ${failures} failed · ${markers} markers`);
