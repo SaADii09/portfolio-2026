@@ -16,6 +16,9 @@ export interface ProviderEnv {
   AI_PROVIDER?: string;
   ANTHROPIC_API_KEY?: string;
   AI_API_KEY?: string;
+  /** openai-compat: the `…/v1` root and the model id (both REQUIRED). */
+  AI_BASE_URL?: string;
+  AI_MODEL?: string;
 }
 
 /** Terminal pre-stream gap kinds (design §Route rewrite). */
