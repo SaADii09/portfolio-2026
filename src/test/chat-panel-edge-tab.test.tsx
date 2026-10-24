@@ -52,7 +52,6 @@ describe("ChatPanel desktop edge tab", () => {
       windows: [],
       activeWindowId: null,
       chatOpen: false,
-      chatExpanded: false,
       messages: [],
       isLoading: false,
     });

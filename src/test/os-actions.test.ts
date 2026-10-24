@@ -40,7 +40,6 @@ describe("os-actions", () => {
       widgets: [],
       theme: "retro",
       chatOpen: false,
-      chatExpanded: false,
       isPlaying: false,
       volume: 0.7,
       currentTrack: { id: "t1", title: "Neon Lights", artist: "Synthwave Dreams" },

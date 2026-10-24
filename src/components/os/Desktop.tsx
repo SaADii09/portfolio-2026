@@ -27,6 +27,7 @@ import { TerminalApp } from "@/components/apps/TerminalApp";
 import { ContactApp } from "@/components/apps/ContactApp";
 import { ResumeApp } from "@/components/apps/ResumeApp";
 import { BrowserApp } from "@/components/apps/BrowserApp";
+import { ChatApp } from "@/components/apps/ChatApp";
 import { ContextMenu } from "@/components/os/ContextMenu";
 import { CommandPalette } from "@/components/os/CommandPalette";
 import { APP_ICONS } from "@/components/os/appIcons";
@@ -44,6 +45,7 @@ const APP_RENDERERS: Record<string, (w: WindowInstance) => ReactNode> = {
   contact: () => <ContactApp />,
   resume: () => <ResumeApp />,
   browser: (w) => <BrowserApp windowId={w.id} />,
+  chat: () => <ChatApp />,
 };
 
 /**

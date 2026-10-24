@@ -160,7 +160,6 @@ describe("chatSlice v2 — ids, persistence, unread, retry, reset", () => {
     it("persistPartialize EXCLUDES transient fields (chatOpen, chatExpanded, isLoading)", () => {
       useStore.setState({
         chatOpen: true,
-        chatExpanded: true,
         isLoading: true,
         unreadCount: 0,
         chatGreeted: false,

@@ -1,26 +1,30 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "@/store";
 import { openApp } from "@/lib/os-actions";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import { MessageCircle, X, Send, ChevronLeft, ChevronRight, Bot, User, Clock } from "lucide-react";
+import { useChatActionExecutor } from "@/components/apps/chat-internal/useChatActionExecutor";
+import { MessageList } from "@/components/apps/chat-internal/MessageList";
+import { ChatComposer } from "@/components/apps/chat-internal/ChatComposer";
+import { StarterChips } from "@/components/apps/chat-internal/StarterChips";
+import { MessageCircle, X } from "lucide-react";
 
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
+/**
+ * Thin chat shell — a visibility rule plus the mobile FAB/sheet chrome. All
+ * chat UI lives in the shared `chat-internal` internals; the desktop window
+ * body is `ChatApp` (via Desktop's APP_RENDERERS).
+ *
+ * EXECUTION RULE (chat phase, Task 5/8): ChatPanel is always mounted on both
+ * platforms regardless of open state, so the executor hook below is mounted
+ * exactly ONCE per runtime platform and keeps observing the streaming
+ * assistant message even when the chat window/sheet is closed.
+ */
 export function ChatPanel() {
   const chatOpen = useStore((s) => s.chatOpen);
-  const chatExpanded = useStore((s) => s.chatExpanded);
   const messages = useStore((s) => s.messages);
   const isLoading = useStore((s) => s.isLoading);
   const toggleChat = useStore((s) => s.toggleChat);
-  const setChatExpanded = useStore((s) => s.setChatExpanded);
   const sendMessage = useStore((s) => s.sendMessage);
   // Chat is a registered OS app: the desktop edge tab stands in for the chat
   // WINDOW, so it only exists while no non-minimized chat window is on screen.
@@ -29,27 +33,18 @@ export function ChatPanel() {
   );
   const isMobile = useIsMobile();
 
-  const [input, setInput] = useState("");
-  const listRef = useRef<HTMLDivElement>(null);
+  // Exactly as the slice represents it: pick the assistant message whose
+  // `streaming === true` and pass `{id, content}` (null when none).
+  const streamingMessage = messages.find(
+    (m) => m.role === "assistant" && m.streaming === true,
+  );
+  useChatActionExecutor(
+    streamingMessage ? { id: streamingMessage.id, content: streamingMessage.content } : null,
+  );
 
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const handleSend = () => {
-    const text = input.trim();
-    if (!text || isLoading) return;
-    sendMessage(text);
-    setInput("");
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  const handleMobileSend = (text: string) => {
+    if (!text.trim() || isLoading) return;
+    void sendMessage(text);
   };
 
   if (isMobile) {
@@ -128,277 +123,34 @@ export function ChatPanel() {
                 </button>
               </div>
 
-              <div
-                ref={listRef}
-                aria-live="polite"
-                className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 font-body text-xs"
-              >
-                {messages.length === 0 && (
-                  <div className="text-center py-6" style={{ color: "var(--text-secondary)" }}>
-                    <Bot size={24} className="mx-auto mb-2 opacity-50" />
-                    <p>Ask me anything about my work, skills, or projects.</p>
-                  </div>
-                )}
+              <MessageList messages={messages} />
 
-                {messages.map((msg) => (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ y: 6, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ type: "spring", damping: 20, stiffness: 300 }}
-                    className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
-                  >
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{
-                        background: msg.role === "user" ? "var(--accent-1)" : "var(--bg-tertiary)",
-                      }}
-                    >
-                      {msg.role === "user" ? (
-                        <User size={12} style={{ color: "var(--bg-primary)" }} />
-                      ) : (
-                        <Bot size={12} style={{ color: "var(--text-primary)" }} />
-                      )}
-                    </div>
-                    <div className="max-w-[80%] flex flex-col gap-0.5">
-                      <div
-                        className="rounded-os px-3 py-2 leading-relaxed break-words"
-                        style={{
-                          background:
-                            msg.role === "user"
-                              ? "linear-gradient(135deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 60%, var(--accent-1)))"
-                              : undefined,
-                          color: msg.role === "user" ? "var(--bg-primary)" : "var(--text-primary)",
-                        }}
-                      >
-                        {msg.content}
-                        {msg.streaming && (
-                          <span
-                            className="inline-block w-1.5 h-3.5 ml-0.5 animate-pulse rounded-sm"
-                            style={{ background: "var(--accent-1)" }}
-                          />
-                        )}
-                      </div>
-                      <span
-                        className="flex items-center gap-1 text-[9px] px-1"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        <Clock size={8} />
-                        {formatTime(msg.timestamp)}
-                      </span>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+              {messages.length === 0 && (
+                <StarterChips onPick={handleMobileSend} />
+              )}
 
-              <div
-                className="flex items-center gap-2 p-3 border-t"
-                style={{ borderColor: "color-mix(in srgb, var(--border) 40%, transparent)" }}
-              >
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type a message..."
-                  disabled={isLoading}
-                  className="flex-1 px-3 py-2.5 text-xs font-body rounded-os outline-none border glass glass-pos min-h-[44px] focus:glow-sm transition-shadow"
-                  style={{
-                    color: "var(--text-primary)",
-                    borderColor: "color-mix(in srgb, var(--border) 40%, transparent)",
-                  }}
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
-                  className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-os transition-all hover:scale-105 active:scale-95 disabled:opacity-30"
-                  style={{
-                    background: "var(--accent-1)",
-                    color: "var(--bg-primary)",
-                  }}
-                  aria-label="Send"
-                >
-                  <Send size={16} />
-                </button>
-              </div>
+              <ChatComposer onSend={handleMobileSend} disabled={isLoading} />
             </motion.div>
           )}
         </AnimatePresence>
       </>
     );
   }
-  if (!chatOpen) {
-    // A chat window is already the chat surface — no edge tab beside it.
-    if (hasChatWindow) return null;
-    return (
-      <button
-        onClick={() => openApp("chat")}
-        className="fixed right-0 top-1/3 z-[9997] flex items-center justify-center w-8 h-12 rounded-l-os transition-all hover:w-10 glow-sm"
-        style={{
-          background: "var(--accent-1)",
-          color: "var(--bg-primary)",
-        }}
-        aria-label="Open chat"
-      >
-        <MessageCircle size={16} />
-      </button>
-    );
-  }
+
+  // A chat window is already the chat surface — no edge tab beside it.
+  if (hasChatWindow) return null;
 
   return (
-    <motion.div
-      initial={{ x: 320 }}
-      animate={{ x: 0 }}
-      exit={{ x: 320 }}
-      transition={{ type: "spring", damping: 25, stiffness: 300 }}
-      className="fixed right-0 z-[9997] flex flex-col glass-heavy border"
+    <button
+      onClick={() => openApp("chat")}
+      className="fixed right-0 top-1/3 z-[9997] flex items-center justify-center w-8 h-12 rounded-l-os transition-all hover:w-10 glow-sm"
       style={{
-        top: 36,
-        width: chatExpanded ? 280 : 240,
-        bottom: 0,
-        borderColor: "color-mix(in srgb, var(--accent-1) 15%, transparent)",
-        boxShadow: "var(--shadow-glass)",
+        background: "var(--accent-1)",
+        color: "var(--bg-primary)",
       }}
+      aria-label="Open chat"
     >
-      <div
-        className="flex items-center justify-between px-3 py-2.5"
-        style={{
-          background: "var(--accent-1)",
-          color: "var(--bg-primary)",
-        }}
-      >
-        <span className="font-display text-xs tracking-wide flex items-center gap-2">
-          Dev Chat
-          {isLoading && (
-            <span className="flex items-center gap-0.5 opacity-70">
-              <span
-                className="w-1 h-1 rounded-full bg-current animate-bounce"
-                style={{ animationDelay: "0ms" }}
-              />
-              <span
-                className="w-1 h-1 rounded-full bg-current animate-bounce"
-                style={{ animationDelay: "150ms" }}
-              />
-              <span
-                className="w-1 h-1 rounded-full bg-current animate-bounce"
-                style={{ animationDelay: "300ms" }}
-              />
-            </span>
-          )}
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setChatExpanded(!chatExpanded)}
-            className="flex items-center justify-center w-5 h-5 rounded-sm transition-all hover:scale-110 active:scale-95"
-            aria-label={chatExpanded ? "Collapse" : "Expand"}
-          >
-            {chatExpanded ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
-          </button>
-          <button
-            onClick={toggleChat}
-            className="flex items-center justify-center w-5 h-5 rounded-sm transition-all hover:scale-110 active:scale-95"
-            aria-label="Close chat"
-          >
-            <X size={12} />
-          </button>
-        </div>
-      </div>
-
-      {chatExpanded && (
-        <>
-          <div
-            ref={listRef}
-            aria-live="polite"
-            className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 font-body text-xs"
-          >
-            {messages.length === 0 && (
-              <div className="text-center py-6" style={{ color: "var(--text-secondary)" }}>
-                <Bot size={24} className="mx-auto mb-2 opacity-50" />
-                <p>Ask me anything about my work, skills, or projects.</p>
-              </div>
-            )}
-
-            {messages.map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ y: 6, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ type: "spring", damping: 20, stiffness: 300 }}
-                className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
-              >
-                <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{
-                    background: msg.role === "user" ? "var(--accent-1)" : "var(--bg-tertiary)",
-                  }}
-                >
-                  {msg.role === "user" ? (
-                    <User size={10} style={{ color: "var(--bg-primary)" }} />
-                  ) : (
-                    <Bot size={10} style={{ color: "var(--text-primary)" }} />
-                  )}
-                </div>
-                <div className="max-w-[80%] flex flex-col gap-0.5">
-                  <div
-                    className="rounded-os px-2.5 py-1.5 leading-relaxed break-words"
-                    style={{
-                      background:
-                        msg.role === "user"
-                          ? "linear-gradient(135deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 60%, var(--accent-1)))"
-                          : undefined,
-                      color: msg.role === "user" ? "var(--bg-primary)" : "var(--text-primary)",
-                    }}
-                  >
-                    {msg.content}
-                    {msg.streaming && (
-                      <span
-                        className="inline-block w-1.5 h-3.5 ml-0.5 animate-pulse rounded-sm"
-                        style={{ background: "var(--accent-1)" }}
-                      />
-                    )}
-                  </div>
-                  <span
-                    className="flex items-center gap-1 text-[9px] px-1"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    <Clock size={8} />
-                    {formatTime(msg.timestamp)}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          <div
-            className="flex items-center gap-1.5 p-2.5 border-t"
-            style={{ borderColor: "color-mix(in srgb, var(--border) 40%, transparent)" }}
-          >
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
-              disabled={isLoading}
-              className="flex-1 px-2.5 py-1.5 text-xs font-body rounded-os outline-none border glass glass-pos focus:glow-sm transition-shadow"
-              style={{
-                color: "var(--text-primary)",
-                borderColor: "color-mix(in srgb, var(--border) 40%, transparent)",
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              className="flex items-center justify-center w-7 h-7 rounded-os transition-all hover:scale-105 active:scale-95 disabled:opacity-30"
-              style={{
-                background: "var(--accent-1)",
-                color: "var(--bg-primary)",
-              }}
-              aria-label="Send"
-            >
-              <Send size={12} />
-            </button>
-          </div>
-        </>
-      )}
-    </motion.div>
+      <MessageCircle size={16} />
+    </button>
   );
 }

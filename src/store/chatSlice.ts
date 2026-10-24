@@ -205,13 +205,11 @@ async function runAssistantTurn(
 
 export interface ChatSlice {
   chatOpen: boolean;
-  chatExpanded: boolean;
   messages: Message[];
   isLoading: boolean;
   unreadCount: number;
   chatGreeted: boolean;
   toggleChat: () => void;
-  setChatExpanded: (v: boolean) => void;
   sendMessage: (text: string) => Promise<void>;
   retryLast: () => Promise<void>;
   clearConversation: () => void;
@@ -220,20 +218,14 @@ export interface ChatSlice {
 
 export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
   chatOpen: false,
-  chatExpanded: false,
   messages: [],
   isLoading: false,
   unreadCount: 0,
   chatGreeted: false,
 
   toggleChat: () => {
-    set((s) => ({
-      chatOpen: !s.chatOpen,
-      chatExpanded: s.chatOpen ? false : true,
-    }));
+    set((s) => ({ chatOpen: !s.chatOpen }));
   },
-
-  setChatExpanded: (v) => set({ chatExpanded: v }),
 
   sendMessage: async (text) => {
     const userMsg: Message = {
@@ -246,7 +238,6 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
     set((s) => ({
       messages: trimMessages([...s.messages, userMsg]),
       isLoading: true,
-      chatExpanded: true,
     }));
     // History = everything after the user write, before the pending assistant bubble.
     const history = get().messages;
@@ -264,7 +255,6 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
     set(() => ({
       messages: trimMessages([...history, pendingAssistant(assistantId)]),
       isLoading: true,
-      chatExpanded: true,
     }));
     await runAssistantTurn(assistantId, history, set, get);
   },
