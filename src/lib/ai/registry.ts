@@ -10,6 +10,7 @@
  */
 import type { ModelProvider, ProviderName } from "./provider";
 import { ANTHROPIC_ADAPTER } from "./adapters/anthropic";
+import { OPENAI_COMPAT_ADAPTER } from "./adapters/openai-compat";
 
 export interface ProviderEnv {
   AI_PROVIDER?: string;
@@ -46,6 +47,12 @@ type ProviderRow = (env: ProviderEnv) => ProviderResolution;
 const PROVIDER_ROWS: Partial<Record<ProviderName, ProviderRow>> = {
   anthropic: (env) =>
     isAnthropicConfigured(env) ? { provider: ANTHROPIC_ADAPTER } : { error: "not_configured" },
+  "openai-compat": (env) => {
+    const baseUrl = env.AI_BASE_URL?.trim();
+    const model = env.AI_MODEL?.trim();
+    if (!baseUrl || !model) return { error: "missing_model" };
+    return { provider: OPENAI_COMPAT_ADAPTER };
+  },
 };
 
 export function resolveProviderFromEnv(env: ProviderEnv): ProviderResolution {
