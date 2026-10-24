@@ -125,7 +125,9 @@ async function* streamEvents(
       totalMs: TOTAL_TIMEOUT_MS,
       signal: req.signal,
       cancel: () => {
-        void reader.cancel();
+        // A stream that already errored rejects cancel() with that same
+        // error; the reader is gone either way, so swallow it.
+        void reader.cancel().catch(() => {});
       },
     });
   } catch (err) {

@@ -42,9 +42,7 @@ export function ChatPanel() {
 
   // Exactly as the slice represents it: pick the assistant message whose
   // `streaming === true` and pass `{id, content}` (null when none).
-  const streamingMessage = messages.find(
-    (m) => m.role === "assistant" && m.streaming === true,
-  );
+  const streamingMessage = messages.find((m) => m.role === "assistant" && m.streaming === true);
   useChatActionExecutor(
     streamingMessage ? { id: streamingMessage.id, content: streamingMessage.content } : null,
   );
@@ -155,9 +153,7 @@ export function ChatPanel() {
 
               <MessageList messages={messages} />
 
-              {messages.length === 0 && (
-                <StarterChips onPick={handleMobileSend} />
-              )}
+              {messages.length === 0 && <StarterChips onPick={handleMobileSend} />}
 
               <ChatComposer onSend={handleMobileSend} disabled={isLoading} />
             </motion.div>

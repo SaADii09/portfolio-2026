@@ -637,7 +637,11 @@ describe("persist migrator", () => {
     expect(migrated.windows).toEqual([]);
     expect(migrated.widgets).toEqual([]);
     expect(migrated.volume).toBe(0.4);
-    expect(migrated.currentTrack).toEqual({ id: "t3", title: "Midnight Code", artist: "DevOS Beats" });
+    expect(migrated.currentTrack).toEqual({
+      id: "t3",
+      title: "Midnight Code",
+      artist: "DevOS Beats",
+    });
     // New chat fields added with defaults
     expect(migrated.messages).toEqual([]);
     expect(migrated.unreadCount).toBe(0);

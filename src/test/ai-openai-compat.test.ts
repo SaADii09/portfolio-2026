@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { TextEncoder, TextDecoder } from "node:util";
-import { ReadableStream as NodeReadableStream } from "node:stream/web";
 import {
-  OPENAI_COMPAT_ADAPTER,
-  createOpenAiCompatAdapter,
-} from "@/lib/ai/adapters/openai-compat";
+  ReadableStream as NodeReadableStream,
+  type UnderlyingSource as NodeUnderlyingSource,
+} from "node:stream/web";
+import { OPENAI_COMPAT_ADAPTER, createOpenAiCompatAdapter } from "@/lib/ai/adapters/openai-compat";
 import type { NormalizedStreamEvent, StreamRequest } from "@/lib/ai/provider";
+
+/** Node's ReadableStream is structurally close to lib.dom's but not identical under strict types. */
+function nodeStream(source: NodeUnderlyingSource<Uint8Array>): ReadableStream<Uint8Array> {
+  return new NodeReadableStream<Uint8Array>(source) as unknown as ReadableStream<Uint8Array>;
+}
 
 beforeAll(() => {
   vi.stubGlobal("TextEncoder", TextEncoder);
@@ -48,7 +53,7 @@ function testRequest(overrides: Partial<StreamRequest> = {}): StreamRequest {
 
 function bodyStream(text: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
-  return new NodeReadableStream<Uint8Array>({
+  return nodeStream({
     start(controller) {
       controller.enqueue(encoder.encode(text));
       controller.close();
@@ -57,9 +62,12 @@ function bodyStream(text: string): ReadableStream<Uint8Array> {
 }
 
 /** URL-aware fetch mock: records the call, answers with a canned Response-like. */
-function fetchReturning(
-  response: { ok: boolean; status: number; body?: ReadableStream<Uint8Array>; text?: string },
-): { fetch: typeof fetch; calls: Array<[string | URL | Request, RequestInit | undefined]> } {
+function fetchReturning(response: {
+  ok: boolean;
+  status: number;
+  body?: ReadableStream<Uint8Array>;
+  text?: string;
+}): { fetch: typeof fetch; calls: Array<[string | URL | Request, RequestInit | undefined]> } {
   const calls: Array<[string | URL | Request, RequestInit | undefined]> = [];
   const mock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     calls.push([input, init]);
@@ -73,7 +81,9 @@ function fetchReturning(
   return { fetch: mock as unknown as typeof fetch, calls };
 }
 
-async function collect(events: AsyncIterable<NormalizedStreamEvent>): Promise<NormalizedStreamEvent[]> {
+async function collect(
+  events: AsyncIterable<NormalizedStreamEvent>,
+): Promise<NormalizedStreamEvent[]> {
   const out: NormalizedStreamEvent[] = [];
   for await (const event of events) out.push(event);
   return out;
@@ -93,7 +103,11 @@ describe("OPENAI_COMPAT_ADAPTER capabilities", () => {
 describe("openai-compat adapter streaming", () => {
   it("maps choices[].delta.content to token events, skipping framing and [DONE]", async () => {
     const base = "https://api.openai.com/v1";
-    const { fetch, calls } = fetchReturning({ ok: true, status: 200, body: bodyStream(SSE_TRANSCRIPT) });
+    const { fetch, calls } = fetchReturning({
+      ok: true,
+      status: 200,
+      body: bodyStream(SSE_TRANSCRIPT),
+    });
     process.env.AI_BASE_URL = base;
     process.env.AI_MODEL = "gpt-4o-mini";
     try {
@@ -131,7 +145,11 @@ describe("openai-compat adapter streaming", () => {
 
   it("sends the Authorization bearer header when AI_API_KEY is set", async () => {
     const base = "https://api.openrouter.ai/api/v1";
-    const { fetch, calls } = fetchReturning({ ok: true, status: 200, body: bodyStream(SSE_TRANSCRIPT) });
+    const { fetch, calls } = fetchReturning({
+      ok: true,
+      status: 200,
+      body: bodyStream(SSE_TRANSCRIPT),
+    });
     process.env.AI_BASE_URL = base;
     process.env.AI_MODEL = "<model>:free";
     process.env.AI_API_KEY = "sk-or-test";
@@ -179,7 +197,7 @@ describe("openai-compat adapter streaming", () => {
     try {
       const encoder = new TextEncoder();
       let sent = 0;
-      const exploding = new NodeReadableStream<Uint8Array>({
+      const exploding = nodeStream({
         pull(controller) {
           if (sent === 0) {
             controller.enqueue(encoder.encode(delta("Hi")));
@@ -213,7 +231,7 @@ describe("openai-compat adapter streaming", () => {
     try {
       process.env.AI_BASE_URL = "https://api.openai.com/v1";
       process.env.AI_MODEL = "gpt-4o-mini";
-      const stalled = new NodeReadableStream<Uint8Array>({
+      const stalled = nodeStream({
         start(controller) {
           controller.enqueue(new TextEncoder().encode(delta("Hi")));
           // never enqueues again — a stalled upstream body
@@ -248,7 +266,7 @@ describe("openai-compat adapter streaming", () => {
       const controller = new AbortController();
       const encoder = new TextEncoder();
       let sent = 0;
-      const stallingAfterOne = new NodeReadableStream<Uint8Array>({
+      const stallingAfterOne = nodeStream({
         pull(ctrl) {
           if (sent === 0) {
             ctrl.enqueue(encoder.encode(delta("Hi")));
@@ -261,9 +279,9 @@ describe("openai-compat adapter streaming", () => {
       const { fetch } = fetchReturning({ ok: true, status: 200, body: stallingAfterOne });
       const adapter = createOpenAiCompatAdapter({ fetchImpl: fetch });
 
-      const iterator = adapter.stream(testRequest({ signal: controller.signal }))[
-        Symbol.asyncIterator
-      ]();
+      const iterator = adapter
+        .stream(testRequest({ signal: controller.signal }))
+        [Symbol.asyncIterator]();
       expect(await iterator.next()).toEqual({
         done: false,
         value: { type: "token", text: "Hi" },

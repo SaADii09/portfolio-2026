@@ -24,7 +24,9 @@ describe("AssistantMarkdown", () => {
 
   it("renders an allow-listed link with the exact safe attributes", () => {
     const { container } = render(
-      <AssistantMarkdown content={`See [GitHub](${CHAT_LINKS.github}) and [LinkedIn](${CHAT_LINKS.linkedin}).`} />,
+      <AssistantMarkdown
+        content={`See [GitHub](${CHAT_LINKS.github}) and [LinkedIn](${CHAT_LINKS.linkedin}).`}
+      />,
     );
     const anchors = container.querySelectorAll("a");
     expect(anchors).toHaveLength(2);

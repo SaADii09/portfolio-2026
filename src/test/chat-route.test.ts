@@ -346,10 +346,11 @@ describe("POST message validation", () => {
 describe("POST provider resolution", () => {
   // Fresh IPs so the module-private rate-limit log never contaminates a pin.
   /** Saves env values, runs, restores them verbatim. */
-  async function withEnv(overrides: Record<string, string>, run: () => Promise<void>): Promise<void> {
-    const saved = Object.entries(overrides).map(
-      ([key, value]) => [key, process.env[key]] as const,
-    );
+  async function withEnv(
+    overrides: Record<string, string>,
+    run: () => Promise<void>,
+  ): Promise<void> {
+    const saved = Object.entries(overrides).map(([key, value]) => [key, process.env[key]] as const);
     for (const [key, value] of Object.entries(overrides)) process.env[key] = value;
     try {
       await run();
@@ -366,40 +367,45 @@ describe("POST provider resolution", () => {
       delete process.env.AI_API_KEY;
       const res = await POST(makeRequest(undefined, { "x-forwarded-for": "203.0.113.50" }));
       expect(res.status).toBe(500);
-      await expect(res.json()).resolves.toStrictEqual({ error: "ANTHROPIC_API_KEY not configured" });
+      await expect(res.json()).resolves.toStrictEqual({
+        error: "ANTHROPIC_API_KEY not configured",
+      });
     });
   });
 
   it("works with AI_PROVIDER=anthropic plus the generic AI_API_KEY", async () => {
     const upstreamEncoder = new TextEncoder();
-    await withEnv({ ANTHROPIC_API_KEY: "", AI_API_KEY: "generic", AI_PROVIDER: "anthropic" }, async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          body: new ReadableStream<Uint8Array>({
-            start(c) {
-              c.enqueue(
-                upstreamEncoder.encode(
-                  'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hey"}}\n\n',
-                ),
-              );
-              c.close();
-            },
+    await withEnv(
+      { ANTHROPIC_API_KEY: "", AI_API_KEY: "generic", AI_PROVIDER: "anthropic" },
+      async () => {
+        vi.stubGlobal(
+          "fetch",
+          vi.fn().mockResolvedValue({
+            ok: true,
+            body: new ReadableStream<Uint8Array>({
+              start(c) {
+                c.enqueue(
+                  upstreamEncoder.encode(
+                    'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hey"}}\n\n',
+                  ),
+                );
+                c.close();
+              },
+            }),
           }),
-        }),
-      );
-      try {
-        const res = await POST(makeRequest(undefined, { "x-forwarded-for": "203.0.113.51" }));
-        expect(res.status).toBe(200);
-        expect(await streamText(res)).toContain('data: {"type":"token","text":"hey"}\n\n');
-      } finally {
-        vi.unstubAllGlobals();
-        vi.stubGlobal("TextEncoder", TextEncoder);
-        vi.stubGlobal("TextDecoder", TextDecoder);
-        vi.stubGlobal("ReadableStream", ReadableStream);
-      }
-    });
+        );
+        try {
+          const res = await POST(makeRequest(undefined, { "x-forwarded-for": "203.0.113.51" }));
+          expect(res.status).toBe(200);
+          expect(await streamText(res)).toContain('data: {"type":"token","text":"hey"}\n\n');
+        } finally {
+          vi.unstubAllGlobals();
+          vi.stubGlobal("TextEncoder", TextEncoder);
+          vi.stubGlobal("TextDecoder", TextDecoder);
+          vi.stubGlobal("ReadableStream", ReadableStream);
+        }
+      },
+    );
   });
 
   it("500s naming the bogus AI_PROVIDER — the legacy string must NOT appear", async () => {
@@ -412,7 +418,7 @@ describe("POST provider resolution", () => {
     });
   });
 
-  it("re-encodes the upstream stream as exact `data: {\"type\":\"token\",\"text\":…}` lines", async () => {
+  it('re-encodes the upstream stream as exact `data: {"type":"token","text":…}` lines', async () => {
     const upstreamEncoder = new TextEncoder();
     const payloads = [
       'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',

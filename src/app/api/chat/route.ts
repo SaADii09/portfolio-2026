@@ -125,9 +125,12 @@ function resolutionErrorToResponse(kind: ProviderResolutionError): Response {
     return Response.json({ error: `Unknown AI_PROVIDER: "${requested}"` }, { status: 500 });
   }
   // Reachable only once task 3 wires openai-compat without a model pinned.
-  return Response.json({ error: "AI_MODEL is required for the configured provider" }, {
-    status: 500,
-  });
+  return Response.json(
+    { error: "AI_MODEL is required for the configured provider" },
+    {
+      status: 500,
+    },
+  );
 }
 
 /** The stream Response with the exact headers the route has always sent. */
@@ -139,9 +142,15 @@ function sseResponseFor(
     async start(controller) {
       try {
         for await (const bytes of sseBytes(iterator, first)) {
-          // enqueue can throw if the client aborted mid-stream — the
-          // response is dead either way; the finally still closes quietly.
-          controller.enqueue(bytes);
+          // enqueue throws once the client aborted mid-stream (the controller
+          // is dead). Swallow it per chunk and keep draining so the terminal
+          // error event is still relayed if one is already in flight; the
+          // upstream ends on the request signal and the finally closes quietly.
+          try {
+            controller.enqueue(bytes);
+          } catch {
+            // dead controller — the response is gone, nothing to deliver
+          }
         }
       } finally {
         try {

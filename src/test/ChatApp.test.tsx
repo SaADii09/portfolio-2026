@@ -114,9 +114,7 @@ describe("ChatApp", () => {
     const sendMessage = spyOnSendMessage();
     render(<ChatApp />);
 
-    const composer = screen.getByPlaceholderText(
-      "Type a message...",
-    ) as HTMLTextAreaElement;
+    const composer = screen.getByPlaceholderText("Type a message...") as HTMLTextAreaElement;
     fireEvent.change(composer, { target: { value: "Show me projects" } });
     fireEvent.keyDown(composer, { key: "Enter" });
 
@@ -135,9 +133,7 @@ describe("ChatApp", () => {
     const sendMessage = spyOnSendMessage();
     render(<ChatApp />);
 
-    const composer = screen.getByPlaceholderText(
-      "Type a message...",
-    ) as HTMLTextAreaElement;
+    const composer = screen.getByPlaceholderText("Type a message...") as HTMLTextAreaElement;
     fireEvent.change(composer, { target: { value: "line one" } });
     fireEvent.keyDown(composer, { key: "Enter", shiftKey: true });
 
@@ -174,10 +170,11 @@ describe("ChatApp", () => {
     });
 
     it("does not re-greet once chatGreeted is set", () => {
-      render(<ChatApp />);
+      const first = render(<ChatApp />);
       expect(screen.getByText(/Hi! I'm DevOS AI/)).toBeInTheDocument();
+      first.unmount();
 
-      // Second mount in the same session: the persisted flag suppresses it.
+      // Remount in the same session: the persisted flag suppresses it.
       render(<ChatApp />);
       expect(screen.getAllByText(/Hi! I'm DevOS AI/)).toHaveLength(1);
       expect(useStore.getState().messages).toHaveLength(1);
@@ -285,9 +282,7 @@ describe("ChatPanel shell executor mount", () => {
 
   it("ignores a finished (non-streaming) message", () => {
     useStore.setState({
-      messages: [
-        msg("a1", "assistant", "Done — [[action:open_app:about]]", { streaming: false }),
-      ],
+      messages: [msg("a1", "assistant", "Done — [[action:open_app:about]]", { streaming: false })],
     });
 
     render(<ChatPanel />);

@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ACTIONS_DOCS } from "@/lib/ai/actions";
 
 /** The KB file is absent in the test env — fs.readFileSync throws → null KB → base-only prompt. */
-vi.mock("fs", () => ({
-  readFileSync: vi.fn(() => {
+vi.mock("fs", () => {
+  const readFileSync = vi.fn(() => {
     throw new Error("no KB file in test env");
-  }),
-}));
+  });
+  // `prompt.ts` uses the default import; named + default both point at the mock.
+  return { readFileSync, default: { readFileSync } };
+});
 
 import { buildSystemPrompt, kbSizeThreshold } from "@/lib/ai/prompt";
 import fs from "fs";
@@ -52,7 +54,9 @@ describe("buildSystemPrompt — no KB file", () => {
 
 describe("buildSystemPrompt — full KB injection", () => {
   beforeEach(() => {
-    mockReadFileSync.mockImplementation(() => "Saad is a full-stack engineer who loves TypeScript.");
+    mockReadFileSync.mockImplementation(
+      () => "Saad is a full-stack engineer who loves TypeScript.",
+    );
   });
 
   it("injects the full KB verbatim when under the threshold", () => {

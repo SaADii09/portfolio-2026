@@ -13,6 +13,8 @@ import { ANTHROPIC_ADAPTER } from "./adapters/anthropic";
 import { OPENAI_COMPAT_ADAPTER } from "./adapters/openai-compat";
 
 export interface ProviderEnv {
+  /** Index signature so `process.env` satisfies the contract directly. */
+  [key: string]: string | undefined;
   AI_PROVIDER?: string;
   ANTHROPIC_API_KEY?: string;
   AI_API_KEY?: string;
@@ -24,9 +26,7 @@ export interface ProviderEnv {
 /** Terminal pre-stream gap kinds (design §Route rewrite). */
 export type ProviderResolutionError = "not_configured" | "invalid_provider" | "missing_model";
 
-export type ProviderResolution =
-  | { provider: ModelProvider }
-  | { error: ProviderResolutionError };
+export type ProviderResolution = { provider: ModelProvider } | { error: ProviderResolutionError };
 
 /** The v1 provider set — closed, so a new adapter is a compile decision. */
 const PROVIDER_NAMES: readonly ProviderName[] = ["anthropic", "openai-compat"];

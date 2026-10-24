@@ -67,18 +67,18 @@ NEXT_PUBLIC_SITE_URL=https://saadahmad.dev
 
 The chat route is provider-agnostic: a registry picks the adapter from env vars at request time, so swapping vendors never touches client code or the SSE shape.
 
-| Var                      | Meaning                                                              | Default                     |
-| ------------------------ | -------------------------------------------------------------------- | --------------------------- |
-| `AI_PROVIDER`            | `anthropic` \| `openai-compat`                                        | `anthropic` (compat)        |
-| `AI_API_KEY`             | generic key (per-adapter fallback; `ANTHROPIC_API_KEY` wins for anthropic) | —                       |
-| `AI_BASE_URL`            | openai-compat base, `…/v1` root, no trailing slash                    | `https://api.openai.com/v1` |
-| `AI_MODEL`               | model id                                                              | `claude-sonnet-4-20250514` / **required** for openai-compat |
-| `AI_TEMPERATURE`         | sampling temperature (kept low for grounded answers)                  | `0.3`                       |
-| `AI_MAX_OUTPUT_TOKENS`   | hard output cap                                                       | `1024`                      |
-| `AI_RATE_LIMIT_PER_MIN`  | per-IP chat rate limit                                                | `15`                        |
-| `AI_MAX_CONTEXT_MESSAGES`| conversation trim window (route hard max stays 20)                    | `8`                         |
-| `AI_KB_FULL_THRESHOLD`   | KB chars under which the whole knowledge base is injected             | `24000`                     |
-| `AI_CACHE_SYSTEM`        | Anthropic prompt caching on the system prompt                         | `false`                     |
+| Var                       | Meaning                                                                    | Default                                                     |
+| ------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `AI_PROVIDER`             | `anthropic` \| `openai-compat`                                             | `anthropic` (compat)                                        |
+| `AI_API_KEY`              | generic key (per-adapter fallback; `ANTHROPIC_API_KEY` wins for anthropic) | —                                                           |
+| `AI_BASE_URL`             | openai-compat base, `…/v1` root, no trailing slash                         | `https://api.openai.com/v1`                                 |
+| `AI_MODEL`                | model id                                                                   | `claude-sonnet-4-20250514` / **required** for openai-compat |
+| `AI_TEMPERATURE`          | sampling temperature (kept low for grounded answers)                       | `0.3`                                                       |
+| `AI_MAX_OUTPUT_TOKENS`    | hard output cap                                                            | `1024`                                                      |
+| `AI_RATE_LIMIT_PER_MIN`   | per-IP chat rate limit                                                     | `15`                                                        |
+| `AI_MAX_CONTEXT_MESSAGES` | conversation trim window (route hard max stays 20)                         | `8`                                                         |
+| `AI_KB_FULL_THRESHOLD`    | KB chars under which the whole knowledge base is injected                  | `24000`                                                     |
+| `AI_CACHE_SYSTEM`         | Anthropic prompt caching on the system prompt                              | `false`                                                     |
 
 **Swap recipes** — all first-class, no code changes:
 

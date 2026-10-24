@@ -95,7 +95,8 @@ const WEBVIEW_SLOT: SlotSpec = { leftFrac: 0.5, topFrac: 0.4 };
  * contact 500 · about 480 · control-panel 420 (deliberately scrolls below
  * the Theme section) · browser 380 (⅓–¼ unreachable BY DESIGN — the start
  * page compacts, see the browser compaction CSS) · projects 360 · resume
- * 320 · terminal 200 (the global floor; its 158px body fits).
+ * 320 · terminal 200 (the global floor; its 158px body fits) · chat 380
+ * (a transcript line above the composer and its chips).
  */
 export const APP_MIN_HEIGHTS: Record<AppId, number> = {
   contact: 500,
@@ -105,6 +106,7 @@ export const APP_MIN_HEIGHTS: Record<AppId, number> = {
   projects: 360,
   resume: 320,
   terminal: 200,
+  chat: 380,
 };
 
 /**
