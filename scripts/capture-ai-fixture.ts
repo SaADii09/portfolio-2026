@@ -55,7 +55,8 @@ const PROVIDERS: Record<string, ProviderSpec> = {
   groq: {
     baseUrl: "https://api.groq.com/openai/v1",
     path: "/chat/completions",
-    model: "llama-3.3-70b-versatile",
+    // Groq retires models regularly; check `GET /openai/v1/models` if this 404s.
+    model: "openai/gpt-oss-120b",
     keyEnvs: ["AI_API_KEY"],
   },
   openrouter: {

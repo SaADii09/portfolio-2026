@@ -86,7 +86,7 @@ The chat route is provider-agnostic: a registry picks the adapter from env vars 
 # Groq
 AI_PROVIDER=openai-compat
 AI_BASE_URL=https://api.groq.com/openai/v1
-AI_MODEL=llama-3.3-70b-versatile
+AI_MODEL=openai/gpt-oss-120b
 AI_API_KEY=gsk_...
 
 # OpenRouter (free models carry a `:free` suffix)
