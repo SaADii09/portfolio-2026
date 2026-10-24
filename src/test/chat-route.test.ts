@@ -25,6 +25,19 @@ function makeRequest(body: unknown = DEFAULT_BODY, headers: Record<string, strin
   } as unknown as Request;
 }
 
+/** Drains a Response body to raw SSE text (byte-exact pins). */
+async function streamText(res: Response): Promise<string> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let raw = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    raw += decoder.decode(value, { stream: true });
+  }
+  return raw + decoder.decode();
+}
+
 beforeAll(() => {
   // Without a key the route 500s pre-stream (unreachable mid-stream path).
   vi.stubEnv("ANTHROPIC_API_KEY", "test");
@@ -327,6 +340,115 @@ describe("POST message validation", () => {
       { role: "user", content: "a" },
       { role: "assistant", content: "b" },
     ]);
+  });
+});
+
+describe("POST provider resolution", () => {
+  // Fresh IPs so the module-private rate-limit log never contaminates a pin.
+  /** Saves env values, runs, restores them verbatim. */
+  async function withEnv(overrides: Record<string, string>, run: () => Promise<void>): Promise<void> {
+    const saved = Object.entries(overrides).map(
+      ([key, value]) => [key, process.env[key]] as const,
+    );
+    for (const [key, value] of Object.entries(overrides)) process.env[key] = value;
+    try {
+      await run();
+    } finally {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  it("500s with the byte-exact legacy body when NO key is configured", async () => {
+    await withEnv({ ANTHROPIC_API_KEY: "", AI_API_KEY: "", AI_PROVIDER: "" }, async () => {
+      delete process.env.AI_API_KEY;
+      const res = await POST(makeRequest(undefined, { "x-forwarded-for": "203.0.113.50" }));
+      expect(res.status).toBe(500);
+      await expect(res.json()).resolves.toStrictEqual({ error: "ANTHROPIC_API_KEY not configured" });
+    });
+  });
+
+  it("works with AI_PROVIDER=anthropic plus the generic AI_API_KEY", async () => {
+    const upstreamEncoder = new TextEncoder();
+    await withEnv({ ANTHROPIC_API_KEY: "", AI_API_KEY: "generic", AI_PROVIDER: "anthropic" }, async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          body: new ReadableStream<Uint8Array>({
+            start(c) {
+              c.enqueue(
+                upstreamEncoder.encode(
+                  'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hey"}}\n\n',
+                ),
+              );
+              c.close();
+            },
+          }),
+        }),
+      );
+      try {
+        const res = await POST(makeRequest(undefined, { "x-forwarded-for": "203.0.113.51" }));
+        expect(res.status).toBe(200);
+        expect(await streamText(res)).toContain('data: {"type":"token","text":"hey"}\n\n');
+      } finally {
+        vi.unstubAllGlobals();
+        vi.stubGlobal("TextEncoder", TextEncoder);
+        vi.stubGlobal("TextDecoder", TextDecoder);
+        vi.stubGlobal("ReadableStream", ReadableStream);
+      }
+    });
+  });
+
+  it("500s naming the bogus AI_PROVIDER — the legacy string must NOT appear", async () => {
+    await withEnv({ AI_PROVIDER: "bogus" }, async () => {
+      const res = await POST(makeRequest(undefined, { "x-forwarded-for": "203.0.113.52" }));
+      expect(res.status).toBe(500);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("bogus");
+      expect(body.error).not.toContain("ANTHROPIC_API_KEY not configured");
+    });
+  });
+
+  it("re-encodes the upstream stream as exact `data: {\"type\":\"token\",\"text\":…}` lines", async () => {
+    const upstreamEncoder = new TextEncoder();
+    const payloads = [
+      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',
+      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" there"}}\n\n',
+    ];
+    let sent = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: new ReadableStream<Uint8Array>({
+          pull(c) {
+            if (sent < payloads.length) {
+              c.enqueue(upstreamEncoder.encode(payloads[sent]!));
+              sent++;
+            } else {
+              c.error(new Error("upstream exploded"));
+            }
+          },
+        }),
+      }),
+    );
+    try {
+      const res = await POST(makeRequest(undefined, { "x-forwarded-for": "203.0.113.53" }));
+      expect(res.status).toBe(200);
+      expect(await streamText(res)).toBe(
+        'data: {"type":"token","text":"Hi"}\n\n' +
+          'data: {"type":"token","text":" there"}\n\n' +
+          `data: ${JSON.stringify({ type: "error", text: INTERRUPTION_TEXT })}\n\n`,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.stubGlobal("TextEncoder", TextEncoder);
+      vi.stubGlobal("TextDecoder", TextDecoder);
+      vi.stubGlobal("ReadableStream", ReadableStream);
+    }
   });
 });
 
