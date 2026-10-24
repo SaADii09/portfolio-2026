@@ -820,7 +820,12 @@ function TabPanel({
   const panelRef = useRef<HTMLDivElement>(null);
   // The scroll affordance (G4): every real scroller announces its state —
   // the tab panel is one of the five (Window body, tab panel, terminal,
-  // side panel, chat list).
+  // side panel, chat list). Interplay note (review M4, accepted): the fade
+  // is an IN-FLOW +24px ::after, so a position flushed at the inflated
+  // bottom can restore ≤24px high once (the restore useLayoutEffect runs
+  // before the hook's first measure mounts the fade) — the browser then
+  // clamps and the end-state reports correctly. Transient, self-correcting,
+  // never a content jump.
   useScrollFade(panelRef);
   const scrollRef = useRef<ScrollState>(newScrollState(tab.scrollTop));
 

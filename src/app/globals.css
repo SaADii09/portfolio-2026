@@ -740,6 +740,18 @@ select,
   container-name: tabpanel;
 }
 
+/* The terminal's CRT surface is theme-invariant black (see TerminalApp's
+ * design-token-exempt palette) — the generic bg-primary veil would read as a
+ * light wash over it in light themes (review M6).
+ * design-token-exempt: fixed CRT terminal palette (theme-invariant) by design */
+.terminal-scroll[data-scrollable="true"]:not([data-scrolled-end="true"])::after {
+  background: linear-gradient(to top, rgba(13, 13, 13, 0.85), transparent);
+}
+
+/* 299 = the tallest panel body at the browser floor that still needs the
+ * compact layout: 380 floor − measured shell chrome (tab strip + toolbar +
+ * address row) ≈ 238 with headroom — 300 would leave a 1px band where the
+ * full layout flickers back. Derived once; retune only with a measurement. */
 @container tabpanel (max-height: 299px) {
   .browser-home-greeting {
     display: none;

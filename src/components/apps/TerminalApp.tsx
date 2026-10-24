@@ -98,7 +98,10 @@ export function TerminalApp() {
       className="flex flex-col h-full font-mono text-sm"
       style={{ background: "#0d0d0d", color: "#00ff41" }} // design-token-exempt: fixed CRT terminal palette (theme-invariant) by design
     >
-      <div ref={listRef} className="flex-1 overflow-y-auto p-3 whitespace-pre-wrap leading-relaxed">
+      <div
+        ref={listRef}
+        className="terminal-scroll flex-1 overflow-y-auto p-3 whitespace-pre-wrap leading-relaxed"
+      >
         {lines.map((l, i) => (
           <div
             key={i}

@@ -53,6 +53,23 @@ function viewportSize() {
   return { vw: window.innerWidth, vh: window.innerHeight };
 }
 
+/**
+ * A remembered rect is usable only as a finite plain rect (review M1): a
+ * tampered `lastGeometry[key]` from corrupt localStorage (a function, or a
+ * non-finite rect) must not reach the clamp maths — null falls through to
+ * the per-app table.
+ */
+function isFiniteNumber(n: unknown): n is number {
+  return typeof n === "number" && Number.isFinite(n);
+}
+
+function usableRect(value: unknown): WindowGeometry | null {
+  if (typeof value !== "object" || value === null) return null;
+  const r = value as WindowGeometry;
+  if (![r.x, r.y, r.width, r.height].every(isFiniteNumber)) return null;
+  return r;
+}
+
 function clampToViewport(w: WindowInstance): WindowInstance {
   if (typeof window === "undefined") return w;
   const vw = window.innerWidth;
@@ -136,9 +153,9 @@ export const createWindowSlice: StateCreator<WindowSlice> = (set, get) => ({
     // falls through to `resolveOpenGeometry` when nothing was remembered.
     const { vw, vh } = viewportSize();
     const key = geometryKeyForConfig(config);
-    const remembered = key ? get().lastGeometry[key] : undefined;
-    const geometry = remembered
-      ? clampRemembered(remembered, vw, vh, key)
+    const rememberedRect = usableRect(get().lastGeometry[key]);
+    const geometry = rememberedRect
+      ? clampRemembered(rememberedRect, vw, vh, key)
       : resolveOpenGeometry(config, vw, vh, offset);
 
     const win: WindowInstance = {

@@ -216,6 +216,18 @@ describe("windowSlice", () => {
     }
   });
 
+  it("ignores a tampered lastGeometry (review M1) and opens from the table", () => {
+    // Corrupt localStorage shapes must not poison the clamp maths.
+    (store as unknown as { lastGeometry: Record<string, unknown> }).lastGeometry["browser"] =
+      function fake() {} as unknown as never;
+    store.openWindow({ title: "Browser", type: "app", component: "browser" });
+    // Falls through to the per-app table: 960×660, clamped to jsdom's
+    // desktop available height (768 − 112 = 656) — a NUMBER, never NaN.
+    expect(store.windows[0]?.height).toBe(656);
+    expect(Number.isFinite(store.windows[0]?.y ?? NaN)).toBe(true);
+    expect(Number.isFinite(store.windows[0]?.height ?? NaN)).toBe(true);
+  });
+
   it("restores a stale below-floor browser lastGeometry clamped UP to the floor", () => {
     // A lastGeometry persisted before the floors shipped (e.g. 960×225).
     store.lastGeometry["browser"] = { x: 40, y: 30, width: 960, height: 225 };

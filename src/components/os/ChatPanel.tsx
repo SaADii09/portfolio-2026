@@ -28,7 +28,12 @@ export function ChatPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   // The scroll affordance (G4): the chat list is one of the five measured
   // scrollers. The docked and expanded branches share this ref — the hook
-  // re-attaches when the branch swap replaces the element.
+  // re-attaches when the branch swap replaces the element. Known blind
+  // window (review M3, accepted): while the mobile sheet's AnimatePresence
+  // exit animation unmounts the list INTERNALLY, ChatPanel does not
+  // re-render, so the mirror effect cannot observe the detach — the stale
+  // observer idles (a detached node fires no scroll) until the next
+  // chatOpen toggle re-renders and re-measures the fresh element.
   useScrollFade(listRef);
 
   useEffect(() => {

@@ -89,7 +89,6 @@ export function Desktop() {
   const windows = useStore((s) => s.windows);
   const widgets = useStore((s) => s.widgets);
   const addWidget = useStore((s) => s.addWidget);
-  const clampAllWindows = useStore((s) => s.clampAllWindows);
   const isPaletteOpen = useStore((s) => s.isPaletteOpen);
   const initDone = useRef(false);
   const isMobile = useIsMobile();
@@ -120,6 +119,13 @@ export function Desktop() {
       useStore.setState({ widgets: deduped });
     }
 
+    // Rehydration is a seventh height-carrying path (short-window review M2):
+    // persisted OPEN windows restore as stored — a pre-floor persisted window
+    // (e.g. about at 300px) must clamp UP to its floor at mount, for EVERY
+    // visitor, not only first-run ones. Hence ABOVE the widget-seeding early
+    // return (review fix wave, 2026-10-24).
+    useStore.getState().clampAllWindows();
+
     if (deduped.length > 0) return;
 
     const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
@@ -130,7 +136,6 @@ export function Desktop() {
     addWidget("music", "Music", vw - 220, bounds.topBar + 230);
     addWidget("notes", "Notes", vw - 220, bounds.topBar + 340);
 
-    clampAllWindows();
     const store = useStore.getState();
     store.clampAllWidgets();
     store.resolveAllWidgetCollisions();

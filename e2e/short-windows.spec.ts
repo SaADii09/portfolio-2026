@@ -28,16 +28,16 @@ const VIEWPORT = { width: 1440, height: 900 };
 const TOP_BAR = 36;
 const BOTTOM_BAR = 76;
 
-/** Mirror of APP_MIN_HEIGHTS (src/lib/window-geometry.ts). */
+/** Mirror of APP_MIN_HEIGHTS (src/lib/window-geometry.ts) — the apps this
+ * suite actually launches (the other two floors are exercised by the store
+ * pins in src/test/stores.test.ts and the mirror test in window-content-fit). */
 const FLOORS: Record<AppKey, number> = {
   about: 480,
   browser: 380,
   "control-panel": 420,
   contact: 500,
-  projects: 360,
   resume: 320,
-  terminal: 200,
-} as Record<AppKey, number>;
+};
 
 const ICON_TITLES: Record<AppKey, string> = {
   about: "Open About Me",
@@ -112,13 +112,10 @@ async function inSafeZone(win: Locator): Promise<boolean> {
   );
 }
 
-/** True when the element's box is fully inside the visible content zone. */
-async function inViewport(box: {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}): Promise<boolean> {
+/** True when the element's box is inside the visible vertical band (top bar
+ * → dock). Horizontal containment is asserted separately where it matters
+ * (inSafeZone); these reachability pins only need the band. */
+function inVerticalBand(box: { y: number; height: number }): boolean {
   return (
     box.y >= TOP_BAR - 1 && box.y + box.height <= VIEWPORT.height - BOTTOM_BAR + 1 && box.height > 0
   );
@@ -149,7 +146,7 @@ test("every floored app keeps its primary action in-viewport without scrolling",
     const action = find();
     await expect(action).toBeVisible();
     const box = (await action.boundingBox())!;
-    expect(await inViewport(box), `${key}'s primary action at its floor`).toBe(true);
+    expect(inVerticalBand(box), `${key}'s primary action at its floor`).toBe(true);
     await closeWindow(page, win);
     await expect(win).toHaveCount(0);
   }
@@ -184,11 +181,12 @@ test("the browser start page compacts at the floor and restores above it", async
   await expect(panel.getByRole("button", { name: "GitHub" })).toBeVisible();
   const shortcuts = panel.getByRole("heading", { name: "Shortcuts" }).locator("..");
   const box = (await shortcuts.boundingBox())!;
-  expect(await inViewport(box), "Shortcuts region fully in view at the floor").toBe(true);
+  expect(inVerticalBand(box), "Shortcuts region fully in view at the floor").toBe(true);
 
-  // The measured panel announces itself for the fade (G4's fifth scroller
-  // class) — the projects list scrolls behind it.
-  await expect(panel).toHaveAttribute("data-scrollable", /true|false/);
+  // The measured panel announces itself for the fade — at the 380 floor the
+  // projects list genuinely overflows, so the panel IS scrollable (exact
+  // value, not presence: the false case would mean the compaction broke).
+  await expect(panel).toHaveAttribute("data-scrollable", "true");
 
   // Restoring the full height brings the full layout back (pure CSS — no
   // JS breakpoint to get stuck).
@@ -316,5 +314,5 @@ test("the degraded README escape hatch stays reachable at the browser floor", as
   await shrinkToFloor(page, win, FLOORS.browser);
   const link = readmeBody.getByRole("link", { name: /open on github/i });
   const box = (await link.boundingBox())!;
-  expect(await inViewport(box), "the escape hatch is in-viewport at the floor").toBe(true);
+  expect(inVerticalBand(box), "the escape hatch is in-viewport at the floor").toBe(true);
 });

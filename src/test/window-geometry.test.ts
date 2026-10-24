@@ -24,6 +24,15 @@ describe("minHeightFor — the per-app floor table (short-window spec)", () => {
     expect(minHeightFor(undefined)).toBe(200);
     expect(minHeightFor(`${WEBVIEW_GEOMETRY_KEY}https://example.com`)).toBe(200);
   });
+
+  it("does not inherit Object.prototype keys (review M1)", () => {
+    // A tampered key must resolve to the fallback NUMBER — never an inherited
+    // function (which would poison the clamp maths into NaN heights).
+    expect(minHeightFor("toString")).toBe(200);
+    expect(minHeightFor("constructor")).toBe(200);
+    expect(minHeightFor("valueOf")).toBe(200);
+    expect(minHeightFor("hasOwnProperty")).toBe(200);
+  });
 });
 
 /**

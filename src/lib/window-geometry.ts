@@ -108,10 +108,15 @@ export const APP_MIN_HEIGHTS: Record<AppId, number> = {
  * The height floor for a window keyed by `component` (or a geometry key).
  * Unknown components and `webview:<url>` iframe keys resolve to the global
  * `MIN_WINDOW_HEIGHT`. A lookup, not a chain — one guarded map read.
+ * `Object.hasOwn` keeps inherited `Object.prototype` keys ("toString",
+ * "constructor", …) from resolving — a tampered localStorage key would
+ * otherwise yield a FUNCTION here and NaN geometry downstream (review M1).
  */
 export function minHeightFor(component?: string): number {
   if (!component) return MIN_WINDOW_HEIGHT;
-  return APP_MIN_HEIGHTS[component as AppId] ?? MIN_WINDOW_HEIGHT;
+  return Object.hasOwn(APP_MIN_HEIGHTS, component)
+    ? (APP_MIN_HEIGHTS[component as AppId] ?? MIN_WINDOW_HEIGHT)
+    : MIN_WINDOW_HEIGHT;
 }
 
 /** Unknown components keep today's defaults (spec §4.4 fallback row). */
