@@ -14,7 +14,7 @@ Interactive Web OS portfolio — a fully functional desktop environment in the b
 - **DevOS Browser** — one browser window with a tab strip: project tabs render each repo's sanitized GitHub README, web tabs run the sandboxed iframe pipeline (a server-side framing verdict decides whether a site may be embedded, and a genuine refuser gets a live preview with a reader fallback), and the home tab is a Chrome-style start page (shortcut tiles, recently visited, your live projects) — with a warm-tab cache and a project side panel (about, tech, timeline, links)
 - **4 live widgets** — CPU monitor, Weather (Open-Meteo API), Music player (Web Audio synth), Sticky notes
 - **Terminal ↔ OS bridge** — `theme`, `open <app>`, `music <action>`, and `apps` drive real OS state
-- **AI chat assistant** — Anthropic streaming API with BM25 RAG over a local knowledge base
+- **AI chat assistant** — provider-agnostic streaming (Anthropic or any OpenAI-compatible API), full knowledge-base grounding with BM25 fallback, markdown answers, and OS actions
 - **Live wallpapers** — canvas-rendered per theme (retro embers, neon grid, editorial curves) with mouse-reactive particles
 - **Dynamic glassmorphism** — variable-driven blur/saturation/spotlight with per-theme presets and live glass controls
 - **Desktop chrome** — glass dock (open windows only), top bar with clock/calendar and control centre, right-click and long-press context menus
@@ -54,7 +54,7 @@ Open [http://localhost:3000](http://localhost:3000).
 Create a `.env.local` (see `.env.example`):
 
 ```
-# Required for the AI chat panel — optional, chat degrades gracefully without it
+# AI chat (optional — the terminal, apps, and widgets work without it)
 ANTHROPIC_API_KEY=sk-ant-...
 
 # Canonical site origin used for metadata, OpenGraph, sitemap, robots.txt
@@ -62,6 +62,55 @@ NEXT_PUBLIC_SITE_URL=https://saadahmad.dev
 ```
 
 `NEXT_PUBLIC_SITE_URL` falls back to `http://localhost:3000`, so set it in your host's environment before deploying — canonical and social URLs must be absolute.
+
+### AI provider (chat assistant)
+
+The chat route is provider-agnostic: a registry picks the adapter from env vars at request time, so swapping vendors never touches client code or the SSE shape.
+
+| Var                      | Meaning                                                              | Default                     |
+| ------------------------ | -------------------------------------------------------------------- | --------------------------- |
+| `AI_PROVIDER`            | `anthropic` \| `openai-compat`                                        | `anthropic` (compat)        |
+| `AI_API_KEY`             | generic key (per-adapter fallback; `ANTHROPIC_API_KEY` wins for anthropic) | —                       |
+| `AI_BASE_URL`            | openai-compat base, `…/v1` root, no trailing slash                    | `https://api.openai.com/v1` |
+| `AI_MODEL`               | model id                                                              | `claude-sonnet-4-20250514` / **required** for openai-compat |
+| `AI_TEMPERATURE`         | sampling temperature (kept low for grounded answers)                  | `0.3`                       |
+| `AI_MAX_OUTPUT_TOKENS`   | hard output cap                                                       | `1024`                      |
+| `AI_RATE_LIMIT_PER_MIN`  | per-IP chat rate limit                                                | `15`                        |
+| `AI_MAX_CONTEXT_MESSAGES`| conversation trim window (route hard max stays 20)                    | `8`                         |
+| `AI_KB_FULL_THRESHOLD`   | KB chars under which the whole knowledge base is injected             | `24000`                     |
+| `AI_CACHE_SYSTEM`        | Anthropic prompt caching on the system prompt                         | `false`                     |
+
+**Swap recipes** — all first-class, no code changes:
+
+```bash
+# Groq
+AI_PROVIDER=openai-compat
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_MODEL=llama-3.3-70b-versatile
+AI_API_KEY=gsk_...
+
+# OpenRouter (free models carry a `:free` suffix)
+AI_PROVIDER=openai-compat
+AI_BASE_URL=https://openrouter.ai/api/v1
+AI_MODEL=meta-llama/llama-3.3-70b-instruct:free
+AI_API_KEY=sk-or-v1-...
+
+# Ollama / LM Studio (local, keyless)
+AI_PROVIDER=openai-compat
+AI_BASE_URL=http://localhost:11434/v1
+AI_MODEL=llama3.1
+
+# OpenAI
+AI_PROVIDER=openai-compat
+AI_MODEL=gpt-4o-mini
+AI_API_KEY=sk-...
+
+# Anthropic (legacy default)
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Keyless operation is allowed **only** for `openai-compat` (the `Authorization` header is omitted). An unknown `AI_PROVIDER` fails fast with HTTP 500 — it never silently falls back. Answers are grounded on `data/portfolio-knowledge.md`: the full KB is injected while it fits under `AI_KB_FULL_THRESHOLD`, otherwise the route falls back to BM25 retrieval.
 
 ## Commands
 
@@ -86,13 +135,13 @@ src/
 │   └── api/                # /chat, /screenshot, /project-meta, /weather
 ├── components/
 │   ├── os/                 # Window, Desktop, Dock, TopBar, Taskbar, ChatPanel, CommandPalette
-│   ├── apps/               # AboutApp, BrowserApp, ProjectGrid, ProjectSidePanel, ReadmeView, TerminalApp, ContactApp, ResumeApp, ControlPanelApp
+│   ├── apps/               # AboutApp, BrowserApp, ProjectGrid, ProjectSidePanel, ReadmeView, TerminalApp, ContactApp, ResumeApp, ControlPanelApp, ChatApp (+ chat-internal)
 │   ├── widgets/            # CPU, Weather, Music, Notes (+ WidgetWrapper)
 │   └── theme/              # ThemeProvider
 ├── store/                  # Zustand slices (window, theme, widget, chat, music, ui, browser)
 ├── hooks/                  # Drag, glass glare, keyboard shortcuts, palette, long-press, viewport clamp
 ├── types/                  # TypeScript interfaces
-└── lib/                    # App registry, shortcuts, palette data/DOM, terminal commands, RAG
+└── lib/                    # App registry, shortcuts, palette data/DOM, terminal commands, RAG, ai/ (registry, adapters, prompt)
 ```
 
 ## Design System

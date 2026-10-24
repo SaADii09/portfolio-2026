@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // jsdom has no Web Audio API — stub the synth engine so music actions are testable
 vi.mock("@/lib/audio-engine", () => ({
@@ -15,12 +15,21 @@ vi.mock("@/lib/audio-engine", () => ({
 import { useStore } from "@/store";
 import {
   openApp,
+  chatLauncher,
   toggleWidget,
   musicControl,
   setThemeByName,
   type MusicAction,
 } from "@/lib/os-actions";
+import { getViewportBounds } from "@/lib/boundaries";
 import { APP_DEFS, resolveAppId, type AppId } from "@/lib/apps";
+
+/** Desktop vs mobile viewport — the chat launcher reads the 768 rule from boundaries. */
+const originalInnerWidth = window.innerWidth;
+
+function setViewportWidth(width: number): void {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+}
 
 describe("os-actions", () => {
   beforeEach(() => {
@@ -30,6 +39,7 @@ describe("os-actions", () => {
       activeWindowId: null,
       widgets: [],
       theme: "retro",
+      chatOpen: false,
       isPlaying: false,
       volume: 0.7,
       currentTrack: { id: "t1", title: "Neon Lights", artist: "Synthwave Dreams" },
@@ -41,6 +51,10 @@ describe("os-actions", () => {
       metaLru: {},
       sidePanelOpen: false,
     });
+  });
+
+  afterEach(() => {
+    setViewportWidth(originalInnerWidth);
   });
 
   describe("openApp", () => {
@@ -109,6 +123,78 @@ describe("os-actions", () => {
       const state = useStore.getState();
       expect(state.windows).toHaveLength(0);
       expect(state.activeWindowId).toBeNull();
+    });
+  });
+
+  describe("chatLauncher (device-mapped registry launcher)", () => {
+    it("opens a registry Dev Chat window on desktop", () => {
+      chatLauncher(false);
+      const state = useStore.getState();
+      expect(state.windows).toHaveLength(1);
+      expect(state.windows[0]?.title).toBe("Dev Chat");
+      expect(state.windows[0]?.component).toBe("chat");
+      expect(state.windows[0]?.type).toBe("app");
+      expect(state.activeWindowId).toBe(state.windows[0]?.id);
+      // The desktop branch must not open the mobile bottom sheet.
+      expect(state.chatOpen).toBe(false);
+    });
+
+    it("focuses the existing Dev Chat window instead of duplicating", () => {
+      chatLauncher(false);
+      const chatId = useStore.getState().windows[0]?.id;
+      chatLauncher(false);
+
+      const state = useStore.getState();
+      expect(state.windows).toHaveLength(1);
+      expect(state.activeWindowId).toBe(chatId);
+      const chat = state.windows.find((w) => w.id === chatId)!;
+      expect(chat.zIndex).toBe(Math.max(...state.windows.map((w) => w.zIndex)));
+    });
+
+    it("restores a minimized Dev Chat window", () => {
+      chatLauncher(false);
+      const chatId = useStore.getState().windows[0]?.id ?? "";
+      useStore.getState().minimizeWindow(chatId);
+      expect(useStore.getState().windows[0]?.isMinimized).toBe(true);
+
+      chatLauncher(false);
+      const state = useStore.getState();
+      expect(state.windows).toHaveLength(1);
+      expect(state.windows[0]?.isMinimized).toBe(false);
+      expect(state.activeWindowId).toBe(chatId);
+    });
+
+    it("toggles the mobile chat sheet and opens no window", () => {
+      chatLauncher(true);
+      expect(useStore.getState().chatOpen).toBe(true);
+      expect(useStore.getState().windows).toHaveLength(0);
+
+      chatLauncher(true);
+      expect(useStore.getState().chatOpen).toBe(false);
+      expect(useStore.getState().windows).toHaveLength(0);
+    });
+  });
+
+  describe("openApp('chat') — the registry row is device-aware", () => {
+    it("opens the Dev Chat window on a desktop viewport", () => {
+      setViewportWidth(1024);
+      expect(getViewportBounds(1024).isMobile).toBe(false);
+
+      openApp("chat");
+      const state = useStore.getState();
+      expect(state.windows).toHaveLength(1);
+      expect(state.windows[0]?.component).toBe("chat");
+      expect(state.chatOpen).toBe(false);
+    });
+
+    it("toggles the mobile chat sheet below the 768 breakpoint", () => {
+      setViewportWidth(767);
+      expect(getViewportBounds(767).isMobile).toBe(true);
+
+      openApp("chat");
+      const state = useStore.getState();
+      expect(state.chatOpen).toBe(true);
+      expect(state.windows).toHaveLength(0);
     });
   });
 
@@ -184,6 +270,8 @@ describe("resolveAppId", () => {
     expect(resolveAppId("projects")).toBe("projects");
     expect(resolveAppId("settings")).toBe("control-panel");
     expect(resolveAppId("cv")).toBe("resume");
+    expect(resolveAppId("chat")).toBe("chat");
+    expect(resolveAppId("CHAT")).toBe("chat");
     expect(resolveAppId("nope")).toBeNull();
   });
 });

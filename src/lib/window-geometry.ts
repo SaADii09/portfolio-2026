@@ -66,6 +66,8 @@ const APP_SIZES: Record<string, SizeSpec> = {
   resume: { width: 700, height: 760 },
   terminal: { width: 640, height: 420 },
   contact: { width: 480, height: 520 },
+  // Dev Chat window (chat phase, Task 7) — the desktop home of the assistant.
+  chat: { width: 420, height: 640 },
   // Browser exact-key row (browser spec §7) — resolved like any app key.
   browser: BROWSER_SIZE,
 };
@@ -79,6 +81,7 @@ const APP_SLOTS: Record<string, SlotSpec> = {
   resume: { leftFrac: 0.5, topFrac: 0.06 },
   terminal: { leftFrac: 0, topFrac: 0.9 },
   contact: { leftFrac: 0.72, topFrac: 0.25 },
+  chat: { leftFrac: 0.6, topFrac: 0.1 },
   browser: BROWSER_SLOT,
 };
 

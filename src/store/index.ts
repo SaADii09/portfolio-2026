@@ -7,6 +7,7 @@ import { ChatSlice, createChatSlice } from "./chatSlice";
 import { MusicSlice, createMusicSlice } from "./musicSlice";
 import { UiSlice, createUiSlice } from "./uiSlice";
 import { BrowserSlice, createBrowserSlice } from "./browserSlice";
+import { Message } from "@/types/chat";
 
 export type AppStore = WindowSlice &
   ThemeSlice &
@@ -30,6 +31,9 @@ export type AppStore = WindowSlice &
  * deliberately NOT persisted — browser sessions are ephemeral per spec §7,
  * and the migrator below drops any stray browser keys an old localStorage
  * blob might carry.
+ *
+ * Chat slice: `messages` (capped at 50), `unreadCount`, `chatGreeted` are persisted.
+ * `chatOpen`, `isLoading` are transient (never persisted).
  */
 export type PersistedAppState = Pick<
   AppStore,
@@ -43,9 +47,32 @@ export type PersistedAppState = Pick<
   | "lastGeometry"
   | "volume"
   | "currentTrack"
+  | "messages"
+  | "unreadCount"
+  | "chatGreeted"
 >;
 
+/**
+ * Helper to cap messages at 50 for persistence.
+ */
+function trimMessagesForPersist(messages: Message[]): Message[] {
+  return messages.slice(-50);
+}
+
+/**
+ * Helper to coerce a trailing streaming assistant message to non-streaming
+ * so a reload mid-stream doesn't render a permanently-cursored bubble.
+ */
+function finalizeStreamingForPersist(messages: Message[]): Message[] {
+  const lastIndex = messages.length - 1;
+  const last = messages[lastIndex];
+  if (!last || last.role !== "assistant" || last.streaming !== true) return messages;
+  const finalized: Message = { ...last, streaming: false };
+  return [...messages.slice(0, lastIndex), finalized];
+}
+
 export function persistPartialize(state: AppStore): PersistedAppState {
+  const messages = finalizeStreamingForPersist(trimMessagesForPersist(state.messages));
   return {
     theme: state.theme,
     customTokens: state.customTokens,
@@ -57,6 +84,9 @@ export function persistPartialize(state: AppStore): PersistedAppState {
     lastGeometry: state.lastGeometry,
     volume: state.volume,
     currentTrack: state.currentTrack,
+    messages,
+    unreadCount: state.unreadCount,
+    chatGreeted: state.chatGreeted,
   };
 }
 
@@ -65,7 +95,7 @@ export function persistPartialize(state: AppStore): PersistedAppState {
  * load so this mapping can never drift from what the slices actually declare.
  * (The audio engine is only touched by actions, never at slice construction.)
  */
-function createPersistedDefaults(): PersistedAppState {
+export function createPersistedDefaults(): PersistedAppState {
   const store = {} as AppStore;
   const set = (partial: Partial<AppStore> | ((s: AppStore) => Partial<AppStore>)) => {
     Object.assign(store, typeof partial === "function" ? partial(store) : partial);
@@ -78,6 +108,7 @@ function createPersistedDefaults(): PersistedAppState {
     createWindowSlice(set, get, api),
     createThemeSlice(set, get, api),
     createWidgetSlice(set, get, api),
+    createChatSlice(set, get, api),
     createMusicSlice(set, get, api),
   );
   return persistPartialize(store);
@@ -118,7 +149,7 @@ export const useStore = create<AppStore>()(
     }),
     {
       name: "devos-store",
-      version: 1,
+      version: 2,
       partialize: persistPartialize,
       migrate: persistMigrator,
     },

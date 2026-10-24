@@ -1,17 +1,24 @@
-import { retrieveRelevantContext } from "@/lib/rag";
 import {
   clientIpOf,
   createRateLimiter,
   pruneTimestamps as pruneStamps,
   rateLimitedResponse,
 } from "@/lib/rate-limit";
+import { resolveProviderFromEnv, type ProviderResolutionError } from "@/lib/ai/registry";
+import { buildSystemPrompt } from "@/lib/ai/prompt";
+import type { NormalizedStreamEvent, StreamRequest } from "@/lib/ai/provider";
 
-const MAX_REQUESTS_PER_MINUTE = 15;
+const MAX_REQUESTS_PER_MINUTE = Number(process.env.AI_RATE_LIMIT_PER_MIN ?? 15);
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
 const ALLOWED_ROLES = new Set<string>(["user", "assistant"]);
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_LENGTH = 10_000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
+const DEFAULT_TEMPERATURE = 0.3;
+/** The verbatim one-shot interruption copy — emitted only if the adapter (which owns every
+ * upstream failure) somehow throws. */
+const STREAM_ERROR_TEXT = "The assistant was interrupted. Please try again.";
 
 const limiter = createRateLimiter({
   limit: MAX_REQUESTS_PER_MINUTE,
@@ -25,16 +32,6 @@ const limiter = createRateLimiter({
 export function pruneTimestamps(stamps: number[], now: number): number[] {
   return pruneStamps(stamps, now, RATE_LIMIT_WINDOW_MS);
 }
-
-const SYSTEM_PROMPT_BASE = `You are DevOS AI, an assistant embedded in Saad Ahmad's interactive portfolio website.
-You help visitors learn about Saad's work, skills, projects, and experience.
-Be concise, friendly, and helpful. Use markdown sparingly (bold for emphasis).
-If asked something outside your knowledge, say you don't know rather than making up an answer.
-The current year is 2026.
-
-Below is relevant context from Saad's portfolio knowledge base. Use it to answer the user's question.
-If the context doesn't contain enough information, answer based on what you know about Saad from the context.
-`;
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -78,6 +75,92 @@ export function validateMessages(input: unknown): ValidationOk | ValidationFail 
   return { ok: true, messages };
 }
 
+function toSsePayload(event: NormalizedStreamEvent): { type: string; text: string } {
+  return { type: event.type, text: event.text };
+}
+
+/** One SSE data line for a plain `{type, text}` payload. */
+function sseLineFor(encoder: TextEncoder, payload: { type: string; text: string }): Uint8Array {
+  return encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+/**
+ * Relays the provider's normalized events into SSE line bytes: tokens as
+ * `{"type":"token",…}` and terminal errors as `{"type":"error",…}` — the
+ * exact byte-format the pre-cutover route emitted (the internal error `code`
+ * is route knowledge, never client-visible). The adapter itself is the
+ * single error boundary — it ends the stream with a terminal error event
+ * instead of throwing — so the catch here is defensive parity with
+ * yesterday's read loop.
+ */
+async function* sseBytes(
+  iterator: AsyncIterator<NormalizedStreamEvent>,
+  first: { type: string; text: string } | null,
+): AsyncGenerator<Uint8Array, void, undefined> {
+  const encoder = new TextEncoder();
+  if (first !== null) {
+    yield sseLineFor(encoder, first);
+  }
+  try {
+    let next = await iterator.next();
+    while (!next.done) {
+      yield sseLineFor(encoder, toSsePayload(next.value));
+      next = await iterator.next();
+    }
+  } catch (err) {
+    console.error("Stream error:", err);
+    yield sseLineFor(encoder, { type: "error", text: STREAM_ERROR_TEXT });
+  }
+}
+
+/** Maps a registry gap kind to today's exact pre-stream status and body. */
+function resolutionErrorToResponse(kind: ProviderResolutionError): Response {
+  if (kind === "not_configured") {
+    // Byte-exact legacy body — the client renders its friendly copy from
+    // this exact string; it must never change.
+    return Response.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
+  }
+  if (kind === "invalid_provider") {
+    const requested = process.env.AI_PROVIDER?.trim() ?? "";
+    return Response.json({ error: `Unknown AI_PROVIDER: "${requested}"` }, { status: 500 });
+  }
+  // Reachable only once task 3 wires openai-compat without a model pinned.
+  return Response.json({ error: "AI_MODEL is required for the configured provider" }, {
+    status: 500,
+  });
+}
+
+/** The stream Response with the exact headers the route has always sent. */
+function sseResponseFor(
+  iterator: AsyncIterator<NormalizedStreamEvent>,
+  first: { type: string; text: string } | null,
+): Response {
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const bytes of sseBytes(iterator, first)) {
+          // enqueue can throw if the client aborted mid-stream — the
+          // response is dead either way; the finally still closes quietly.
+          controller.enqueue(bytes);
+        }
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // stream already closed or cancelled — nothing left to close
+        }
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   const ip = clientIpOf(request);
 
@@ -99,116 +182,35 @@ export async function POST(request: Request) {
   const messages = validated.messages;
 
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
-  const context = lastUserMessage ? retrieveRelevantContext(lastUserMessage.content) : "";
+  const systemPrompt = buildSystemPrompt({ userQuery: lastUserMessage?.content ?? "" });
 
-  const systemPrompt = SYSTEM_PROMPT_BASE + (context ? `\n\nRelevant context:\n${context}` : "");
+  const resolved = resolveProviderFromEnv(process.env);
+  if ("error" in resolved) return resolutionErrorToResponse(resolved.error);
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
-  }
+  // The legacy route never aborted on client disconnect; a fresh signal
+  // keeps that posture while giving the adapter a well-formed AbortSignal
+  // (its idle timeout listens for a later Task's disconnect wiring).
+  const streamRequest: StreamRequest = {
+    messages,
+    system: systemPrompt,
+    maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    temperature: DEFAULT_TEMPERATURE,
+    signal: new AbortController().signal,
+  };
+  const iterator = resolved.provider.stream(streamRequest)[Symbol.asyncIterator]();
 
+  // Pull the first event before building the Response, so a first-event
+  // `error` (a non-200 upstream) or an unexpected setup throw keeps today's
+  // pre-stream status/body instead of leaking into an SSE stream.
+  let first: IteratorResult<NormalizedStreamEvent, undefined>;
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages,
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error("Anthropic API error:", response.status, errBody);
-      return Response.json({ error: "AI service unavailable" }, { status: 502 });
-    }
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = response.body?.getReader();
-        if (!reader) {
-          controller.close();
-          return;
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith("data: ")) continue;
-              const data = trimmed.slice(6);
-              if (data === "[DONE]") continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
-                  const payload = JSON.stringify({
-                    type: "token",
-                    text: parsed.delta.text,
-                  });
-                  controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-                }
-              } catch {
-                // skip malformed SSE lines
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Stream error:", err);
-          // One-shot terminal error event so the client can render the
-          // interruption. Must land before controller.close() in finally.
-          // enqueue can throw if the client aborted mid-stream — swallow, the response is dead either way.
-          // enqueue can throw if the client aborted mid-stream — swallow, the response is dead either way.
-          try {
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "error",
-                  text: "The assistant was interrupted. Please try again.",
-                })}\n\n`,
-              ),
-            );
-          } catch {
-            // stream already closed or cancelled — nothing left to deliver
-          }
-        } finally {
-          try {
-            controller.close();
-          } catch {
-            // stream already closed or cancelled — nothing left to close
-          }
-        }
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
+    first = await iterator.next();
   } catch (err) {
     console.error("Chat API error:", err);
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }
+  if (!first.done && first.value.type === "error") {
+    return Response.json({ error: "AI service unavailable" }, { status: 502 });
+  }
+  return sseResponseFor(iterator, first.done ? null : toSsePayload(first.value));
 }

@@ -57,6 +57,7 @@ const TABLE: Record<string, [number, number]> = {
   terminal: [640, 420],
   contact: [480, 520],
   browser: [960, 660],
+  chat: [420, 640],
   [`${WEBVIEW_GEOMETRY_KEY}https://example.com`]: [800, 560],
 };
 
@@ -141,6 +142,15 @@ describe("getAppWindowGeometry — desktop anchor slots @ 1440×900", () => {
     expect([geo.width, geo.height]).toEqual(TABLE.browser);
     expect(Math.abs(painted(geo).x - Math.round(0.5 * (VW - 960)))).toBeLessThanOrEqual(1);
     // Raw anchor 0.1 × 164 = 16.4 sits above the top bar, so the clamp parks
+    // the painted top edge at the top bar itself.
+    expect(painted(geo).y).toBe(TOP_BAR);
+  });
+
+  it("chat opens 420×640 from its (0.6, 0.1) anchor", () => {
+    const geo = getAppWindowGeometry("chat", VW, VH, 0);
+    expect([geo.width, geo.height]).toEqual(TABLE.chat);
+    expect(Math.abs(painted(geo).x - Math.round(0.6 * (VW - 420)))).toBeLessThanOrEqual(1);
+    // Raw anchor 0.1 × 184 = 18.4 sits above the top bar, so the clamp parks
     // the painted top edge at the top bar itself.
     expect(painted(geo).y).toBe(TOP_BAR);
   });

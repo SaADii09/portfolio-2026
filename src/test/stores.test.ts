@@ -488,13 +488,16 @@ describe("persist partialize", () => {
     const persisted = persistPartialize(state);
 
     expect(Object.keys(persisted).sort()).toEqual([
+      "chatGreeted",
       "currentTrack",
       "customTokens",
       "glassBlur",
       "glassOpacity",
       "glassSaturate",
       "lastGeometry",
+      "messages",
       "theme",
+      "unreadCount",
       "volume",
       "widgets",
       "windows",
@@ -558,13 +561,16 @@ describe("persist partialize", () => {
 
 describe("persist migrator", () => {
   const PERSISTED_KEYS = [
+    "chatGreeted",
     "currentTrack",
     "customTokens",
     "glassBlur",
     "glassOpacity",
     "glassSaturate",
     "lastGeometry",
+    "messages",
     "theme",
+    "unreadCount",
     "volume",
     "widgets",
     "windows",
@@ -605,8 +611,9 @@ describe("persist migrator", () => {
     expect(migrated).not.toHaveProperty("chatMessages");
   });
 
-  it("migrates an already-current version-1 state as an identity merge", () => {
-    const state: PersistedAppState = {
+  it("migrates an already-current version-1 state as an identity merge (with v2 chat fields added)", () => {
+    // v1 state (without chat fields) → migrator adds chat fields with defaults
+    const v1State = {
       theme: "editorial",
       customTokens: { "--bg": "#faf8f6" },
       glassBlur: 12,
@@ -619,7 +626,22 @@ describe("persist migrator", () => {
       currentTrack: { id: "t3", title: "Midnight Code", artist: "DevOS Beats" },
     };
 
-    expect(persistMigrator(state, 1)).toEqual(state);
+    const migrated = persistMigrator(v1State, 1);
+    // Should include v1 fields plus new chat fields with defaults
+    expect(migrated.theme).toBe("editorial");
+    expect(migrated.customTokens).toEqual({ "--bg": "#faf8f6" });
+    expect(migrated.glassBlur).toBe(12);
+    expect(migrated.glassSaturate).toBe(140);
+    expect(migrated.glassOpacity).toBe(65);
+    expect(migrated.lastGeometry).toEqual({ terminal: { x: 11, y: 22, width: 640, height: 420 } });
+    expect(migrated.windows).toEqual([]);
+    expect(migrated.widgets).toEqual([]);
+    expect(migrated.volume).toBe(0.4);
+    expect(migrated.currentTrack).toEqual({ id: "t3", title: "Midnight Code", artist: "DevOS Beats" });
+    // New chat fields added with defaults
+    expect(migrated.messages).toEqual([]);
+    expect(migrated.unreadCount).toBe(0);
+    expect(migrated.chatGreeted).toBe(false);
   });
 
   it("does not crash on a junk customTokens entry and keeps the rest of the merge", () => {

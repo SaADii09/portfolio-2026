@@ -110,7 +110,7 @@ describe("executeCommand — byte-for-byte outputs", () => {
     // `ls` derives from APP_DEFS (app ids joined by two spaces) — the order moved
     // from the historical literal ("resume, terminal, contact" before
     // "control-panel") to registry order, and "browser" joined the list.
-    ["ls", ["about  projects  browser  control-panel  resume  terminal  contact"]],
+    ["ls", ["about  projects  browser  control-panel  resume  terminal  contact  chat"]],
   ];
 
   it.each(cases)("%s", (input, expected) => {
@@ -217,7 +217,7 @@ describe("executeCommand — OS bridge commands", () => {
     it("prints the unknown-app hint and touches nothing", () => {
       const ctx = createCtx();
       expect(executeCommand("open nope", ctx).lines).toEqual([
-        "Unknown app: nope. Try: about, projects, browser, control-panel, resume, terminal, contact",
+        "Unknown app: nope. Try: about, projects, browser, control-panel, resume, terminal, contact, chat",
       ]);
       expect(ctx.openApp).not.toHaveBeenCalled();
     });
@@ -286,6 +286,7 @@ describe("executeCommand — OS bridge commands", () => {
         "resume — Resume",
         "terminal — Terminal",
         "contact — Contact",
+        "chat — Dev Chat",
       ]);
     });
   });

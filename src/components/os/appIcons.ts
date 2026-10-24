@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Bot,
   FileText,
   FolderKanban,
   Globe,
@@ -21,6 +22,7 @@ export const APP_ICONS: Record<AppId, LucideIcon> = {
   resume: FileText,
   terminal: Terminal,
   contact: Mail,
+  chat: Bot,
 };
 
 /**

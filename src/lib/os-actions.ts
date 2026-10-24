@@ -47,7 +47,30 @@ const APP_LAUNCHERS: Record<AppId, (id: AppId) => void> = {
   resume: openRegistryApp,
   terminal: openRegistryApp,
   contact: openRegistryApp,
+  // Device-mapped: the desktop opens a real Dev Chat WINDOW, mobile keeps the
+  // bottom-sheet chat. `os-actions` is not a React module, so the 768 rule
+  // comes from `getViewportBounds` (the same one `useIsMobile` wraps).
+  chat: () => chatLauncher(isMobileViewport()),
 };
+
+/** The viewport 768 rule, resolved without a React hook. */
+function isMobileViewport(): boolean {
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  return getViewportBounds(vw).isMobile;
+}
+
+/**
+ * Pure, directly testable chat launcher: on a desktop viewport it opens (or
+ * focuses/restores) the Dev Chat registry window; on mobile it toggles the
+ * chat sheet, which is a panel rather than a window.
+ */
+export function chatLauncher(isMobile: boolean): void {
+  if (isMobile) {
+    useStore.getState().toggleChat();
+    return;
+  }
+  openRegistryApp("chat");
+}
 
 /**
  * Launch an app by id — the single choke point every launcher funnels
