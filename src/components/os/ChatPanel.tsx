@@ -5,10 +5,11 @@ import { useStore } from "@/store";
 import { openApp } from "@/lib/os-actions";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useChatActionExecutor } from "@/components/apps/chat-internal/useChatActionExecutor";
+import { useChatGreeting } from "@/components/apps/chat-internal/useChatGreeting";
 import { MessageList } from "@/components/apps/chat-internal/MessageList";
 import { ChatComposer } from "@/components/apps/chat-internal/ChatComposer";
 import { StarterChips } from "@/components/apps/chat-internal/StarterChips";
-import { MessageCircle, X } from "lucide-react";
+import { MessageCircle, Trash2, X } from "lucide-react";
 
 /**
  * Thin chat shell — a visibility rule plus the mobile FAB/sheet chrome. All
@@ -24,14 +25,20 @@ export function ChatPanel() {
   const chatOpen = useStore((s) => s.chatOpen);
   const messages = useStore((s) => s.messages);
   const isLoading = useStore((s) => s.isLoading);
+  const unreadCount = useStore((s) => s.unreadCount);
   const toggleChat = useStore((s) => s.toggleChat);
   const sendMessage = useStore((s) => s.sendMessage);
+  const clearConversation = useStore((s) => s.clearConversation);
   // Chat is a registered OS app: the desktop edge tab stands in for the chat
   // WINDOW, so it only exists while no non-minimized chat window is on screen.
   const hasChatWindow = useStore((s) =>
     s.windows.some((w) => w.component === "chat" && !w.isMinimized),
   );
   const isMobile = useIsMobile();
+
+  // One-shot greeting: only the mobile sheet is a chat surface here (desktop
+  // renders its greeting from ChatApp inside the window).
+  useChatGreeting(isMobile && chatOpen);
 
   // Exactly as the slice represents it: pick the assistant message whose
   // `streaming === true` and pass `{id, content}` (null when none).
@@ -58,9 +65,23 @@ export function ChatPanel() {
               background: "var(--accent-1)",
               color: "var(--bg-primary)",
             }}
-            aria-label="Open chat"
+            aria-label={`Open chat${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
           >
             <MessageCircle size={20} />
+            {unreadCount > 0 && (
+              <span
+                className="absolute right-1 top-1 flex items-center justify-center w-4 h-4 min-w-4 rounded-full"
+                style={{
+                  background: "var(--bg-primary)",
+                  color: "var(--accent-1)",
+                  fontSize: "10px",
+                  fontWeight: "600",
+                  lineHeight: "1",
+                }}
+              >
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
         )}
 
@@ -114,13 +135,22 @@ export function ChatPanel() {
                     </span>
                   )}
                 </span>
-                <button
-                  onClick={toggleChat}
-                  className="flex items-center justify-center min-w-[44px] min-h-[44px] transition-all hover:scale-110 active:scale-95"
-                  aria-label="Close chat"
-                >
-                  <X size={16} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={clearConversation}
+                    className="flex items-center justify-center min-w-[44px] min-h-[44px] transition-all hover:scale-110 active:scale-95"
+                    aria-label="Clear conversation"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <button
+                    onClick={toggleChat}
+                    className="flex items-center justify-center min-w-[44px] min-h-[44px] transition-all hover:scale-110 active:scale-95"
+                    aria-label="Close chat"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
 
               <MessageList messages={messages} />
@@ -148,9 +178,24 @@ export function ChatPanel() {
         background: "var(--accent-1)",
         color: "var(--bg-primary)",
       }}
-      aria-label="Open chat"
+      aria-label={`Open chat${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
     >
       <MessageCircle size={16} />
+      {unreadCount > 0 && (
+        <span
+          className="absolute right-0 top-0 flex items-center justify-center w-4 h-4 min-w-4 rounded-full"
+          style={{
+            background: "var(--bg-primary)",
+            color: "var(--accent-1)",
+            fontSize: "10px",
+            fontWeight: "600",
+            lineHeight: "1",
+            transform: "translate(25%, -25%)",
+          }}
+        >
+          {unreadCount > 9 ? "9+" : unreadCount}
+        </span>
+      )}
     </button>
   );
 }

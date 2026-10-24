@@ -133,12 +133,14 @@ function createTurnIo(assistantId: string, set: ChatStateSetter, get: ChatStateG
       // Terminal mid-stream failure from the route: flush pending tokens, then append.
       flushBuffer();
       patchAssistant((m) =>
-        m.streaming ? { ...m, content: m.content + event.text, streaming: false } : m,
+        m.streaming ? { ...m, content: m.content + event.text, streaming: false, error: true } : m,
       );
     },
     finalizeFailure: (text) => {
       flushBuffer();
-      patchAssistant((m) => (m.streaming ? { ...m, content: text, streaming: false } : m));
+      patchAssistant((m) =>
+        m.streaming ? { ...m, content: text, streaming: false, error: true } : m,
+      );
       settle();
     },
     settle,
@@ -213,6 +215,7 @@ export interface ChatSlice {
   sendMessage: (text: string) => Promise<void>;
   retryLast: () => Promise<void>;
   clearConversation: () => void;
+  greet: () => void;
   markDeliveredIfHidden: () => void;
 }
 
@@ -262,6 +265,26 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
   clearConversation: () => {
     set({ messages: [], unreadCount: 0 });
     // chatGreeted is intentionally NOT reset (greeting logic lives in Task 10).
+  },
+
+  /** One-shot welcome message: fires the first time a chat surface opens,
+   * then never again (`chatGreeted` gates it). No network, no duplicate. */
+  greet: () => {
+    set((s) => {
+      // One shot, and only into a bare conversation (a reload mid-thread must
+      // never splice a greeting above the user's history).
+      if (s.chatGreeted || s.messages.length > 0) return {};
+      const greeting: Message = {
+        id: genMsgId(),
+        role: "assistant",
+        content: "Hi! I'm DevOS AI — ask me about my work, skills, or projects.",
+        timestamp: Date.now(),
+      };
+      return {
+        messages: trimMessages([...s.messages, greeting]),
+        chatGreeted: true,
+      };
+    });
   },
 
   markDeliveredIfHidden: () => {

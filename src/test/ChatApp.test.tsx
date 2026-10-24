@@ -161,6 +161,76 @@ describe("ChatApp", () => {
     }
   });
 
+  describe("greeting", () => {
+    beforeEach(() => {
+      useStore.setState({ chatGreeted: false, messages: [] });
+    });
+
+    it("fires the one-shot greeting on first bare render", () => {
+      render(<ChatApp />);
+      expect(screen.getByText(/Hi! I'm DevOS AI/)).toBeInTheDocument();
+      // A greeting is a message: the empty state and chips stand down.
+      expect(screen.queryByText(/Ask me anything about my work/)).toBeNull();
+    });
+
+    it("does not re-greet once chatGreeted is set", () => {
+      render(<ChatApp />);
+      expect(screen.getByText(/Hi! I'm DevOS AI/)).toBeInTheDocument();
+
+      // Second mount in the same session: the persisted flag suppresses it.
+      render(<ChatApp />);
+      expect(screen.getAllByText(/Hi! I'm DevOS AI/)).toHaveLength(1);
+      expect(useStore.getState().messages).toHaveLength(1);
+    });
+  });
+
+  describe("reset", () => {
+    it("clears the conversation from the header control", () => {
+      useStore.setState({ messages: [msg("u1", "user", "hello")] });
+      render(<ChatApp />);
+
+      fireEvent.click(screen.getByLabelText("Clear conversation"));
+
+      expect(useStore.getState().messages).toHaveLength(0);
+      expect(useStore.getState().unreadCount).toBe(0);
+    });
+  });
+
+  describe("retry", () => {
+    it("renders Retry on a failed assistant message and calls retryLast", () => {
+      const retryLast = vi.fn(() => Promise.resolve());
+      useStore.setState({
+        messages: [msg("a1", "assistant", "Network error. Please try again.", { error: true })],
+        retryLast: retryLast as ChatSlice["retryLast"],
+      });
+
+      render(<ChatApp />);
+      fireEvent.click(screen.getByLabelText("Retry the last message"));
+
+      expect(retryLast).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows no Retry on a healthy message", () => {
+      useStore.setState({
+        messages: [msg("a1", "assistant", "All good.")],
+      });
+
+      render(<ChatApp />);
+
+      expect(screen.queryByLabelText("Retry the last message")).toBeNull();
+    });
+
+    it("hides Retry while a turn is still streaming", () => {
+      useStore.setState({
+        messages: [msg("a1", "assistant", "Network error. Please try again.", { error: true })],
+        isLoading: true,
+      });
+
+      render(<ChatApp />);
+
+      expect(screen.queryByLabelText("Retry the last message")).toBeNull();
+    });
+  });
 });
 
 describe("StarterChips", () => {

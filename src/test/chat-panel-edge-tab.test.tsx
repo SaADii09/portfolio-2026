@@ -97,4 +97,27 @@ describe("ChatPanel desktop edge tab", () => {
     // The edge tab steps aside for the window it just opened.
     expect(screen.queryByLabelText("Open chat")).toBeNull();
   });
+
+  it("shows an unread badge on the edge tab when unreadCount > 0", () => {
+    useStore.setState({ unreadCount: 3 });
+    render(<ChatPanel />);
+    const tab = screen.getByLabelText("Open chat, 3 unread");
+    expect(tab).toBeInTheDocument();
+    // The badge is the button's only text content (the icon is an svg).
+    expect(tab.textContent).toBe("3");
+  });
+
+  it("shows no badge when unreadCount is 0", () => {
+    useStore.setState({ unreadCount: 0 });
+    render(<ChatPanel />);
+    const tab = screen.getByLabelText("Open chat");
+    expect(tab.textContent).toBe("");
+  });
+
+  it("caps the badge display at 9+", () => {
+    useStore.setState({ unreadCount: 12 });
+    render(<ChatPanel />);
+    const tab = screen.getByLabelText("Open chat, 12 unread");
+    expect(tab.textContent).toBe("9+");
+  });
 });

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Bot, User, Clock } from "lucide-react";
+import { Bot, User, Clock, RotateCcw } from "lucide-react";
+import { useStore } from "@/store";
 import type { Message } from "@/types/chat";
 import { AssistantMarkdown } from "@/components/apps/chat-internal/AssistantMarkdown";
 
@@ -16,10 +17,13 @@ function formatTime(ts: number): string {
 /**
  * Shared transcript surface — one implementation for the desktop window and
  * the mobile sheet. Assistant answers render through `AssistantMarkdown`
- * (marker stripping + link allow-list live there).
+ * (marker stripping + link allow-list live there). A failed assistant turn
+ * carries `error` and gets a Retry affordance wired to `retryLast()`.
  */
 export function MessageList({ messages }: { messages: Message[] }) {
   const listRef = useRef<HTMLDivElement>(null);
+  const isLoading = useStore((s) => s.isLoading);
+  const retryLast = useStore((s) => s.retryLast);
 
   useEffect(() => {
     if (listRef.current) {
@@ -84,6 +88,17 @@ export function MessageList({ messages }: { messages: Message[] }) {
               <Clock size={8} />
               {formatTime(msg.timestamp)}
             </span>
+            {msg.error === true && !isLoading && (
+              <button
+                onClick={() => void retryLast()}
+                className="flex items-center gap-1 self-start min-h-[44px] px-2 text-[10px] underline underline-offset-2"
+                style={{ color: "var(--accent-1)" }}
+                aria-label="Retry the last message"
+              >
+                <RotateCcw size={10} />
+                Retry
+              </button>
+            )}
           </div>
         </motion.div>
       ))}

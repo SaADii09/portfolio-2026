@@ -510,6 +510,7 @@ describe("chatSlice v2 — ids, persistence, unread, retry, reset", () => {
         const assistant = store.messages.find((m) => m.role === "assistant");
         expect(assistant?.content).toBe("Network error. Please try again.");
         expect(assistant?.streaming).toBe(false);
+        expect(assistant?.error).toBe(true);
         expect(store.isLoading).toBe(false);
       } finally {
         vi.unstubAllGlobals();
@@ -529,9 +530,49 @@ describe("chatSlice v2 — ids, persistence, unread, retry, reset", () => {
         const assistant = store.messages.find((m) => m.role === "assistant");
         expect(assistant?.content).toBe("The assistant is not configured yet.");
         expect(assistant?.streaming).toBe(false);
+        expect(assistant?.error).toBe(true);
       } finally {
         vi.unstubAllGlobals();
       }
+    });
+  });
+
+  describe("greet", () => {
+    it("seeds exactly one assistant greeting and flips the persisted flag", () => {
+      const store = slice();
+
+      store.greet();
+
+      expect(store.chatGreeted).toBe(true);
+      expect(store.messages).toHaveLength(1);
+      expect(store.messages[0]?.role).toBe("assistant");
+      expect(store.messages[0]?.content).toMatch(/Hi! I'm DevOS AI/);
+
+      // Second call is a no-op — the flag gates it.
+      store.greet();
+      expect(store.messages).toHaveLength(1);
+    });
+
+    it("never greets into an existing conversation", () => {
+      const store = slice();
+      store.messages = [{ id: "u1", role: "user", content: "already here", timestamp: 1 }];
+
+      store.greet();
+
+      expect(store.messages).toHaveLength(1);
+      expect(store.messages[0]?.content).toBe("already here");
+      expect(store.chatGreeted).toBe(false);
+    });
+
+    it("a clear keeps the greeted flag (no second welcome after reset)", () => {
+      const store = slice();
+      store.greet();
+      store.clearConversation();
+
+      store.greet();
+
+      expect(store.messages).toHaveLength(0);
+      expect(store.chatGreeted).toBe(true);
     });
   });
 });
