@@ -50,6 +50,20 @@ describe("buildSystemPrompt — no KB file", () => {
     expect(prompt).toContain("DevOS AI");
     expect(prompt.split("Relevant context:").length).toBe(1);
   });
+
+  /**
+   * Live smoke (2026-10-25, groq/gpt-oss-120b) produced two grounding defects:
+   * a CRM walkthrough that invented "B2B teams … real-time collaboration, secure
+   * data handling", and an answer that labelled Saad's own role "Your Role".
+   * These two rules are the fix, and they are pinned so a later prompt edit
+   * cannot quietly drop them.
+   */
+  it("pins third-person address and the no-embellishment rule", () => {
+    const prompt = buildSystemPrompt({ userQuery: "walk me through the CRM" });
+    expect(prompt).toContain("third person");
+    expect(prompt).toContain('never call his role "your role"');
+    expect(prompt).toContain("Never invent goals");
+  });
 });
 
 describe("buildSystemPrompt — full KB injection", () => {
