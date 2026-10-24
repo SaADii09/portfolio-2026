@@ -15,6 +15,101 @@ function formatTime(ts: number): string {
   });
 }
 
+/** Role avatar — accent fill for the visitor, surface fill for the assistant. */
+function MessageAvatar({ role }: { role: Message["role"] }) {
+  const isUser = role === "user";
+  return (
+    <div
+      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+      style={{ background: isUser ? "var(--accent-1)" : "var(--bg-tertiary)" }}
+    >
+      {isUser ? (
+        <User size={12} style={{ color: "var(--bg-primary)" }} />
+      ) : (
+        <Bot size={12} style={{ color: "var(--text-primary)" }} />
+      )}
+    </div>
+  );
+}
+
+/** Assistant answers render markdown; visitor text stays verbatim. */
+function BubbleBody({ msg }: { msg: Message }) {
+  if (msg.role === "assistant") {
+    return <AssistantMarkdown content={msg.content} streaming={msg.streaming === true} />;
+  }
+  return <p className="whitespace-pre-wrap">{msg.content}</p>;
+}
+
+function MessageBubble({ msg }: { msg: Message }) {
+  const isUser = msg.role === "user";
+  return (
+    <div
+      className="rounded-os px-3 py-2 leading-relaxed break-words"
+      style={{
+        background: isUser
+          ? "linear-gradient(135deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 60%, var(--accent-1)))"
+          : undefined,
+        color: isUser ? "var(--bg-primary)" : "var(--text-primary)",
+      }}
+    >
+      <BubbleBody msg={msg} />
+    </div>
+  );
+}
+
+function MessageTimestamp({ ts }: { ts: number }) {
+  return (
+    <span
+      className="flex items-center gap-1 text-[9px] px-1"
+      style={{ color: "var(--text-secondary)" }}
+    >
+      <Clock size={8} />
+      {formatTime(ts)}
+    </span>
+  );
+}
+
+function RetryButton({ onRetry }: { onRetry: () => void }) {
+  return (
+    <button
+      onClick={onRetry}
+      className="flex items-center gap-1 self-start min-h-[44px] px-2 text-[10px] underline underline-offset-2"
+      style={{ color: "var(--accent-1)" }}
+      aria-label="Retry the last message"
+    >
+      <RotateCcw size={10} />
+      Retry
+    </button>
+  );
+}
+
+function MessageRow({
+  msg,
+  isLoading,
+  onRetry,
+}: {
+  msg: Message;
+  isLoading: boolean;
+  onRetry: () => void;
+}) {
+  const showRetry = msg.error === true && !isLoading;
+  return (
+    <motion.div
+      initial={{ y: 6, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: "spring", damping: 20, stiffness: 300 }}
+      className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
+    >
+      <MessageAvatar role={msg.role} />
+      <div className="max-w-[80%] flex flex-col gap-0.5">
+        <MessageBubble msg={msg} />
+        <MessageTimestamp ts={msg.timestamp} />
+        {showRetry && <RetryButton onRetry={onRetry} />}
+      </div>
+    </motion.div>
+  );
+}
+
 /**
  * Shared transcript surface — one implementation for the desktop window and
  * the mobile sheet. Assistant answers render through `AssistantMarkdown`
@@ -51,62 +146,7 @@ export function MessageList({ messages }: { messages: Message[] }) {
       )}
 
       {messages.map((msg) => (
-        <motion.div
-          key={msg.id}
-          initial={{ y: 6, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ type: "spring", damping: 20, stiffness: 300 }}
-          className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
-        >
-          <div
-            className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{
-              background: msg.role === "user" ? "var(--accent-1)" : "var(--bg-tertiary)",
-            }}
-          >
-            {msg.role === "user" ? (
-              <User size={12} style={{ color: "var(--bg-primary)" }} />
-            ) : (
-              <Bot size={12} style={{ color: "var(--text-primary)" }} />
-            )}
-          </div>
-          <div className="max-w-[80%] flex flex-col gap-0.5">
-            <div
-              className="rounded-os px-3 py-2 leading-relaxed break-words"
-              style={{
-                background:
-                  msg.role === "user"
-                    ? "linear-gradient(135deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 60%, var(--accent-1)))"
-                    : undefined,
-                color: msg.role === "user" ? "var(--bg-primary)" : "var(--text-primary)",
-              }}
-            >
-              {msg.role === "assistant" ? (
-                <AssistantMarkdown content={msg.content} streaming={msg.streaming === true} />
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-            </div>
-            <span
-              className="flex items-center gap-1 text-[9px] px-1"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              <Clock size={8} />
-              {formatTime(msg.timestamp)}
-            </span>
-            {msg.error === true && !isLoading && (
-              <button
-                onClick={() => void retryLast()}
-                className="flex items-center gap-1 self-start min-h-[44px] px-2 text-[10px] underline underline-offset-2"
-                style={{ color: "var(--accent-1)" }}
-                aria-label="Retry the last message"
-              >
-                <RotateCcw size={10} />
-                Retry
-              </button>
-            )}
-          </div>
-        </motion.div>
+        <MessageRow key={msg.id} msg={msg} isLoading={isLoading} onRetry={() => void retryLast()} />
       ))}
     </div>
   );

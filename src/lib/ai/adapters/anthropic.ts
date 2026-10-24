@@ -53,24 +53,61 @@ async function* readChunks(
   }
 }
 
-/** The parsed `data:` payload of a line, or null for anything not a token. */
-function tokenFromLine(line: string): NormalizedStreamEvent | null {
+interface AnthropicDeltaEvent {
+  type?: string;
+  delta?: { type?: string; text?: string };
+}
+
+/** The SSE payload after `data: `, or null for non-data / `[DONE]` lines. */
+function dataPayload(line: string): string | null {
   const trimmed = line.trim();
-  // Non-data lines are skipped; malformed payloads are swallowed (same as the
-  // original route's `catch { /* skip malformed SSE lines */ }`).
   if (!trimmed.startsWith("data: ")) return null;
-  if (trimmed.slice(6) === "[DONE]") return null;
+  const payload = trimmed.slice(6);
+  return payload === "[DONE]" ? null : payload;
+}
+
+/** Parsed JSON, or null for a malformed payload (same tolerance as the old route). */
+function parseEvent(payload: string): AnthropicDeltaEvent | null {
   try {
-    const parsed = JSON.parse(trimmed.slice(6)) as {
-      type?: string;
-      delta?: { type?: string; text?: string };
-    };
-    if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
-      return { type: "token", text: parsed.delta.text ?? "" };
-    }
-    return null;
+    return JSON.parse(payload) as AnthropicDeltaEvent;
   } catch {
     return null;
+  }
+}
+
+function isTextDelta(event: AnthropicDeltaEvent): boolean {
+  return event.type === "content_block_delta" && event.delta?.type === "text_delta";
+}
+
+function deltaText(event: AnthropicDeltaEvent): string {
+  return event.delta?.text ?? "";
+}
+
+/** The text of a `text_delta` event, or null for every other event type. */
+function textDeltaOf(event: AnthropicDeltaEvent | null): string | null {
+  if (event === null) return null;
+  return isTextDelta(event) ? deltaText(event) : null;
+}
+
+/** The parsed `data:` payload of a line, or null for anything not a token. */
+function tokenFromLine(line: string): NormalizedStreamEvent | null {
+  const payload = dataPayload(line);
+  if (payload === null) return null;
+  const text = textDeltaOf(parseEvent(payload));
+  if (text === null) return null;
+  return { type: "token", text };
+}
+
+/** Splits the decode buffer into complete lines and the trailing partial line. */
+function splitLines(buffer: string): { lines: string[]; rest: string } {
+  const lines = buffer.split("\n");
+  return { lines, rest: lines.pop() ?? "" };
+}
+
+function* tokensFromLines(lines: string[]): Generator<NormalizedStreamEvent, void, undefined> {
+  for (const line of lines) {
+    const token = tokenFromLine(line);
+    if (token !== null) yield token;
   }
 }
 
@@ -81,12 +118,9 @@ async function* tokensFromChunks(
   let buffer = "";
   for await (const chunk of chunks) {
     buffer += decoder.decode(chunk, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const token = tokenFromLine(line);
-      if (token !== null) yield token;
-    }
+    const { lines, rest } = splitLines(buffer);
+    buffer = rest;
+    yield* tokensFromLines(lines);
   }
 }
 
@@ -140,6 +174,30 @@ async function* streamEvents(
   }
 }
 
+function anthropicApiKey(): string {
+  return process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY || "";
+}
+
+function anthropicModel(): string {
+  return process.env.AI_MODEL || DEFAULT_ANTHROPIC_MODEL;
+}
+
+function anthropicRequestBody(req: StreamRequest): string {
+  const caching = process.env.AI_CACHE_SYSTEM === "true";
+  return JSON.stringify(buildRequestBody(req, caching, anthropicModel()));
+}
+
+/** Non-200 upstream → one terminal error event (never thrown). */
+async function upstreamErrorEvent(response: Response): Promise<NormalizedStreamEvent> {
+  const detail = await response.text();
+  console.error("Anthropic API error:", response.status, detail);
+  return {
+    type: "error",
+    code: statusToErrorCode(response.status),
+    text: "AI service unavailable",
+  };
+}
+
 /**
  * Builds the anthropic adapter. `ANTHROPIC_ADAPTER` is the process-wide
  * instance resolved by the registry; tests inject `fetchImpl` so no suite
@@ -147,7 +205,7 @@ async function* streamEvents(
  */
 export function createAnthropicAdapter(options: AnthropicAdapterOptions = {}): ModelProvider {
   const stream = async function* (req: StreamRequest) {
-    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY;
+    const apiKey = anthropicApiKey();
     if (!apiKey) {
       // Unreachable via the route (the registry gates it) — a direct call
       // still fails loudly at protocol level instead of crashing.
@@ -162,23 +220,11 @@ export function createAnthropicAdapter(options: AnthropicAdapterOptions = {}): M
         "x-api-key": apiKey,
         "anthropic-version": ANTHROPIC_VERSION,
       },
-      body: JSON.stringify(
-        buildRequestBody(
-          req,
-          process.env.AI_CACHE_SYSTEM === "true",
-          process.env.AI_MODEL || DEFAULT_ANTHROPIC_MODEL,
-        ),
-      ),
+      body: anthropicRequestBody(req),
       signal: req.signal,
     });
     if (!response.ok) {
-      const detail = await response.text();
-      console.error("Anthropic API error:", response.status, detail);
-      yield {
-        type: "error",
-        code: statusToErrorCode(response.status),
-        text: "AI service unavailable",
-      };
+      yield await upstreamErrorEvent(response);
       return;
     }
     yield* streamEvents(response, req);

@@ -54,20 +54,16 @@ export interface PromptOptions {
   systemBase?: string;
 }
 
+/** The KB text to inject: the full KB while it fits, else the BM25 slice. */
+function contextFor(userQuery: string, fullKb: string | null): string | null {
+  if (fullKb === null) return null;
+  if (fullKb.length <= kbSizeThreshold()) return fullKb; // full injection — 100% recall
+  return retrieveRelevantContext(userQuery) || null; // BM25 fallback
+}
+
 /** Build the system prompt: base persona + action protocol + KB context. */
 export function buildSystemPrompt(options: PromptOptions): string {
   const { userQuery, systemBase = SYSTEM_PROMPT_BASE } = options;
-  const threshold = kbSizeThreshold();
-  const fullKb = getFullKb();
-
-  let context: string | null = null;
-  if (fullKb !== null) {
-    if (fullKb.length <= threshold) {
-      context = fullKb; // full injection — 100% recall
-    } else {
-      context = retrieveRelevantContext(userQuery) || null; // BM25 fallback
-    }
-  }
-
+  const context = contextFor(userQuery, getFullKb());
   return context ? `${systemBase}\n\nRelevant context:\n${context}` : systemBase;
 }

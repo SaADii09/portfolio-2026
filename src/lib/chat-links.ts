@@ -26,19 +26,32 @@ export const CHAT_PROJECT_LINKS: readonly string[] = PROJECTS.flatMap((project) 
  *    stripped (a model copying the KB may add one);
  *  - every other scheme (javascript:, data:, …) is rejected outright.
  */
-export function normalizeChatUrl(url: string): string | null {
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-  if (trimmed.toLowerCase().startsWith("mailto:")) return trimmed.toLowerCase();
+function isHttpProtocol(protocol: string): boolean {
+  return protocol === "http:" || protocol === "https:";
+}
+
+/** Lowercased whole string for `mailto:` links, else null. */
+function normalizeMailto(trimmed: string): string | null {
+  const lower = trimmed.toLowerCase();
+  return lower.startsWith("mailto:") ? lower : null;
+}
+
+/** Lowercased host + slash-trimmed path; null for any other scheme or a bad URL. */
+function normalizeHttpUrl(trimmed: string): string | null {
   try {
     const parsed = new URL(trimmed);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-    const host = parsed.hostname.toLowerCase();
+    if (!isHttpProtocol(parsed.protocol)) return null;
     const path = parsed.pathname.replace(/\/+$/, "");
-    return `${parsed.protocol}//${host}${path}${parsed.search}`;
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${path}${parsed.search}`;
   } catch {
     return null;
   }
+}
+
+export function normalizeChatUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  return normalizeMailto(trimmed) ?? normalizeHttpUrl(trimmed);
 }
 
 const ALLOWED_URLS: ReadonlySet<string> = new Set(
