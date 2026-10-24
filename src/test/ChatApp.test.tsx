@@ -151,8 +151,8 @@ describe("ChatApp", () => {
     expect(send.className).toContain("min-h-[44px]");
     expect(send.className).toContain("min-w-[44px]");
 
-    const chips = screen.getAllByRole("button", { name: "What can you do?" });
-    for (const chip of chips) {
+    const chipGroup = screen.getByRole("group", { name: "Starter prompts" });
+    for (const chip of within(chipGroup).getAllByRole("button")) {
       expect(chip.className).toContain("min-h-[44px]");
     }
   });
@@ -236,10 +236,10 @@ describe("StarterChips", () => {
     useStore.setState({ isLoading: false });
     render(<StarterChips onPick={onPick} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "What can you do?" }));
+    fireEvent.click(screen.getByRole("button", { name: "What has Saad built?" }));
 
     expect(onPick).toHaveBeenCalledTimes(1);
-    expect(onPick).toHaveBeenCalledWith("What can you do?");
+    expect(onPick).toHaveBeenCalledWith("What has Saad built?");
   });
 
   it("disables every chip while a turn streams", () => {
@@ -254,7 +254,7 @@ describe("StarterChips", () => {
       expect(chip).toBeDisabled();
     }
 
-    fireEvent.click(screen.getByRole("button", { name: "Show me your projects" }));
+    fireEvent.click(screen.getByRole("button", { name: "Is Saad available for work?" }));
     expect(onPick).not.toHaveBeenCalled();
   });
 });

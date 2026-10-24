@@ -3,15 +3,15 @@
 import { useStore } from "@/store";
 
 /**
- * PROVISIONAL starter-prompt copy — finalized at Task 11's owner gate.
+ * Starter-prompt copy — finalized at Task 11's owner gate (2026-10-25).
  * No semantics beyond "starter prompt suggestions"; each chip hands its
  * literal text to `onPick`.
  */
 const STARTERS = [
-  "What can you do?",
-  "Show me your projects",
-  "What's your tech stack?",
-  "How do I get in touch?",
+  "What has Saad built?",
+  "What's his tech stack?",
+  "Is Saad available for work?",
+  "Show me the CRM project",
 ] as const;
 
 /**
