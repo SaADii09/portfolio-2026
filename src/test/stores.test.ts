@@ -4,7 +4,7 @@ import { createThemeSlice, ThemeSlice } from "@/store/themeSlice";
 import { createWidgetSlice, WidgetSlice } from "@/store/widgetSlice";
 import { createMusicSlice, MusicSlice } from "@/store/musicSlice";
 import { createUiSlice, UiSlice } from "@/store/uiSlice";
-import { useStore, persistPartialize, persistMigrator, PersistedAppState } from "@/store";
+import { useStore, persistPartialize, persistMigrator } from "@/store";
 import { createBrowserSlice, type BrowserSlice } from "@/store/browserSlice";
 
 // jsdom has no Web Audio API — stub the synth engine so music slice logic is testable
@@ -588,7 +588,7 @@ describe("persist migrator", () => {
       chatMessages: [{ role: "user", content: "hi" }],
     };
 
-    const migrated = persistMigrator(legacy, 0);
+    const migrated = persistMigrator(legacy);
 
     expect(Object.keys(migrated).sort()).toEqual(PERSISTED_KEYS);
     // Persisted values win over defaults (defaults merged FIRST)
@@ -626,7 +626,7 @@ describe("persist migrator", () => {
       currentTrack: { id: "t3", title: "Midnight Code", artist: "DevOS Beats" },
     };
 
-    const migrated = persistMigrator(v1State, 1);
+    const migrated = persistMigrator(v1State);
     // Should include v1 fields plus new chat fields with defaults
     expect(migrated.theme).toBe("editorial");
     expect(migrated.customTokens).toEqual({ "--bg": "#faf8f6" });
@@ -654,7 +654,7 @@ describe("persist migrator", () => {
       theme: "retro",
     };
 
-    const migrated = persistMigrator(legacy, 0);
+    const migrated = persistMigrator(legacy);
 
     expect(migrated.customTokens).toEqual({ "--bg": "#000000", junkEntry: 5 });
     expect(migrated.theme).toBe("retro");
@@ -663,7 +663,7 @@ describe("persist migrator", () => {
   });
 
   it("returns pure defaults when nothing usable was persisted", () => {
-    const migrated = persistMigrator(null, 0);
+    const migrated = persistMigrator(null);
 
     expect(migrated.theme).toBe("retro");
     expect(migrated.customTokens).toEqual({});

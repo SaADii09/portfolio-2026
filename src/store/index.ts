@@ -122,8 +122,12 @@ const PERSISTED_DEFAULTS = createPersistedDefaults();
  * obsolete keys drop and every persisted key rehydrates onto its own field.
  * Merge order is pinned: defaults first, persisted values on top — the
  * reverse would clobber the user's state with defaults.
+ *
+ * The `version` argument zustand also passes is intentionally unaccepted:
+ * every persisted shape (v0 legacy, v1, v2) migrates through the same
+ * defaults-merge, so there is no version-specific branch to select.
  */
-export function persistMigrator(persisted: unknown, _fromVersion: number): PersistedAppState {
+export function persistMigrator(persisted: unknown): PersistedAppState {
   return persistPartialize(mergePersisted(persisted));
 }
 

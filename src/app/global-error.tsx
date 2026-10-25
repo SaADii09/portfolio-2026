@@ -17,7 +17,10 @@ export default function GlobalError({ reset }: GlobalErrorProps) {
     <html lang="en">
       <body>
         <div className="min-h-screen bg-os-bg font-body flex items-center justify-center p-6">
-          <div className="glass glass-border rounded-os shadow-os w-full max-w-md p-8 text-center">
+          <div
+            role="alert"
+            className="glass glass-border rounded-os shadow-os w-full max-w-md p-8 text-center"
+          >
             <h1 className="font-display text-sm text-os-text mb-4">
               Something went wrong in the OS.
             </h1>

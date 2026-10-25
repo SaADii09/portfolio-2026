@@ -131,7 +131,7 @@ describe("chatSlice v2 — ids, persistence, unread, retry, reset", () => {
         currentTrack: { id: "t3", title: "Midnight Code", artist: "DevOS Beats" },
       };
 
-      const migrated = persistMigrator(v1Blob, 1);
+      const migrated = persistMigrator(v1Blob);
 
       expect(migrated.messages).toEqual([]);
       expect(migrated.unreadCount).toBe(0);

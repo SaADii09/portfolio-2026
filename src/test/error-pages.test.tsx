@@ -37,6 +37,12 @@ describe("ErrorPage", () => {
 
     expect(reset).toHaveBeenCalledTimes(1);
   });
+
+  it("announces the crash panel with role=alert", () => {
+    renderErrorPage();
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
 });
 
 describe("GlobalError", () => {
@@ -61,5 +67,12 @@ describe("GlobalError", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
 
     expect(reset).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces the panel with role=alert and pins lang=en on <html>", () => {
+    const markup = globalErrorMarkup();
+
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('<html lang="en">');
   });
 });

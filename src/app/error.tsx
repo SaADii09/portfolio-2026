@@ -12,7 +12,10 @@ interface ErrorPageProps {
 export default function ErrorPage({ reset }: ErrorPageProps) {
   return (
     <div className="min-h-screen bg-os-bg font-body flex items-center justify-center p-6">
-      <div className="glass glass-border rounded-os shadow-os w-full max-w-md p-8 text-center">
+      <div
+        role="alert"
+        className="glass glass-border rounded-os shadow-os w-full max-w-md p-8 text-center"
+      >
         <h1 className="font-display text-sm text-os-text mb-4">Something went wrong in the OS.</h1>
         <p className="text-xs text-os-muted mb-6 leading-relaxed">
           An unexpected error occurred and the session crashed. Nothing was lost — reset the shell
