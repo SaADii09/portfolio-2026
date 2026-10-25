@@ -37,7 +37,6 @@ interface WebViewProps {
 export type FrameSignal = {
   kind: "load" | "error" | "timeout";
   contentAccessible?: boolean;
-  contentLooksBlank?: boolean;
 };
 
 /** Only same-origin embeddable loads are provably "ok" — see calibration above. */
@@ -55,6 +54,9 @@ const FRAME_WATCHDOG_MS = 3500;
  * contentAccessible: false }`, `{ kind: "error" }`, `{ kind: "timeout" }` →
  * "refused", which the API consumer now reads as "consult the server verdict"
  * — an unreadable frame is no longer failed on this label alone.
+ *
+ * The array contract is single-element by design (audit 2026-10-25); a
+ * multi-signal scan is a future need, not current behavior.
  */
 export function decideRefusal(signals: FrameSignal[]): "ok" | "refused" {
   const last = signals[signals.length - 1];
@@ -222,11 +224,7 @@ export function WebView({ url }: WebViewProps) {
   const probeFrame = useCallback((): FrameSignal => {
     const doc = readFrameDocument(iframeRef.current);
     if (doc && doc.body) {
-      return {
-        kind: "load",
-        contentAccessible: true,
-        contentLooksBlank: doc.body.childElementCount === 0,
-      };
+      return { kind: "load", contentAccessible: true };
     }
     return { kind: "load", contentAccessible: false };
   }, []);

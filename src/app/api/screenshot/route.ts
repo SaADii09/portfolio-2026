@@ -24,6 +24,9 @@ const CACHE_MAX = 32;
 const SLICE_WIDTH = 1280;
 const SLICE_HEIGHT = 720;
 const SLICE_QUALITY = 70;
+/** Deadlines for the two outbound legs — a hung upstream must not hold the unauthenticated route open. */
+const CAPTURE_TIMEOUT_MS = 15_000;
+const BYTES_TIMEOUT_MS = 10_000;
 const screenshotCache = new Map<string, { bytes: ArrayBuffer; contentType: string; at: number }>();
 
 /** Expired entries go first (value sweep); the oldest follows. */
@@ -85,13 +88,36 @@ function cachedResponse(url: string): Response | undefined {
   return undefined;
 }
 
+/** The image answer must really be an image — a 200 HTML page is never relayed. */
+function responseIsImage(res: Response): boolean {
+  return res.headers.get("content-type")?.startsWith("image/") === true;
+}
+
+/**
+ * Guards AND reads the capture bytes. The content-type gate lives here, next
+ * to the read it protects: a 200 whose body is an HTML error page must
+ * reject here, never flow into the resize/cache path.
+ */
+async function readScreenshotBytes(image: Response): Promise<Buffer> {
+  if (!responseIsImage(image)) throw new Error("Screenshot bytes are not an image");
+
+  // Read the bytes once, resize, and cache the compressed result. Reading
+  // through Response(stream) keeps plain {ok, body}-shaped mock responses —
+  // as the unit tests build — on the same path.
+  return Buffer.from(await new Response(image.body).arrayBuffer());
+}
+
 /**
  * Outbound Microlink capture: resolve the serve URL from JSON, fetch the
  * image bytes, and throw on every failure shape so GET's catch renders 502.
+ * Each leg carries its own abort deadline (CAPTURE_TIMEOUT_MS /
+ * BYTES_TIMEOUT_MS) — the route is public and unauthenticated, so a hung
+ * upstream must never hold it open.
  */
 async function captureMicrolink(url: string): Promise<Buffer> {
   const res = await fetch(
     `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false`,
+    { signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS) },
   );
   if (!res.ok) throw new Error("Screenshot failed");
 
@@ -102,13 +128,9 @@ async function captureMicrolink(url: string): Promise<Buffer> {
   };
   if (typeof screenshotUrl !== "string") throw new Error("No screenshot url");
 
-  const image = await fetch(screenshotUrl);
+  const image = await fetch(screenshotUrl, { signal: AbortSignal.timeout(BYTES_TIMEOUT_MS) });
   if (!image.ok) throw new Error("Screenshot bytes fetch failed");
-
-  // Read the bytes once, resize, and cache the compressed result. Reading
-  // through Response(stream) keeps plain {ok, body}-shaped mock responses —
-  // as the unit tests build — on the same path.
-  return Buffer.from(await new Response(image.body).arrayBuffer());
+  return readScreenshotBytes(image);
 }
 
 export async function GET(request: Request) {

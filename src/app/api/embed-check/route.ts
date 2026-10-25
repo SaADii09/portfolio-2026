@@ -919,6 +919,8 @@ function cachedResponse(key: string): Response | null {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  // Per-request sweep (see the chat route): aged addresses leave the map here.
+  limiter.prune();
   const requestUrl = new URL(request.url);
   if (limiter.isLimited(clientIpOf(request))) {
     return rateLimitedResponse();

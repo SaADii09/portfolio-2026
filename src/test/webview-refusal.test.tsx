@@ -22,7 +22,7 @@ import { WebView, decideRefusal, type FrameSignal } from "@/components/os/WebVie
  * verdict swaps to the fallback panel (Review Focus 1).
  */
 
-const okLoad: FrameSignal = { kind: "load", contentAccessible: true, contentLooksBlank: false };
+const okLoad: FrameSignal = { kind: "load", contentAccessible: true };
 
 describe("decideRefusal", () => {
   it("classifies a same-origin embeddable load as ok", () => {
@@ -30,9 +30,11 @@ describe("decideRefusal", () => {
   });
 
   it("classes an accessible-but-blank interim load (webkit about:blank commit) as ok", () => {
-    expect(
-      decideRefusal([{ kind: "load", contentAccessible: true, contentLooksBlank: true }]),
-    ).toBe("ok");
+    // The interim commit presents as an accessible load, and accessibility —
+    // not blankness — is the hinge. Blankness is no longer part of
+    // FrameSignal: `contentLooksBlank` was set-but-never-read and was deleted
+    // (audit 2026-10-25).
+    expect(decideRefusal([{ kind: "load", contentAccessible: true }])).toBe("ok");
   });
 
   it("classes nothing observed yet as ok (load pending)", () => {

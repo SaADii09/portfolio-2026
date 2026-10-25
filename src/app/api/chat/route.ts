@@ -172,6 +172,9 @@ function sseResponseFor(
 }
 
 export async function POST(request: Request) {
+  // Per-request sweep: addresses that aged out of the window leave the map
+  // here rather than waiting for their next visit (memory hygiene).
+  limiter.prune();
   const ip = clientIpOf(request);
 
   if (limiter.isLimited(ip)) {

@@ -217,6 +217,49 @@ describe("GET route", () => {
     await expect(res.json()).resolves.toEqual({ error: "screenshot unavailable" });
   });
 
+  it("returns 502 when the capture bytes are not an image — a 200 HTML page is never relayed", async () => {
+    // Upstream answers 200 with a valid body but a text/html content-type:
+    // whatever those bytes are, they are not the requested screenshot. The
+    // route must reject them, never relay them into the cache/resize path.
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { screenshot: { url: "https://cdn.microlink.io/shot.png" } } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: new Response(new Uint8Array(TINY_PNG)).body,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === "content-type" ? "text/html" : null),
+        },
+      });
+
+    const res = await GET(makeRequest("?url=https://github.com/SaADii09/devos"));
+
+    expect(res.status).toBe(502);
+    await expect(res.json()).resolves.toEqual({ error: "screenshot unavailable" });
+  });
+
+  it("time-bounds both outbound legs — each fetch receives its own abort signal", async () => {
+    // Wiring proof, not a wait: the pins assert the fetches RECEIVED an
+    // AbortSignal (fresh per leg), which is what makes a hung upstream
+    // time-bounded, without parking the suite for 15s.
+    mockScreenshotFlow();
+
+    await GET(makeRequest("?url=https://github.com/SaADii09/devos"));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [captureInit, bytesInit] = fetchMock.mock.calls.map(
+      (call) => call[1] as { signal?: unknown } | undefined,
+    );
+    expect(captureInit?.signal).toBeInstanceOf(AbortSignal);
+    expect(bytesInit?.signal).toBeInstanceOf(AbortSignal);
+    // Two legs, two deadlines — never one shared signal.
+    expect(captureInit?.signal).not.toBe(bytesInit?.signal);
+  });
+
   it("502 bodies never echo the upstream screenshot url", async () => {
     fetchMock.mockRejectedValueOnce(new Error("upstream down"));
 
