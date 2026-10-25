@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { createChatSlice, ChatSlice, MESSAGE_CAP, trimMessages } from "@/store/chatSlice";
+import { FRIENDLY_429_COPY } from "@/lib/ai/provider";
 import { useStore, persistMigrator, persistPartialize } from "@/store/index";
 import type { WindowSlice } from "@/store/windowSlice";
 import type { Message } from "@/types/chat";
@@ -529,6 +530,26 @@ describe("chatSlice v2 — ids, persistence, unread, retry, reset", () => {
         await store.sendMessage("test");
         const assistant = store.messages.find((m) => m.role === "assistant");
         expect(assistant?.content).toBe("The assistant is not configured yet.");
+        expect(assistant?.streaming).toBe(false);
+        expect(assistant?.error).toBe(true);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("renders the provider-429 friendly copy without the Error: prefix", async () => {
+      const store = slice();
+      stubFetch(
+        vi.fn().mockResolvedValue({
+          ok: false,
+          json: async () => ({ error: FRIENDLY_429_COPY }),
+        }),
+      );
+      try {
+        await store.sendMessage("test");
+        const assistant = store.messages.find((m) => m.role === "assistant");
+        // Exactly the friendly sentence — never `Error: ` prefixed.
+        expect(assistant?.content).toBe(FRIENDLY_429_COPY);
         expect(assistant?.streaming).toBe(false);
         expect(assistant?.error).toBe(true);
       } finally {

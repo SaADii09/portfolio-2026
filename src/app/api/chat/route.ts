@@ -7,6 +7,7 @@ import {
 import { resolveProviderFromEnv, type ProviderResolutionError } from "@/lib/ai/registry";
 import { buildSystemPrompt } from "@/lib/ai/prompt";
 import type { NormalizedStreamEvent, StreamRequest } from "@/lib/ai/provider";
+import { FRIENDLY_429_COPY } from "@/lib/ai/provider";
 
 const MAX_REQUESTS_PER_MINUTE = Number(process.env.AI_RATE_LIMIT_PER_MIN ?? 15);
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -219,6 +220,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }
   if (!first.done && first.value.type === "error") {
+    // A provider-side rate limit is patience, not outage: answer 429 with the
+    // shared friendly copy; every other code keeps the blanket 502.
+    if (first.value.code === "rate_limited") {
+      return Response.json({ error: FRIENDLY_429_COPY }, { status: 429 });
+    }
     return Response.json({ error: "AI service unavailable" }, { status: 502 });
   }
   return sseResponseFor(iterator, first.done ? null : toSsePayload(first.value));

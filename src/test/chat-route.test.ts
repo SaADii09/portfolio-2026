@@ -9,6 +9,7 @@ vi.mock("@/lib/rag", () => ({
 }));
 
 import { POST, validateMessages, pruneTimestamps } from "@/app/api/chat/route";
+import { FRIENDLY_429_COPY } from "@/lib/ai/provider";
 
 let consoleError: ReturnType<typeof vi.spyOn>;
 
@@ -340,6 +341,21 @@ describe("POST message validation", () => {
       { role: "user", content: "a" },
       { role: "assistant", content: "b" },
     ]);
+  });
+
+  it("maps an upstream 429 to the friendly 429 body, not the blanket 502", async () => {
+    // Upstream answers 429 → the adapter emits code:"rate_limited" → the route
+    // takes the friendly branch; every other code keeps the blanket 502.
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 429, text: async () => "rate limit exceeded" }),
+    );
+    // Fresh IP — the module-private limiter log is keyed per IP (see :292).
+    const res = await POST(makeRequest(undefined, { "x-forwarded-for": "203.0.113.42" }));
+    expect(res.status).toBe(429);
+    await expect(res.json()).resolves.toStrictEqual({ error: FRIENDLY_429_COPY });
   });
 });
 

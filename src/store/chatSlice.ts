@@ -1,5 +1,6 @@
 import { StateCreator } from "zustand";
 import { Message } from "@/types/chat";
+import { FRIENDLY_429_COPY } from "@/lib/ai/provider";
 import type { WindowSlice } from "./windowSlice";
 
 /** Narrow seam for sibling window state (no type widening — isolated test stores must compile). */
@@ -56,6 +57,8 @@ async function openChatResponse(history: Message[]): Promise<Response | null> {
 async function errorCopyFrom(res: Response): Promise<string> {
   try {
     const err = (await res.json()) as { error?: string };
+    // The provider-429 body IS the friendly copy — render it verbatim.
+    if (err.error === FRIENDLY_429_COPY) return FRIENDLY_429_COPY;
     return err.error === "ANTHROPIC_API_KEY not configured"
       ? "The assistant is not configured yet."
       : `Error: ${err.error}`;
