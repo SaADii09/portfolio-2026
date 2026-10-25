@@ -138,6 +138,14 @@ describe("ACTIONS_DOCS — prompt snippet cannot drift from the verb table", () 
       expect(ACTIONS_DOCS).toContain(arg);
     }
   });
+
+  it("MANDATES the marker for action requests (drift pin, Task 4b)", () => {
+    // The owner-directed rule: an action request must always produce the
+    // marker itself, never a prose-only promise of it.
+    expect(ACTIONS_DOCS).toContain("ALWAYS emit the matching marker");
+    // …while the verb-table header line that the ai-prompt pins rely on stays.
+    expect(ACTIONS_DOCS).toContain("[[action:open_app:<app>]]");
+  });
 });
 
 describe("executeMarkerAction — verb → os-actions routing", () => {

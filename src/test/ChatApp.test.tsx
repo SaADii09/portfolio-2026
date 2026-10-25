@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, within, act, waitFor } from "@testing-library/react";
 
 // jsdom has no Web Audio API — the store pulls the synth engine in at module load.
 vi.mock("@/lib/audio-engine", () => ({
@@ -288,5 +288,86 @@ describe("ChatPanel shell executor mount", () => {
     render(<ChatPanel />);
 
     expect(mockExecute).not.toHaveBeenCalled();
+  });
+
+  it("fires a marker completed in the final flush (fast-tail race, Task 4b)", async () => {
+    useStore.setState({
+      messages: [
+        msg("u1", "user", "Open the about app"),
+        msg("a1", "assistant", "Sure —", { streaming: true }),
+      ],
+      windows: [],
+      chatOpen: false,
+      isLoading: true,
+    });
+    const { rerender } = render(<ChatPanel />);
+
+    // The race shape: settle() flushes the final chunk (with the completed
+    // marker) AND flips streaming:false in ONE React batch — the streaming
+    // observer never sees the completed marker with streaming:true.
+    act(() => {
+      useStore.setState({
+        messages: [
+          msg("u1", "user", "Open the about app"),
+          msg("a1", "assistant", "Sure — [[action:open_app:about]]", { streaming: false }),
+        ],
+        isLoading: false,
+      });
+    });
+
+    // The post-finalize re-scan executes it — exactly once (idempotent
+    // through the per-message dedupe Set, so a later render cannot re-fire).
+    await waitFor(() =>
+      expect(mockExecute).toHaveBeenCalledWith({ verb: "open_app", arg: "about" }),
+    );
+    rerender(<ChatPanel />);
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("executor failure diagnostics (dev-only warn, Task 4b)", () => {
+  function renderStreamingMarker(): void {
+    useStore.setState({
+      messages: [
+        msg("u1", "user", "Open the about app"),
+        msg("a1", "assistant", "Sure — [[action:open_app:about]]", { streaming: true }),
+      ],
+      windows: [],
+      chatOpen: false,
+      isLoading: false,
+    });
+    render(<ChatPanel />);
+  }
+
+  it("warns once in dev when a validated marker fails to execute", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockExecute.mockReturnValueOnce(false);
+    renderStreamingMarker();
+
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith("[chat] action not executed: open_app:about");
+    warnSpy.mockRestore();
+  });
+
+  it("stays silent when the marker executes", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    renderStreamingMarker();
+
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("stays silent in production even when the marker fails", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockExecute.mockReturnValueOnce(false);
+    renderStreamingMarker();
+
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 });

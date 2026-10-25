@@ -43,6 +43,7 @@ export const ACTIONS_DOCS = `To act in the OS (open apps/projects, switch theme,
 [[action:set_theme:<name>]] — name: retro | neon | editorial
 [[action:music:<action>]] — action: play | pause | toggle | next | prev
 [[action:toggle_widget:<type>]] — type: weather | cpu | music | notes
+Rule: when the visitor asks you to DO something in the OS (open/show an app or project, switch the theme, play/pause music, toggle a widget), ALWAYS emit the matching marker — never merely describe or promise the action in words. One marker per requested action, each on its own line, then answer briefly.
 Markers are parsed and executed automatically; answer normally alongside them.`;
 
 /** Every legal `music` arg — mirrors `MusicAction` in `os-actions.ts`. */
