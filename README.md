@@ -148,13 +148,13 @@ src/
 
 | Document | Audience | Contents |
 | --- | --- | --- |
-| [`docs/UserGuide.md`](./docs/UserGuide.md) | Visitors & owner | **Complete usage guide + walkthrough** — every app, widget, shortcut, terminal command, chat action, theme, gesture, and troubleshooting entry |
-| [`docs/FeatureMap.md`](./docs/FeatureMap.md) | Maintainers | **Full feature → file reference** — 16 sections mapping every feature (major and minor) to its exact source file(s) |
+| [`UserGuide.md`](./UserGuide.md) | Visitors & owner | **Complete usage guide + walkthrough** — every app, widget, shortcut, terminal command, chat action, theme, gesture, and troubleshooting entry |
+| [`FeatureMap.md`](./FeatureMap.md) | Maintainers | **Full feature → file reference** — 16 sections mapping every feature (major and minor) to its exact source file(s) |
 | [`docs/Architecture.md`](./docs/Architecture.md) | Maintainers | Component tree, store slices, API routes |
 | [`docs/Design.md`](./docs/Design.md) | Maintainers | Theme tokens, typography, spacing, animation |
 | [`docs/Rules.md`](./docs/Rules.md) | Maintainers | Tech constraints, naming, error handling, mobile, a11y |
 
-> **Documentation maintenance rule** — any feature added or changed updates, in the same change: its `docs/FeatureMap.md` row(s), the matching `docs/UserGuide.md` section if usage changes, and the README feature table if visitor-facing.
+> **Documentation maintenance rule** — any feature added or changed updates, in the same change: its `FeatureMap.md` row(s), the matching `UserGuide.md` section if usage changes, and the README feature table if visitor-facing. (`UserGuide.md` and `FeatureMap.md` live at the repo root; the rest of the docs corpus stays under `docs/`.)
 
 ### Feature → files (quick reference)
 
