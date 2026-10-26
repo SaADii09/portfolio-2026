@@ -10,7 +10,7 @@ Interactive Web OS portfolio — a fully functional desktop environment in the b
 - **Window management** — drag, 8-edge resize, minimize, maximize, restore, close, snap-to-half, cascading placement, z-index focus
 - **Command palette** — `Ctrl/Cmd+K` fuzzy-searches every app, widget, and command with arrow-key navigation
 - **Global shortcuts** — `Esc` ownership chain, `Alt+Arrow` snap-to-half, `Ctrl/Cmd+W` closes the focused window
-- **6 functional apps** — About, Projects, Terminal, Contact, Resume, Control Panel
+- **8 functional apps** — About, Projects, Terminal, Contact, Resume, Control Panel, **DevOS Browser**, **Dev Chat**
 - **DevOS Browser** — one browser window with a tab strip: project tabs render each repo's sanitized GitHub README, web tabs run the sandboxed iframe pipeline (a server-side framing verdict decides whether a site may be embedded, and a genuine refuser gets a live preview with a reader fallback), and the home tab is a Chrome-style start page (shortcut tiles, recently visited, your live projects) — with a warm-tab cache and a project side panel (about, tech, timeline, links)
 - **4 live widgets** — CPU monitor, Weather (Open-Meteo API), Music player (Web Audio synth), Sticky notes
 - **Terminal ↔ OS bridge** — `theme`, `open <app>`, `music <action>`, and `apps` drive real OS state
@@ -32,7 +32,7 @@ Interactive Web OS portfolio — a fully functional desktop environment in the b
 | State     | Zustand 5 (persist middleware)        |
 | Animation | Framer Motion 12                      |
 | Icons     | Lucide React                          |
-| AI        | Anthropic Claude (streaming SSE)      |
+| AI        | Provider-agnostic streaming SSE (Anthropic, Groq, OpenRouter, Ollama, OpenAI — any OpenAI-compatible API) |
 | Testing   | Vitest + Testing Library + Playwright |
 
 ## Getting Started
@@ -144,6 +144,44 @@ src/
 └── lib/                    # App registry, shortcuts, palette data/DOM, terminal commands, RAG, ai/ (registry, adapters, prompt)
 ```
 
+## Documentation
+
+| Document | Audience | Contents |
+| --- | --- | --- |
+| [`docs/UserGuide.md`](./docs/UserGuide.md) | Visitors & owner | **Complete usage guide + walkthrough** — every app, widget, shortcut, terminal command, chat action, theme, gesture, and troubleshooting entry |
+| [`docs/FeatureMap.md`](./docs/FeatureMap.md) | Maintainers | **Full feature → file reference** — 16 sections mapping every feature (major and minor) to its exact source file(s) |
+| [`docs/Architecture.md`](./docs/Architecture.md) | Maintainers | Component tree, store slices, API routes |
+| [`docs/Design.md`](./docs/Design.md) | Maintainers | Theme tokens, typography, spacing, animation |
+| [`docs/Rules.md`](./docs/Rules.md) | Maintainers | Tech constraints, naming, error handling, mobile, a11y |
+
+> **Documentation maintenance rule** — any feature added or changed updates, in the same change: its `docs/FeatureMap.md` row(s), the matching `docs/UserGuide.md` section if usage changes, and the README feature table if visitor-facing.
+
+### Feature → files (quick reference)
+
+| Feature | Primary files |
+| --- | --- |
+| Desktop, icons, window zone | `src/components/os/Desktop.tsx`, `src/components/os/appIcons.ts` |
+| Window chrome, drag, resize, floors | `src/components/os/Window.tsx`, `src/hooks/useDragPosition.ts`, `src/lib/window-geometry.ts`, `src/lib/boundaries.ts` |
+| Window state, z-order, geometry memory | `src/store/windowSlice.ts` |
+| Dock · Top bar (clock/calendar/control center) · Taskbar · Start menu | `src/components/os/Dock.tsx` · `TopBar.tsx` · `Taskbar.tsx` · `StartMenu.tsx` |
+| Command palette | `src/components/os/CommandPalette.tsx`, `src/lib/paletteItems.ts`, `src/lib/fuzzy.ts`, `src/hooks/usePaletteNav.ts` |
+| Keyboard shortcuts | `src/lib/shortcuts.ts`, `src/hooks/useKeyboardShortcuts.ts` |
+| Context menus | `src/components/os/ContextMenu.tsx`, `src/hooks/useContextMenuLongPress.ts` |
+| Wallpaper (per-theme canvas scenes) | `src/components/os/Wallpaper.tsx` |
+| Apps (8) | `src/components/apps/*`, registry `src/lib/apps.ts`, launch choke point `src/lib/os-actions.ts` |
+| DevOS Browser (tabs, home, side panel, warm-tail) | `src/components/apps/BrowserApp.tsx`, `src/store/browserSlice.ts`, `src/lib/warm-set.ts`, `src/lib/browser-apps.ts` |
+| Embed pipeline (verdicts, sanitizer, previews) | `src/components/os/WebView.tsx`, `src/components/os/FallbackPanel.tsx`, `src/lib/embed-rules.ts`, `src/lib/readme-sanitize.ts` |
+| Dev Chat (window, slice, actions) | `src/components/apps/ChatApp.tsx`, `src/components/os/ChatPanel.tsx`, `src/store/chatSlice.ts`, `src/components/apps/chat-internal/*` |
+| AI backend (registry, adapters, prompt, RAG, actions) | `src/app/api/chat/route.ts`, `src/lib/ai/*`, `src/lib/rag.ts` |
+| Widgets (weather/cpu/music/notes) | `src/components/widgets/*`, `src/store/widgetSlice.ts`, `src/store/musicSlice.ts`, `src/lib/audio-engine.ts` |
+| Themes & glass | `src/app/globals.css`, `src/components/theme/ThemeProvider.tsx`, `src/store/themeSlice.ts`, `lib/design-tokens.ts` |
+| Terminal + OS bridge | `src/components/apps/TerminalApp.tsx`, `src/lib/terminal-commands.ts`, `src/lib/os-actions.ts` |
+| API routes | `src/app/api/chat/route.ts`, `src/app/api/weather/route.ts`, `src/app/api/screenshot/route.ts`, `src/app/api/project-meta/route.ts`, `src/app/api/embed-check/route.ts` |
+| State & persistence (7 slices, v2) | `src/store/index.ts`, `src/store/*.ts` |
+| SEO & metadata | `src/app/layout.tsx`, `src/lib/site.ts`, `src/app/sitemap.ts`, `src/app/robots.ts`, `src/app/opengraph-image.tsx` |
+| Mobile experience | `src/components/os/TopBar.tsx` (shade), `src/components/os/Taskbar.tsx`, `src/hooks/useMediaQuery.ts`, `src/lib/boundaries.ts` |
+| Scroll affordance & glass glare | `src/hooks/useScrollFade.ts`, `src/hooks/useGlassGlare.ts`, `src/components/os/GlassSlider.tsx` |
+
 ## Design System
 
 Three themes defined entirely via CSS custom properties — no hardcoded colors in components:
@@ -167,7 +205,7 @@ npm run build
 npm start
 ```
 
-Deploy to Vercel, Netlify, or any Node.js host. Everything is prerendered except the five API routes (`/api/chat`, `/api/embed-check`, `/api/screenshot`, `/api/project-meta`, `/api/weather`). Set `ANTHROPIC_API_KEY` and `NEXT_PUBLIC_SITE_URL` in the host's environment.
+Deploy to Vercel, Netlify, or any Node.js host. Everything is prerendered except the API routes (`/api/chat`, `/api/embed-check`, `/api/screenshot`, `/api/project-meta`, `/api/weather`). Set your AI provider vars (see the recipes above) and `NEXT_PUBLIC_SITE_URL` in the host's environment.
 
 ## License
 
